@@ -10,7 +10,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Easing, Modal, PanResponder, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
-export function CollaboratorFinanceSheet({ visible, propertyId, onClose, onChanged }: { visible: boolean; propertyId: string; onClose: () => void; onChanged: () => void }) {
+type CollaboratorFinanceSheetProps = {
+  visible: boolean;
+  propertyId: string;
+  collaboratorId?: string;
+  collaboratorName?: string;
+  onClose: () => void;
+  onChanged: () => void;
+};
+
+export function CollaboratorFinanceSheet({ visible, propertyId, collaboratorId, collaboratorName, onClose, onChanged }: CollaboratorFinanceSheetProps) {
   const { colors, isDark } = useAppTheme();
   const { height: windowHeight } = useWindowDimensions();
   const [data, setData] = useState<CollaboratorFinanceSummary | null>(null);
@@ -43,8 +52,6 @@ export function CollaboratorFinanceSheet({ visible, propertyId, onClose, onChang
     }).start(({ finished }) => {
       if (!finished) return;
       onClose();
-      sheetHeight.setValue(collapsedRef.current);
-      currentHeight.current = collapsedRef.current;
     });
   }, [onClose, sheetHeight]);
 
@@ -87,7 +94,8 @@ export function CollaboratorFinanceSheet({ visible, propertyId, onClose, onChang
     finally { setUpdating(''); }
   };
 
-  const summary = data ?? { paid: 0, due: 0, total: 0, collaborators: [] };
+  const groups = collaboratorId ? data?.collaborators.filter((item) => item.collaboratorId === collaboratorId) ?? [] : data?.collaborators ?? [];
+  const summary = collaboratorId ? groups.reduce<CollaboratorFinanceSummary>((result, group) => ({ paid: result.paid + group.paid, due: result.due + group.due, total: result.total + group.total, collaborators: [...result.collaborators, group] }), { paid: 0, due: 0, total: 0, collaborators: [] }) : data ?? { paid: 0, due: 0, total: 0, collaborators: [] };
   return <Modal visible={visible} transparent animationType="fade" onRequestClose={closeByDrag} statusBarTranslucent>
     <View style={styles.overlay}>
       <Pressable accessibilityRole="button" accessibilityLabel="Închide panoul" style={[styles.backdrop, { backgroundColor: colors.overlay }]} onPress={closeByDrag} />
@@ -96,7 +104,7 @@ export function CollaboratorFinanceSheet({ visible, propertyId, onClose, onChang
         <View style={[styles.draggableHeader, { borderBottomColor: colors.border }]}>
           <View {...panResponder.panHandlers} accessibilityRole="adjustable" accessibilityLabel="Trage în sus pentru extindere sau în jos pentru închidere" style={styles.dragSurface}>
             <View style={[styles.handle, { backgroundColor: colors.border }]} />
-            <View style={styles.headerCopy}><AppText variant="title">Colaboratori</AppText><AppText variant="caption" muted>Achitat și de achitat, pentru fiecare client</AppText></View>
+            <View style={styles.headerCopy}><AppText variant="title">{collaboratorName || 'Colaboratori'}</AppText><AppText variant="caption" muted>Achitat și de achitat, pentru fiecare client</AppText></View>
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel="Închide" onPress={closeByDrag} style={[styles.close, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={21} color={colors.text} /></Pressable>
         </View>
@@ -110,7 +118,7 @@ export function CollaboratorFinanceSheet({ visible, propertyId, onClose, onChang
 
           {error ? <View style={[styles.error, { backgroundColor: isDark ? `${palette.danger}18` : palette.dangerSoft }]}><Ionicons name="alert-circle" size={18} color={palette.danger} /><AppText variant="caption" style={{ color: palette.danger, flex: 1 }}>{error}</AppText></View> : null}
           {loading && !data ? <View style={styles.loading}><ActivityIndicator size="large" color={colors.primary} /><AppText muted>Se încarcă situația financiară…</AppText></View> : null}
-          {!loading && data && !data.collaborators.length ? <View style={styles.empty}><View style={[styles.emptyIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="people-circle-outline" size={34} color={colors.primary} /></View><AppText variant="heading">Nu există comisioane</AppText><AppText muted style={styles.center}>Comisioanele apar automat când o fișă este creată pentru un client atribuit unui colaborator.</AppText></View> : null}
+          {!loading && data && !summary.collaborators.length ? <View style={styles.empty}><View style={[styles.emptyIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="people-circle-outline" size={34} color={colors.primary} /></View><AppText variant="heading">Nu există comisioane</AppText><AppText muted style={styles.center}>Comisioanele apar automat când o fișă este creată pentru un client atribuit unui colaborator.</AppText></View> : null}
 
           {summary.collaborators.map((collaborator, index) => {
             const accent = [palette.cyan, palette.purple, palette.warning, palette.electric][index % 4];
