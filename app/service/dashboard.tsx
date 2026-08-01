@@ -52,10 +52,10 @@ export default function DashboardScreen() {
       <DashboardSectionTitle title="Privire de ansamblu" subtitle="Indicatorii esențiali ai proprietății" icon="grid-outline" />
       <View style={styles.stats}>
         <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Total clienți" value={metrics.clientsTotal} icon="people-outline" color={palette.electric} helper={`+${metrics.clientsNew} noi`} />
-        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Total încasări" value={formatCurrency(metrics.totalRevenue)} icon="cash-outline" color={palette.success} />
         <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Clienți în așteptare" value={metrics.clientsWaiting} icon="time-outline" color={palette.warning} />
-        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Venituri on hold" value={formatCurrency(metrics.revenueOnHold)} icon="hourglass-outline" color={palette.warning} />
         <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="G-Shop Net" value={formatCurrency(metrics.gshopNet)} icon="wallet-outline" color={palette.purple} />
+        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Venituri on hold" value={formatCurrency(metrics.revenueOnHold)} icon="hourglass-outline" color={palette.warning} />
+        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Total încasări" value={formatCurrency(metrics.totalRevenue)} icon="cash-outline" color={palette.success} />
         <StatCard
           style={{ flexGrow: 1, flexBasis: statCardBasis }}
           label="Total colaboratori"
