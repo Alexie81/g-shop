@@ -9,7 +9,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Image, Modal, Pressable, StyleSheet, View } from 'react-native';
 
-export function AppHeader({ title, showProperty = true, back = false }: { title?: string; showProperty?: boolean; back?: boolean }) {
+export function AppHeader({ title, showProperty = true, back = false, onBack }: { title?: string; showProperty?: boolean; back?: boolean; onBack?: () => void }) {
   const { colors, isDark } = useAppTheme();
   const { properties, activeProperty, selectProperty } = useProperty();
   const [open, setOpen] = useState(false);
@@ -23,7 +23,7 @@ export function AppHeader({ title, showProperty = true, back = false }: { title?
   return <>
     <View style={[styles.header, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
       <View style={styles.brandRow}>
-        {back ? <Pressable hitSlop={10} onPress={() => router.back()} style={styles.backButton}><Ionicons name="arrow-back" size={23} color={colors.text} /></Pressable> : null}
+        {back ? <Pressable accessibilityRole="button" accessibilityLabel="Înapoi" hitSlop={10} onPress={onBack ?? (() => router.back())} style={styles.backButton}><Ionicons name="arrow-back" size={23} color={colors.text} /></Pressable> : null}
         <Pressable
           accessibilityRole={showProperty && activeProperty ? 'button' : undefined}
           accessibilityLabel={showProperty && activeProperty ? 'Schimbă proprietatea' : undefined}
