@@ -23,6 +23,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [ready, setReady] = useState(false);
   const [savedUsername, setSavedUsername] = useState('');
 
+  useEffect(() => sessionManager.subscribe(setSession), []);
+
   useEffect(() => {
     Promise.all([secureSessionStorage.get(), preferenceStorage.get('username')]).then(async ([stored, username]) => {
       setSavedUsername(username ?? '');

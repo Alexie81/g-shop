@@ -5,6 +5,7 @@ const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'https://reparatiicalculatoa
 let currentSession: AuthSession | null = null;
 let persistSession = false;
 let refreshing: Promise<AuthSession | null> | null = null;
+const sessionListeners = new Set<(session: AuthSession | null) => void>();
 
 export class ApiError extends Error {
   constructor(message: string, public status: number, public details?: unknown) {
@@ -14,8 +15,15 @@ export class ApiError extends Error {
 
 export const sessionManager = {
   get: () => currentSession,
-  set: (session: AuthSession | null) => { currentSession = session; },
+  set: (session: AuthSession | null) => {
+    currentSession = session;
+    sessionListeners.forEach((listener) => listener(session));
+  },
   setPersistence: (persist: boolean) => { persistSession = persist; },
+  subscribe: (listener: (session: AuthSession | null) => void) => {
+    sessionListeners.add(listener);
+    return () => { sessionListeners.delete(listener); };
+  },
 };
 
 type RequestOptions = RequestInit & { authenticated?: boolean; retry?: boolean };
@@ -50,9 +58,14 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   try {
     const response = await fetch(`${API_URL}${path}`, { ...options, headers, signal: controller.signal });
-    if (response.status === 401 && options.authenticated !== false && options.retry !== false) {
-      const refreshed = await refreshSession();
-      if (refreshed) return apiRequest<T>(path, { ...options, retry: false });
+    if (response.status === 401 && options.authenticated !== false) {
+      if (options.retry !== false) {
+        const refreshed = await refreshSession();
+        if (refreshed) return apiRequest<T>(path, { ...options, retry: false });
+      }
+      persistSession = false;
+      sessionManager.set(null);
+      await secureSessionStorage.remove();
     }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new ApiError(payload.message ?? 'Cererea nu a putut fi procesată.', response.status, payload.errors);
