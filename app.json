@@ -1,0 +1,75 @@
+{
+  "expo": {
+    "name": "G-Shop",
+    "slug": "g-shop",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./logo/logo.png",
+    "scheme": "gshop",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ro.gshop.mobile",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "ro.gshop.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./logo/logo.png",
+        "backgroundColor": "#07152D"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./logo/logo.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./logo/logo.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#F6F9FF",
+          "dark": {
+            "backgroundColor": "#061226"
+          }
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "G-Shop folosește camera pentru scanarea codurilor QR ale clienților.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "G-Shop accesează fotografiile pentru atașamentele fișelor de service.",
+          "savePhotosPermission": "G-Shop salvează codurile QR în galeria telefonului.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ],
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true,
+          "faceIDPermission": "Permite G-Shop să securizeze sesiunea cu Face ID."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {}
+    }
+  }
+}
