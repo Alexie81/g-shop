@@ -19,6 +19,8 @@ export function Button({ label, onPress, icon, variant = 'primary', loading, dis
   const borderColor = variant === 'outline' ? colors.border : 'transparent';
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: Boolean(disabled || loading), busy: Boolean(loading) }}
       disabled={disabled || loading}
       onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined); onPress?.(); }}
       style={({ pressed }) => [styles.button, compact && styles.compact, { backgroundColor, borderColor, opacity: disabled ? 0.45 : pressed ? 0.82 : 1 }, style]}
@@ -31,5 +33,5 @@ export function Button({ label, onPress, icon, variant = 'primary', loading, dis
 
 const styles = StyleSheet.create({
   button: { minHeight: 50, borderRadius: radius.md, paddingHorizontal: spacing.xl, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing.sm, borderWidth: 1 },
-  compact: { minHeight: 38, paddingHorizontal: spacing.md, borderRadius: radius.sm },
+  compact: { minHeight: 44, paddingHorizontal: spacing.md, borderRadius: radius.sm },
 });

@@ -7,7 +7,7 @@ import { ClientFinancialOverview } from '@/types';
 import { formatFinanceMoney } from '@/utils/client-finance';
 import { Ionicons } from '@expo/vector-icons';
 import { ComponentProps } from 'react';
-import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -17,6 +17,7 @@ type Props = {
   title?: string;
   subtitle?: string;
   showInternal?: boolean;
+  compact?: boolean;
   actionLabel?: string;
   actionIcon?: IconName;
   onAction?: () => void;
@@ -28,6 +29,7 @@ export function ClientFinanceOverviewCard({
   title = 'Situația financiară a clientului',
   subtitle = 'Sumele actuale asociate clientului',
   showInternal = false,
+  compact = false,
   actionLabel,
   actionIcon = 'arrow-forward-outline',
   onAction,
@@ -52,6 +54,40 @@ export function ClientFinanceOverviewCard({
   const currency = financials.currencyCode || 'RON';
   const money = (value: number) => formatFinanceMoney(value, currency);
   const paid = financials.paymentStatus === 'PAID';
+  const paidRatio = summary.totalDue > 0 ? Math.min(100, Math.max(0, (summary.receivedAmount / summary.totalDue) * 100)) : 0;
+
+  if (compact) {
+    const balanceColor = paid || summary.remainingDue <= 0 ? (isDark ? '#61DF81' : '#087A2E') : (isDark ? '#FFB74A' : '#925500');
+    const statusColor = paid ? (isDark ? '#61DF81' : '#087A2E') : (isDark ? '#FFB74A' : '#925500');
+    return <Card style={[styles.compactCard, { backgroundColor: isDark ? colors.surfaceElevated : '#F8FBFF' }]} elevated>
+      <View style={styles.compactHeader}>
+        <View style={[styles.compactIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="wallet-outline" size={20} color={colors.primary} /></View>
+        <View style={styles.compactCopy}><AppText variant="heading">Finanțe</AppText><AppText variant="caption" muted>Rezumatul clientului</AppText></View>
+        <View style={[styles.compactStatus, { backgroundColor: paid ? (isDark ? `${palette.success}24` : palette.successSoft) : (isDark ? `${palette.warning}24` : palette.warningSoft) }]}>
+          <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+          <AppText variant="caption" style={{ color: statusColor, fontWeight: '800' }}>{paid ? 'Achitat' : 'Neachitat'}</AppText>
+        </View>
+      </View>
+
+      <View style={styles.compactBalanceRow}>
+        <View style={styles.compactBalance}>
+          <AppText variant="caption" muted>{paid ? 'Total încasat' : 'Rest de plată'}</AppText>
+          <AppText variant="title" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={{ color: balanceColor }}>{money(paid ? summary.receivedAmount : summary.remainingDue)}</AppText>
+        </View>
+        {showInternal ? <View style={[styles.compactNet, { backgroundColor: summary.gshopNet >= 0 ? `${palette.purple}${isDark ? '24' : '12'}` : isDark ? `${palette.danger}24` : palette.dangerSoft }]}>
+          <AppText variant="caption" muted>G-Shop Net</AppText>
+          <AppText variant="label" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={{ color: summary.gshopNet >= 0 ? palette.purple : palette.danger, fontWeight: '900' }}>{money(summary.gshopNet)}</AppText>
+        </View> : null}
+      </View>
+
+      <View style={styles.progressBlock}>
+        <View style={[styles.progressTrack, { backgroundColor: colors.surfaceMuted }]}><View style={[styles.progressFill, { width: `${paidRatio}%`, backgroundColor: paid ? palette.success : colors.primary }]} /></View>
+        <View style={styles.progressMeta}><AppText variant="caption" muted numberOfLines={1} style={styles.progressMetaStart}>{money(summary.receivedAmount)} încasat</AppText><AppText variant="caption" muted numberOfLines={1} style={styles.progressMetaEnd}>din {money(summary.totalDue)}</AppText></View>
+      </View>
+
+      {onAction && actionLabel ? <Pressable accessibilityRole="button" onPress={onAction} style={({ pressed }) => [styles.compactAction, { borderColor: colors.border, backgroundColor: colors.surface, opacity: pressed ? 0.78 : 1 }]}><View style={[styles.compactActionIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name={actionIcon} size={18} color={colors.primary} /></View><AppText variant="label" style={styles.compactActionLabel}>{actionLabel}</AppText><Ionicons name="chevron-forward" size={18} color={colors.textMuted} /></Pressable> : null}
+    </Card>;
+  }
 
   return <Card style={[styles.card, { backgroundColor: isDark ? colors.surfaceElevated : '#F8FBFF' }]} elevated>
     <View style={styles.header}>
@@ -107,6 +143,24 @@ function Detail({ label, value, mobile }: { label: string; value: string; mobile
 
 const styles = StyleSheet.create({
   card: { gap: spacing.lg, overflow: 'hidden' },
+  compactCard: { padding: spacing.md, gap: spacing.md, overflow: 'hidden' },
+  compactHeader: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  compactIcon: { width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  compactCopy: { flex: 1, minWidth: 0, gap: 1 },
+  compactStatus: { minHeight: 30, borderRadius: radius.pill, paddingHorizontal: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  statusDot: { width: 7, height: 7, borderRadius: 4 },
+  compactBalanceRow: { flexDirection: 'row', alignItems: 'stretch', gap: spacing.sm },
+  compactBalance: { flex: 1, minWidth: 0, justifyContent: 'center', gap: 2 },
+  compactNet: { width: 104, minWidth: 0, borderRadius: radius.md, padding: spacing.sm, justifyContent: 'center', gap: 2 },
+  progressBlock: { gap: 6 },
+  progressTrack: { height: 7, borderRadius: radius.pill, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: radius.pill },
+  progressMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  progressMetaStart: { minWidth: 0, flex: 1 },
+  progressMetaEnd: { minWidth: 0, flex: 1, textAlign: 'right' },
+  compactAction: { minHeight: 46, borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  compactActionIcon: { width: 32, height: 32, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  compactActionLabel: { flex: 1 },
   header: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.md },
   icon: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   copy: { flex: 1, minWidth: 160, gap: 2 },

@@ -17,22 +17,25 @@ import { clientRepository, serviceSheetRepository } from '@/repositories/api-rep
 import { apiRequest } from '@/services/api';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { AuditLog, Client, ClientFinancialOverview, Paginated } from '@/types';
-import { formatDate, fullName, initials } from '@/utils/format';
+import { formatDate, fullName, initials, normalizePhoneForWhatsApp } from '@/utils/format';
 import { ClientFinanceValue } from '@/utils/client-finance';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Linking, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Linking, Modal, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 type Tab = 'Detalii' | 'Finanțe' | 'QR' | 'Istoric';
 
 export default function ClientDetailsScreen() {
   const { clientId } = useLocalSearchParams<{ clientId: string }>();
   const { user, hasPermission } = useAuth();
+  const { width } = useWindowDimensions();
   const { colors } = useAppTheme(); const { showToast } = useToast(); const [tab, setTab] = useState<Tab>('Detalii');
   const [financeSaving, setFinanceSaving] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
   const isAdmin = user?.role === 'ADMIN';
+  const compactLayout = width <= 390;
   const canViewFinancials = hasPermission('financials.view');
   const canEditClients = hasPermission('clients.update');
   const canManageCollaborators = hasPermission('collaborators.manage');
@@ -43,6 +46,7 @@ export default function ClientDetailsScreen() {
     'QR',
     ...(isAdmin ? ['Istoric' as const] : []),
   ];
+  const returnToClients = () => router.replace('/service/clients');
   const state = useAsyncData(async () => {
     let client = await clientRepository.get(clientId);
     if (!client.qr || client.qr.status === 'NOT_GENERATED') {
@@ -56,8 +60,8 @@ export default function ClientDetailsScreen() {
     return { client, sheets: sheets.data.filter((item) => item.clientId === client.id), financials, history: history.data };
   }, [canViewFinancials, clientId, isAdmin]);
 
-  if (state.loading) return <Screen header={<AppHeader title="Detalii client" back />}><LoadingState rows={5} /></Screen>;
-  if (state.error || !state.data) return <Screen header={<AppHeader title="Detalii client" back />}><ErrorState message={state.error?.message ?? 'Clientul nu există.'} onRetry={() => void state.reload()} /></Screen>;
+  if (state.loading) return <Screen header={<AppHeader title="Detalii client" back onBack={returnToClients} />}><LoadingState rows={5} /></Screen>;
+  if (state.error || !state.data) return <Screen header={<AppHeader title="Detalii client" back onBack={returnToClients} />}><ErrorState message={state.error?.message ?? 'Clientul nu există.'} onRetry={() => void state.reload()} /></Screen>;
 
   const { client, sheets, financials, history } = state.data;
   const serviceSheet = sheets[0];
@@ -65,6 +69,11 @@ export default function ClientDetailsScreen() {
   const openServiceSheet = () => serviceSheet
     ? router.push(`/service/service-sheets/${serviceSheet.id}`)
     : router.push({ pathname: '/service/service-sheets/create', params: { clientId: client.id, returnTo: `/service/clients/${client.id}` } });
+  const selectTab = (next: Tab) => {
+    if (next === tab) return;
+    Haptics.selectionAsync().catch(() => undefined);
+    setTab(next);
+  };
   const replaceFinancials = (next: ClientFinancialOverview) => state.setData((current) => current ? { ...current, financials: next } : current);
   const reloadFinanceHistory = async () => {
     if (!isAdmin) return;
@@ -130,15 +139,30 @@ export default function ClientDetailsScreen() {
       throw error;
     }
   };
-  return <Screen header={<AppHeader title="Detalii client" back />} refreshing={state.refreshing} onRefresh={() => void state.reload(true)}>
-    <Card style={styles.profile}>
-      <View style={[styles.avatar, { backgroundColor: colors.primary }]}><AppText variant="title" style={{ color: '#fff' }}>{initials(client.firstName, client.lastName)}</AppText></View>
-      <View style={styles.profileInfo}><View style={styles.nameRow}><AppText variant="title">{fullName(client)}</AppText><ClientStatusBadge status={client.status} /></View><AppText muted>{client.phone}{client.email ? ` · ${client.email}` : ''}</AppText><AppText variant="caption" muted>{client.city || 'Localitate nespecificată'} · Client din {formatDate(client.createdAt)}</AppText></View>
-      <Button compact variant="outline" icon="create-outline" label="Editează" onPress={() => router.push(`/service/clients/${client.id}/edit`)} />
+  return <Screen header={<AppHeader title="Detalii client" back onBack={returnToClients} />} refreshing={state.refreshing} onRefresh={() => void state.reload(true)} style={[styles.screenContent, compactLayout && styles.screenContentCompact]}>
+    <Card style={[styles.profile, compactLayout && styles.profileCompact]} elevated>
+      <View style={styles.profileTop}>
+        <View style={[styles.avatar, { backgroundColor: colors.primary }]}><AppText variant="heading" style={{ color: '#fff', fontWeight: '900' }}>{initials(client.firstName, client.lastName)}</AppText></View>
+        <View style={styles.profileInfo}>
+          <View style={styles.nameRow}><AppText variant="heading" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={styles.profileName}>{fullName(client)}</AppText>{canEditClients ? <Pressable accessibilityRole="button" accessibilityLabel="Editează clientul" hitSlop={4} onPress={() => router.push(`/service/clients/${client.id}/edit`)} style={({ pressed }) => [styles.editButton, { backgroundColor: colors.surfaceMuted, borderColor: colors.border, opacity: pressed ? 0.72 : 1 }]}><Ionicons name="create-outline" size={19} color={colors.primary} /></Pressable> : null}</View>
+          <View style={styles.profileContact}><ClientStatusBadge status={client.status} /><AppText variant="label" muted numberOfLines={1}>{client.phone}</AppText></View>
+          <AppText variant="caption" muted numberOfLines={1}>{[client.city, client.county].filter(Boolean).join(', ') || 'Localitate nespecificată'}</AppText>
+          <AppText variant="caption" muted numberOfLines={1}>Adăugat {formatDate(client.createdAt)}</AppText>
+        </View>
+      </View>
+      <View style={[styles.profileDivider, { backgroundColor: colors.border }]} />
+      <View style={styles.quickActions}>
+        <ClientQuickAction label="Sună" icon="call-outline" onPress={() => void contact(`tel:${client.phone}`)} />
+        <ClientQuickAction label="WhatsApp" icon="logo-whatsapp" onPress={() => void contact(`https://wa.me/${normalizePhoneForWhatsApp(client.phone)}`)} />
+        <ClientQuickAction label="Email" icon="mail-outline" disabled={!client.email} onPress={() => void contact(`mailto:${client.email}`)} />
+        <ClientQuickAction label="Fișă" icon="document-text-outline" primary onPress={openServiceSheet} />
+      </View>
     </Card>
-    <View style={styles.actions}><Button compact variant="secondary" icon="call-outline" label="Sună" onPress={() => void contact(`tel:${client.phone}`)} /><Button compact variant="secondary" icon="logo-whatsapp" label="WhatsApp" onPress={() => void contact(`https://wa.me/${client.phone.replace(/\D/g, '')}`)} /><Button compact variant="secondary" icon="mail-outline" label="Email" disabled={!client.email} onPress={() => void contact(`mailto:${client.email}`)} /><Button compact icon="document-text-outline" label="Fișă de service" onPress={openServiceSheet} /></View>
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.tabScroller, { borderBottomColor: colors.border }]} contentContainerStyle={styles.tabs}>{tabs.map((item) => <Pressable key={item} onPress={() => setTab(item)} style={[styles.tab, tab === item && { borderBottomColor: colors.primary }]}><AppText variant="caption" style={{ color: tab === item ? colors.primary : colors.textMuted, fontWeight: '800' }}>{item}</AppText></Pressable>)}</ScrollView>
-    {tab === 'Detalii' ? <><Details client={client} financials={financials} onOpenFinancials={canViewFinancials ? () => setTab('Finanțe') : undefined} />{canEditClients ? <ClientLifecycleAction finalized={client.status === 'FINALIZED'} loading={statusSaving} onConfirm={changeClientStatus} /> : null}</> : tab === 'QR' ? <ClientQRPanel client={client} /> : tab === 'Finanțe' && financials ? <>
+    <View accessibilityRole="tablist" style={[styles.tabs, { backgroundColor: colors.surface, borderColor: colors.border }]}>{tabs.map((item) => {
+      const selected = tab === item;
+      return <Pressable key={item} accessibilityRole="tab" accessibilityLabel={`Fila ${item}`} accessibilityState={{ selected }} onPress={() => selectTab(item)} style={({ pressed }) => [styles.tab, selected && { backgroundColor: colors.primarySoft }, pressed && styles.tabPressed]}><AppText variant="caption" numberOfLines={1} style={{ color: selected ? colors.primary : colors.textMuted, fontWeight: '800' }}>{item}</AppText></Pressable>;
+    })}</View>
+    {tab === 'Detalii' ? <><Details client={client} financials={financials} onOpenFinancials={canViewFinancials ? () => selectTab('Finanțe') : undefined} />{canEditClients ? <ClientLifecycleAction finalized={client.status === 'FINALIZED'} loading={statusSaving} onConfirm={changeClientStatus} /> : null}</> : tab === 'QR' ? <ClientQRPanel client={client} /> : tab === 'Finanțe' && financials ? <>
       <ClientFinanceSection
       value={financials.financials}
       expenses={financials.expenses}
@@ -167,12 +191,38 @@ export default function ClientDetailsScreen() {
   </Screen>;
 }
 
+function ClientQuickAction({ label, icon, onPress, disabled = false, primary = false }: { label: string; icon: keyof typeof Ionicons.glyphMap; onPress: () => void; disabled?: boolean; primary?: boolean }) {
+  const { colors } = useAppTheme();
+  const foreground = primary ? '#fff' : colors.primary;
+  return <Pressable
+    accessibilityRole="button"
+    accessibilityLabel={label === 'Fișă' ? 'Fișă de service' : label}
+    accessibilityState={{ disabled }}
+    disabled={disabled}
+    onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined); onPress(); }}
+    style={({ pressed }) => [styles.quickAction, { backgroundColor: primary ? colors.primary : colors.surfaceMuted, borderColor: primary ? colors.primary : colors.border, opacity: disabled ? 0.42 : pressed ? 0.76 : 1 }]}
+  >
+    <Ionicons name={icon} size={19} color={foreground} />
+    <AppText variant="caption" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} style={{ color: foreground, width: '100%', textAlign: 'center', fontSize: label === 'WhatsApp' ? 9.5 : 11, lineHeight: 14, letterSpacing: -0.15, fontWeight: '800' }}>{label}</AppText>
+  </Pressable>;
+}
+
 function Details({ client, financials, onOpenFinancials }: { client: Client; financials: ClientFinancialOverview | null; onOpenFinancials?: () => void }) {
+  const { colors } = useAppTheme();
   const rows = [
-    ['Telefon', client.phone, 'call-outline'], ['Telefon secundar', client.secondaryPhone, 'phone-portrait-outline'], ['Email', client.email, 'mail-outline'],
-    ['Adresă', client.address, 'location-outline'], ['Oraș', client.city, 'business-outline'], ['Județ / sector', client.county, 'map-outline'], ['Cod poștal', client.postalCode, 'mail-open-outline'],
-  ] as const;
-  return <>{financials ? <ClientFinanceOverviewCard overview={financials} showInternal actionLabel="Deschide finanțele complete" actionIcon="wallet-outline" onAction={onOpenFinancials} /> : null}<Card style={styles.detailCard}><AppText variant="heading">Informații client</AppText><View style={styles.detailGrid}>{rows.map(([label, value, icon]) => <View key={label} style={styles.detailRow}><View style={styles.smallIcon}><Ionicons name={icon} size={17} color={palette.electric} /></View><View style={{ flex: 1 }}><AppText variant="caption" muted>{label}</AppText><AppText variant="label">{value || '—'}</AppText></View></View>)}</View></Card><Card style={styles.detailCard}><AppText variant="heading">Observații</AppText><AppText muted>{client.notes || 'Nu există observații pentru acest client.'}</AppText></Card></>;
+    client.secondaryPhone ? ['Telefon secundar', client.secondaryPhone] : null,
+    client.address ? ['Adresă', [client.address, client.city, client.county].filter(Boolean).join(', ')] : null,
+    client.postalCode ? ['Cod poștal', client.postalCode] : null,
+  ].filter(Boolean) as [string, string][];
+  const hasAdditionalDetails = rows.length > 0 || Boolean(client.notes?.trim());
+  return <>
+    {financials ? <ClientFinanceOverviewCard overview={financials} showInternal compact actionLabel="Vezi toate finanțele" actionIcon="wallet-outline" onAction={onOpenFinancials} /> : null}
+    {hasAdditionalDetails ? <Card style={styles.additionalCard}>
+      <View style={styles.additionalHeader}><View style={[styles.additionalIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="information-circle-outline" size={20} color={colors.primary} /></View><View style={styles.additionalTitle}><AppText variant="heading">Detalii suplimentare</AppText><AppText variant="caption" muted>Doar informațiile completate</AppText></View></View>
+      {rows.length ? <View style={styles.additionalRows}>{rows.map(([label, value]) => <View key={label} style={[styles.additionalRow, { borderBottomColor: colors.border }]}><AppText variant="caption" muted>{label}</AppText><AppText variant="label" selectable>{value}</AppText></View>)}</View> : null}
+      {client.notes?.trim() ? <View style={[styles.notes, { backgroundColor: colors.surfaceMuted }]}><AppText variant="caption" muted>Observații</AppText><AppText>{client.notes}</AppText></View> : null}
+    </Card> : null}
+  </>;
 }
 
 function History({ items }: { items: AuditLog[] }) {
@@ -190,11 +240,16 @@ function ClientLifecycleAction({ finalized, loading, onConfirm }: { finalized: b
     } catch { /* The request layer and toast surface the actionable error. */ }
   };
   return <>
-    <Card style={[styles.lifecycle, { borderColor: `${tone}55`, backgroundColor: isDark ? `${tone}0D` : `${tone}08` }]}>
-      <View style={[styles.lifecycleIcon, { backgroundColor: `${tone}18` }]}><Ionicons name={finalized ? 'checkmark-done-outline' : 'flag-outline'} size={24} color={tone} /></View>
-      <View style={styles.lifecycleCopy}><AppText variant="heading">{finalized ? 'Client finalizat' : 'Finalizează clientul'}</AppText><AppText variant="caption" muted>{finalized ? 'Clientul este închis și apare în filtrul Finalizați.' : 'Închide activitatea clientului și mută-l în lista Finalizați.'}</AppText></View>
-      <Button compact variant={finalized ? 'outline' : 'danger'} icon={finalized ? 'refresh-outline' : 'checkmark-done-outline'} label={finalized ? 'Redeschide' : 'Finalizează'} loading={loading} onPress={() => setOpen(true)} />
-    </Card>
+    <Pressable accessibilityRole="button" accessibilityLabel={finalized ? 'Redeschide clientul' : 'Finalizează clientul'} accessibilityState={{ disabled: loading, busy: loading }} disabled={loading} onPress={() => setOpen(true)} style={styles.lifecyclePressable}>
+      {({ pressed }) => <Card style={[styles.lifecycle, {
+        borderColor: pressed ? tone : `${tone}55`,
+        backgroundColor: isDark ? `${tone}0D` : finalized ? palette.successSoft : palette.dangerSoft,
+      }]}>
+          <View style={[styles.lifecycleIcon, { backgroundColor: isDark ? `${tone}18` : colors.surface }]}><Ionicons name={finalized ? 'refresh-outline' : 'checkmark-done-outline'} size={21} color={tone} /></View>
+          <View style={styles.lifecycleCopy}><AppText variant="label">{finalized ? 'Client finalizat' : 'Finalizează clientul'}</AppText><AppText variant="caption" muted>{finalized ? 'Apasă pentru redeschidere.' : 'Mută clientul în lista Finalizați.'}</AppText></View>
+          <Ionicons name="chevron-forward" size={20} color={tone} />
+        </Card>}
+    </Pressable>
     <Modal visible={open} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setOpen(false)}>
       <View style={[styles.lifecycleOverlay, { backgroundColor: colors.overlay }]}>
         <Pressable accessibilityLabel="Închide confirmarea" style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} />
@@ -209,6 +264,38 @@ function ClientLifecycleAction({ finalized, loading, onConfirm }: { finalized: b
 }
 
 const styles = StyleSheet.create({
-  profile: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flexWrap: 'wrap' }, avatar: { width: 62, height: 62, borderRadius: 31, alignItems: 'center', justifyContent: 'center' }, profileInfo: { flex: 1, minWidth: 220, gap: 3 }, nameRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm }, actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, tabScroller: { flexGrow: 0, borderBottomWidth: 1 }, tabs: { flexDirection: 'row' }, tab: { paddingVertical: spacing.md, paddingHorizontal: spacing.md, borderBottomWidth: 2, borderBottomColor: 'transparent' }, detailCard: { gap: spacing.lg }, detailGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg }, detailRow: { minWidth: 220, flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md }, smallIcon: { width: 36, height: 36, borderRadius: radius.sm, backgroundColor: '#EAF1FF', alignItems: 'center', justifyContent: 'center' }, empty: { alignItems: 'center', paddingVertical: spacing.xxxl, gap: spacing.md },
-  lifecycle: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.md }, lifecycleIcon: { width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' }, lifecycleCopy: { flex: 1, minWidth: 210, gap: 3 }, lifecycleOverlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg }, lifecycleModal: { width: '100%', maxWidth: 480, padding: spacing.xxl, gap: spacing.lg }, lifecycleModalIcon: { width: 62, height: 62, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' }, lifecycleModalCopy: { gap: spacing.sm }, lifecycleModalActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, lifecycleModalButton: { flexGrow: 1, flexBasis: 180 },
+  screenContent: { gap: spacing.md },
+  screenContentCompact: { paddingHorizontal: spacing.sm },
+  profile: { gap: spacing.md },
+  profileCompact: { padding: spacing.md },
+  profileTop: { minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  avatar: { width: 52, height: 52, borderRadius: 26, flexShrink: 0, alignItems: 'center', justifyContent: 'center' },
+  profileInfo: { flex: 1, minWidth: 0, gap: 2 },
+  nameRow: { minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  profileName: { minWidth: 0, flex: 1 },
+  profileContact: { minWidth: 0, minHeight: 30, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  editButton: { width: 44, height: 44, flexShrink: 0, borderWidth: 1, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  profileDivider: { height: 1, width: '100%' },
+  quickActions: { width: '100%', maxWidth: 600, flexDirection: 'row', alignItems: 'stretch', gap: 6 },
+  quickAction: { minWidth: 0, maxWidth: 150, minHeight: 58, flex: 1, borderWidth: 1, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 2 },
+  tabs: { width: '100%', maxWidth: 600, minHeight: 52, padding: 4, borderWidth: 1, borderRadius: radius.md, flexDirection: 'row', alignItems: 'stretch', gap: 3 },
+  tab: { minWidth: 0, minHeight: 44, flex: 1, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  tabPressed: { opacity: 0.68 },
+  additionalCard: { gap: spacing.md },
+  additionalHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  additionalIcon: { width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  additionalTitle: { flex: 1, minWidth: 0, gap: 1 },
+  additionalRows: { gap: 0 },
+  additionalRow: { minHeight: 48, borderBottomWidth: 1, justifyContent: 'center', gap: 2, paddingVertical: spacing.sm },
+  notes: { borderRadius: radius.md, padding: spacing.md, gap: spacing.xs },
+  lifecyclePressable: { borderRadius: radius.lg },
+  lifecycle: { minHeight: 64, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  lifecycleIcon: { width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  lifecycleCopy: { flex: 1, minWidth: 0, gap: 2 },
+  lifecycleOverlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
+  lifecycleModal: { width: '100%', maxWidth: 480, padding: spacing.xxl, gap: spacing.lg },
+  lifecycleModalIcon: { width: 62, height: 62, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
+  lifecycleModalCopy: { gap: spacing.sm },
+  lifecycleModalActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  lifecycleModalButton: { flexGrow: 1, flexBasis: 180 },
 });
