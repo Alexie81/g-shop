@@ -31,6 +31,7 @@ export interface ServiceSheetRepository {
   get(id: UUID): Promise<ServiceSheet>;
   create(input: Partial<ServiceSheet>): Promise<ServiceSheet>;
   update(id: UUID, input: Partial<ServiceSheet>): Promise<ServiceSheet>;
+  remove(id: UUID): Promise<void>;
   saveSignature(id: UUID, signature: string): Promise<ServiceSheet>;
 }
 export interface CollaboratorRepository {

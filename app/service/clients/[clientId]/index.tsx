@@ -15,15 +15,15 @@ import { useAsyncData } from '@/hooks/useAsyncData';
 import { clientRepository, serviceSheetRepository } from '@/repositories/api-repositories';
 import { apiRequest } from '@/services/api';
 import { palette, radius, spacing } from '@/theme/tokens';
-import { AuditLog, Client, ClientFinancialOverview, Paginated, ServiceSheet } from '@/types';
-import { formatCurrency, formatDate, fullName, initials } from '@/utils/format';
+import { AuditLog, Client, ClientFinancialOverview, Paginated } from '@/types';
+import { formatDate, fullName, initials } from '@/utils/format';
 import { ClientFinanceValue } from '@/utils/client-finance';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-type Tab = 'Detalii' | 'Fișe service' | 'Finanțe' | 'QR' | 'Colaboratori' | 'Istoric';
+type Tab = 'Detalii' | 'Finanțe' | 'QR' | 'Colaboratori' | 'Istoric';
 
 export default function ClientDetailsScreen() {
   const { clientId } = useLocalSearchParams<{ clientId: string }>();
@@ -35,7 +35,6 @@ export default function ClientDetailsScreen() {
   const canEditFinancials = canViewFinancials && hasPermission('clients.update');
   const tabs: Tab[] = [
     'Detalii',
-    'Fișe service',
     ...(canViewFinancials ? ['Finanțe' as const] : []),
     'QR',
     'Colaboratori',
@@ -58,7 +57,11 @@ export default function ClientDetailsScreen() {
   if (state.error || !state.data) return <Screen header={<AppHeader title="Detalii client" back />}><ErrorState message={state.error?.message ?? 'Clientul nu există.'} onRetry={() => void state.reload()} /></Screen>;
 
   const { client, sheets, financials, history } = state.data;
+  const serviceSheet = sheets[0];
   const contact = async (url: string) => { if (await Linking.canOpenURL(url)) await Linking.openURL(url); else showToast('Acțiunea nu este disponibilă.', 'error'); };
+  const openServiceSheet = () => serviceSheet
+    ? router.push(`/service/service-sheets/${serviceSheet.id}`)
+    : router.push({ pathname: '/service/service-sheets/create', params: { clientId: client.id, returnTo: `/service/clients/${client.id}` } });
   const replaceFinancials = (next: ClientFinancialOverview) => state.setData((current) => current ? { ...current, financials: next } : current);
   const reloadFinanceHistory = async () => {
     if (!isAdmin) return;
@@ -89,9 +92,9 @@ export default function ClientDetailsScreen() {
       <View style={styles.profileInfo}><View style={styles.nameRow}><AppText variant="title">{fullName(client)}</AppText>{client.qr && client.qr.status !== 'NOT_GENERATED' ? <StatusBadge status={client.qr.status} /> : null}</View><AppText muted>{client.phone}{client.email ? ` · ${client.email}` : ''}</AppText><AppText variant="caption" muted>{client.city || 'Localitate nespecificată'} · Client din {formatDate(client.createdAt)}</AppText></View>
       <Button compact variant="outline" icon="create-outline" label="Editează" onPress={() => router.push(`/service/clients/${client.id}/edit`)} />
     </Card>
-    <View style={styles.actions}><Button compact variant="secondary" icon="call-outline" label="Sună" onPress={() => void contact(`tel:${client.phone}`)} /><Button compact variant="secondary" icon="logo-whatsapp" label="WhatsApp" onPress={() => void contact(`https://wa.me/${client.phone.replace(/\D/g, '')}`)} /><Button compact variant="secondary" icon="mail-outline" label="Email" disabled={!client.email} onPress={() => void contact(`mailto:${client.email}`)} /><Button compact icon="document-text-outline" label="Creează fișă" onPress={() => router.push({ pathname: '/service/service-sheets/create', params: { clientId: client.id, returnTo: `/service/clients/${client.id}` } })} /></View>
+    <View style={styles.actions}><Button compact variant="secondary" icon="call-outline" label="Sună" onPress={() => void contact(`tel:${client.phone}`)} /><Button compact variant="secondary" icon="logo-whatsapp" label="WhatsApp" onPress={() => void contact(`https://wa.me/${client.phone.replace(/\D/g, '')}`)} /><Button compact variant="secondary" icon="mail-outline" label="Email" disabled={!client.email} onPress={() => void contact(`mailto:${client.email}`)} /><Button compact icon="document-text-outline" label="Fișă de service" onPress={openServiceSheet} /></View>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.tabScroller, { borderBottomColor: colors.border }]} contentContainerStyle={styles.tabs}>{tabs.map((item) => <Pressable key={item} onPress={() => setTab(item)} style={[styles.tab, tab === item && { borderBottomColor: colors.primary }]}><AppText variant="caption" style={{ color: tab === item ? colors.primary : colors.textMuted, fontWeight: '800' }}>{item}</AppText></Pressable>)}</ScrollView>
-    {tab === 'Detalii' ? <Details client={client} financials={financials} onOpenFinancials={canViewFinancials ? () => setTab('Finanțe') : undefined} /> : tab === 'QR' ? <ClientQRPanel client={client} /> : tab === 'Fișe service' ? <Sheets items={sheets} clientId={client.id} /> : tab === 'Finanțe' && financials ? <ClientFinanceSection
+    {tab === 'Detalii' ? <Details client={client} financials={financials} onOpenFinancials={canViewFinancials ? () => setTab('Finanțe') : undefined} /> : tab === 'QR' ? <ClientQRPanel client={client} /> : tab === 'Finanțe' && financials ? <ClientFinanceSection
       value={financials.financials}
       expenses={financials.expenses}
       collaboratorCost={financials.summary.collaboratorCost}
@@ -116,15 +119,10 @@ function Details({ client, financials, onOpenFinancials }: { client: Client; fin
   return <>{financials ? <ClientFinanceOverviewCard overview={financials} showInternal actionLabel="Deschide finanțele complete" actionIcon="wallet-outline" onAction={onOpenFinancials} /> : null}<Card style={styles.detailCard}><AppText variant="heading">Informații client</AppText><View style={styles.detailGrid}>{rows.map(([label, value, icon]) => <View key={label} style={styles.detailRow}><View style={styles.smallIcon}><Ionicons name={icon} size={17} color={palette.electric} /></View><View style={{ flex: 1 }}><AppText variant="caption" muted>{label}</AppText><AppText variant="label">{value || '—'}</AppText></View></View>)}</View></Card><Card style={styles.detailCard}><AppText variant="heading">Observații</AppText><AppText muted>{client.notes || 'Nu există observații pentru acest client.'}</AppText></Card></>;
 }
 
-function Sheets({ items, clientId }: { items: ServiceSheet[]; clientId: string }) {
-  const { colors } = useAppTheme();
-  return <Card style={styles.detailCard}><View style={styles.sectionHeading}><AppText variant="heading">Fișe de service</AppText><Button compact label="Fișă nouă" icon="add" onPress={() => router.push({ pathname: '/service/service-sheets/create', params: { clientId, returnTo: `/service/clients/${clientId}` } })} /></View>{items.length ? items.map((item) => <Pressable key={item.id} onPress={() => router.push(`/service/service-sheets/${item.id}`)} style={[styles.listRow, { borderBottomColor: colors.border }]}><View style={{ flex: 1 }}><AppText variant="label">{item.number} · {item.equipment}</AppText><AppText variant="caption" muted>{item.reportedIssue} · {formatDate(item.receivedAt)}</AppText></View><AppText variant="label" style={{ color: colors.primary }}>{formatCurrency(item.totalCost)}</AppText><Ionicons name="chevron-forward" size={18} color={colors.textMuted} /></Pressable>) : <AppText muted>Nu există fișe de service.</AppText>}</Card>;
-}
-
 function History({ items }: { items: AuditLog[] }) {
   return <ClientAuditHistory items={items} />;
 }
 
 const styles = StyleSheet.create({
-  profile: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flexWrap: 'wrap' }, avatar: { width: 62, height: 62, borderRadius: 31, alignItems: 'center', justifyContent: 'center' }, profileInfo: { flex: 1, minWidth: 220, gap: 3 }, nameRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm }, actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, tabScroller: { flexGrow: 0, borderBottomWidth: 1 }, tabs: { flexDirection: 'row' }, tab: { paddingVertical: spacing.md, paddingHorizontal: spacing.md, borderBottomWidth: 2, borderBottomColor: 'transparent' }, detailCard: { gap: spacing.lg }, detailGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg }, detailRow: { minWidth: 220, flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md }, smallIcon: { width: 36, height: 36, borderRadius: radius.sm, backgroundColor: '#EAF1FF', alignItems: 'center', justifyContent: 'center' }, empty: { alignItems: 'center', paddingVertical: spacing.xxxl, gap: spacing.md }, sectionHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md }, listRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth },
+  profile: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flexWrap: 'wrap' }, avatar: { width: 62, height: 62, borderRadius: 31, alignItems: 'center', justifyContent: 'center' }, profileInfo: { flex: 1, minWidth: 220, gap: 3 }, nameRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm }, actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, tabScroller: { flexGrow: 0, borderBottomWidth: 1 }, tabs: { flexDirection: 'row' }, tab: { paddingVertical: spacing.md, paddingHorizontal: spacing.md, borderBottomWidth: 2, borderBottomColor: 'transparent' }, detailCard: { gap: spacing.lg }, detailGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg }, detailRow: { minWidth: 220, flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md }, smallIcon: { width: 36, height: 36, borderRadius: radius.sm, backgroundColor: '#EAF1FF', alignItems: 'center', justifyContent: 'center' }, empty: { alignItems: 'center', paddingVertical: spacing.xxxl, gap: spacing.md },
 });

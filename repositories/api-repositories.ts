@@ -32,6 +32,7 @@ export const serviceSheetRepository: ServiceSheetRepository = {
   get: (id) => apiRequest(`/service-sheets/${id}`),
   create: (input) => apiRequest('/service-sheets', { method: 'POST', body: JSON.stringify(input) }),
   update: (id, input) => apiRequest(`/service-sheets/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
+  remove: (id) => apiRequest(`/service-sheets/${id}`, { method: 'DELETE' }),
   saveSignature: (id, signature) => apiRequest(`/service-sheets/${id}/signature`, { method: 'POST', body: JSON.stringify({ signature }) }),
 };
 export const collaboratorRepository: CollaboratorRepository = {
