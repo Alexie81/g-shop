@@ -1,10 +1,11 @@
 import { AppText } from '@/components/ui/AppText';
+import { Button } from '@/components/ui/Button';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { ServiceSheet } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import { ComponentProps, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, View } from 'react-native';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -21,55 +22,75 @@ type Props = {
 export function ServiceSheetActionsModal({ visible, sheet, onClose, onView, onEdit, onSend, onDelete }: Props) {
   const { colors } = useAppTheme();
   const [deleting, setDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   if (!sheet) return null;
 
   const closeThen = (action: (value: ServiceSheet) => void) => {
+    setConfirmingDelete(false);
     onClose();
     action(sheet);
   };
 
-  const requestDelete = () => Alert.alert(
-    'Ștergi fișa de service?',
-    `${sheet.number} va fi eliminată din aplicație. Datele rămân păstrate în siguranță în istoricul sistemului.`,
-    [
-      { text: 'Anulează', style: 'cancel' },
-      {
-        text: 'Șterge fișa',
-        style: 'destructive',
-        onPress: () => {
-          setDeleting(true);
-          void Promise.resolve(onDelete(sheet)).then(onClose).catch(() => undefined).finally(() => setDeleting(false));
-        },
-      },
-    ],
-  );
+  const close = () => {
+    if (deleting) return;
+    setConfirmingDelete(false);
+    onClose();
+  };
 
-  return <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+  const cancelDelete = () => {
+    if (!deleting) setConfirmingDelete(false);
+  };
+
+  const confirmDelete = async () => {
+    setDeleting(true);
+    try {
+      await onDelete(sheet);
+      setConfirmingDelete(false);
+      onClose();
+    } catch { /* The list screen surfaces the actionable error. */ }
+    finally { setDeleting(false); }
+  };
+
+  return <Modal transparent visible={visible} animationType="fade" statusBarTranslucent onRequestClose={confirmingDelete ? cancelDelete : close}>
     <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
-      <Pressable accessibilityLabel="Închide meniul fișei" style={StyleSheet.absoluteFill} onPress={onClose} />
+      <Pressable accessibilityRole="button" accessibilityLabel="Închide meniul fișei" style={StyleSheet.absoluteFill} onPress={confirmingDelete ? cancelDelete : close} />
       <View style={[styles.sheet, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
         <View style={[styles.handle, { backgroundColor: colors.border }]} />
-        <View style={styles.header}>
-          <View style={[styles.sheetIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="document-text-outline" size={24} color={colors.primary} /></View>
-          <View style={styles.headerCopy}>
-            <AppText variant="heading">{sheet.number}</AppText>
-            <AppText variant="caption" muted numberOfLines={2}>{sheet.client ? `${sheet.client.firstName} ${sheet.client.lastName} · ` : ''}{sheet.equipment}</AppText>
+        {confirmingDelete ? <>
+          <View style={styles.header}>
+            <View style={[styles.sheetIcon, { backgroundColor: `${palette.danger}16` }]}><Ionicons name="trash-outline" size={24} color={palette.danger} /></View>
+            <View style={styles.headerCopy}>
+              <AppText variant="heading">Ștergi fișa?</AppText>
+              <AppText variant="caption" muted numberOfLines={2}>{sheet.number} · {sheet.client ? `${sheet.client.firstName} ${sheet.client.lastName}` : sheet.equipment}</AppText>
+            </View>
+            <Pressable accessibilityRole="button" accessibilityLabel="Înapoi la acțiuni" disabled={deleting} onPress={cancelDelete} style={[styles.close, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="arrow-back" size={21} color={colors.text} /></Pressable>
           </View>
-          <Pressable accessibilityRole="button" accessibilityLabel="Închide" onPress={onClose} style={[styles.close, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={21} color={colors.text} /></Pressable>
-        </View>
-
-        <View style={styles.actions}>
-          <Action icon="eye-outline" color={colors.primary} label="Vizualizare fișă de service" description="Deschide toate detaliile fișei" onPress={() => closeThen(onView)} />
-          <Action icon="create-outline" color={palette.purple} label="Editare fișă de service" description="Modifică echipamentul, valorile și statusul" onPress={() => closeThen(onEdit)} />
-          <Action icon="share-social-outline" color={palette.success} label="Trimitere fișă de service" description="Deschide meniul telefonului, inclusiv WhatsApp" onPress={() => void onSend(sheet)} />
-          <Action icon="trash-outline" color={palette.danger} label="Ștergere fișă de service" description="Eliminare sigură, cu audit păstrat" onPress={requestDelete} loading={deleting} />
-        </View>
-
-        <View style={[styles.future, { backgroundColor: colors.surfaceMuted }]}>
-          <Ionicons name="document-attach-outline" size={20} color={colors.primary} />
-          <AppText variant="caption" muted style={styles.futureCopy}>PDF-ul și linkul public pentru WhatsApp vor fi generate de API într-o etapă viitoare.</AppText>
-        </View>
+          <View style={[styles.deleteNotice, { backgroundColor: `${palette.danger}0E`, borderColor: `${palette.danger}35` }]}>
+            <Ionicons name="alert-circle-outline" size={22} color={palette.danger} />
+            <AppText variant="caption" style={styles.futureCopy}>Fișa va fi eliminată din aplicație. Acțiunea va rămâne înregistrată în istoricul sistemului.</AppText>
+          </View>
+          <View style={styles.deleteActions}><Button variant="outline" label="Anulează" disabled={deleting} onPress={cancelDelete} style={styles.deleteButton} /><Button variant="danger" icon="trash-outline" label="Șterge fișa" loading={deleting} onPress={() => void confirmDelete()} style={styles.deleteButton} /></View>
+        </> : <>
+          <View style={styles.header}>
+            <View style={[styles.sheetIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="document-text-outline" size={24} color={colors.primary} /></View>
+            <View style={styles.headerCopy}>
+              <AppText variant="heading">{sheet.number}</AppText>
+              <AppText variant="caption" muted numberOfLines={2}>{sheet.client ? `${sheet.client.firstName} ${sheet.client.lastName} · ` : ''}{sheet.equipment}</AppText>
+            </View>
+            <Pressable accessibilityRole="button" accessibilityLabel="Închide" onPress={close} style={[styles.close, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={21} color={colors.text} /></Pressable>
+          </View>
+          <View style={styles.actions}>
+            <Action icon="eye-outline" color={colors.primary} label="Vizualizare fișă de service" description="Deschide toate detaliile fișei" onPress={() => closeThen(onView)} />
+            <Action icon="create-outline" color={palette.purple} label="Editare fișă de service" description="Modifică echipamentul, valorile și statusul" onPress={() => closeThen(onEdit)} />
+            <Action icon="share-social-outline" color={palette.success} label="Trimitere fișă de service" description="Deschide meniul telefonului, inclusiv WhatsApp" onPress={() => void onSend(sheet)} />
+            <Action icon="trash-outline" color={palette.danger} label="Ștergere fișă de service" description="Eliminare sigură, cu audit păstrat" onPress={() => setConfirmingDelete(true)} />
+          </View>
+          <View style={[styles.future, { backgroundColor: colors.surfaceMuted }]}>
+            <Ionicons name="document-attach-outline" size={20} color={colors.primary} />
+            <AppText variant="caption" muted style={styles.futureCopy}>PDF-ul și linkul public pentru WhatsApp vor fi generate de API într-o etapă viitoare.</AppText>
+          </View>
+        </>}
       </View>
     </View>
   </Modal>;
@@ -97,11 +118,14 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   sheetIcon: { width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   headerCopy: { flex: 1, minWidth: 0, gap: 2 },
-  close: { width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  close: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   actions: { gap: spacing.sm },
   action: { minHeight: 68, borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   actionIcon: { width: 42, height: 42, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   actionCopy: { flex: 1, minWidth: 0, gap: 2 },
   future: { borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   futureCopy: { flex: 1 },
+  deleteNotice: { minHeight: 68, borderWidth: 1, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  deleteActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  deleteButton: { flexGrow: 1, flexBasis: 130 },
 });

@@ -1,4 +1,3 @@
-import { ClientFinanceOverviewCard } from '@/components/clients/finance';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { ServiceSheetStatus, SERVICE_STATUS_LABELS } from '@/components/service-sheets/ServiceSheetStatus';
 import { SignatureModal } from '@/components/service-sheets/SignatureModal';
@@ -13,24 +12,30 @@ import { useToast } from '@/contexts/ToastContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { clientRepository, serviceSheetRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
-import { ServiceSheet, ServiceSheetStatus as Status } from '@/types';
+import { ClientFinancialOverview, ServiceSheet, ServiceSheetStatus as Status } from '@/types';
 import { formatFinanceMoney } from '@/utils/client-finance';
 import { formatDate } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Image, Pressable, StyleSheet, View } from 'react-native';
+import { Image, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
-const statusOrder: Status[] = ['NEW', 'VERIFYING', 'IN_PROGRESS', 'WAITING_PARTS', 'COMPLETED', 'DELIVERED'];
+const statusOrder: Status[] = ['NEW', 'WAITING', 'VERIFYING', 'IN_PROGRESS', 'WAITING_PARTS', 'COMPLETED', 'DELIVERED'];
+const selectableStatuses: Status[] = [...statusOrder, 'CANCELLED'];
 
 export default function ServiceSheetDetails() {
   const { serviceSheetId } = useLocalSearchParams<{ serviceSheetId: string }>();
-  const { colors } = useAppTheme();
+  const { colors, isDark } = useAppTheme();
+  const { width } = useWindowDimensions();
   const { hasPermission } = useAuth();
   const { showToast } = useToast();
   const [signing, setSigning] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
+  const mobile = width < 520;
+  const veryNarrow = width <= 360;
   const canViewFinancials = hasPermission('financials.view');
+  const returnToServiceSheets = () => router.replace('/service/service-sheets');
   const state = useAsyncData(async () => {
     const sheet = await serviceSheetRepository.get(serviceSheetId);
     const financials = canViewFinancials
@@ -39,12 +44,14 @@ export default function ServiceSheetDetails() {
     return { sheet, financials };
   }, [canViewFinancials, serviceSheetId]);
 
-  if (state.loading) return <Screen header={<AppHeader title="Fișă service" back />}><LoadingState rows={5} /></Screen>;
-  if (state.error || !state.data) return <Screen header={<AppHeader title="Fișă service" back />}><ErrorState message={state.error?.message ?? 'Fișa nu există.'} /></Screen>;
+  const header = <AppHeader title="Fișă service" back onBack={returnToServiceSheets} />;
+  if (state.loading) return <Screen header={header}><LoadingState rows={5} /></Screen>;
+  if (state.error || !state.data) return <Screen header={header}><ErrorState message={state.error?.message ?? 'Fișa nu există.'} onRetry={() => void state.reload()} /></Screen>;
 
   const { sheet, financials } = state.data;
   const currencyCode = sheet.currencyCode ?? financials?.financials.currencyCode ?? 'RON';
   const formatCurrency = (value: number) => formatFinanceMoney(value, currencyCode);
+  const currentStatusIndex = statusOrder.indexOf(sheet.status);
 
   const replaceSheet = (next: ServiceSheet) => state.setData((current) => current ? { ...current, sheet: next } : current);
   const changeStatus = async (status: Status) => {
@@ -61,88 +68,142 @@ export default function ServiceSheetDetails() {
     }
   };
 
-  return <Screen header={<AppHeader title={sheet.number} back />}>
-    <Card style={styles.hero}>
-      <View style={styles.heroCopy}>
-        <ServiceSheetStatus status={sheet.status} />
-        <AppText variant="title">{sheet.equipment}{sheet.brand ? ` · ${sheet.brand}` : ''}</AppText>
-        <AppText muted>{sheet.client ? `${sheet.client.firstName} ${sheet.client.lastName} · ${sheet.client.phone}` : 'Client'}</AppText>
+  const equipmentName = [sheet.equipment, sheet.brand, sheet.model].filter(Boolean).join(' · ');
+  const clientName = sheet.client ? `${sheet.client.firstName} ${sheet.client.lastName}` : 'Client';
+
+  return <Screen
+    header={<AppHeader title={sheet.number} back onBack={returnToServiceSheets} />}
+    refreshing={state.refreshing}
+    onRefresh={() => void state.reload(true)}
+    style={[styles.screen, mobile && styles.screenMobile]}
+  >
+    <Card style={[styles.hero, mobile && styles.cardMobile]} elevated>
+      <View style={styles.heroMain}>
+        <View style={[styles.heroIcon, { backgroundColor: isDark ? `${colors.primary}26` : colors.primarySoft }]}>
+          <Ionicons name="document-text-outline" size={24} color={colors.primary} />
+        </View>
+        <View style={styles.heroCopy}>
+          <AppText variant="caption" muted numberOfLines={1}>{sheet.number}</AppText>
+          <AppText variant="heading" numberOfLines={2}>{equipmentName}</AppText>
+          <View style={styles.clientLine}>
+            <Ionicons name="person-outline" size={15} color={colors.textMuted} />
+            <AppText variant="caption" muted numberOfLines={1} style={styles.clientText}>{clientName}{sheet.client?.phone ? ` · ${sheet.client.phone}` : ''}</AppText>
+          </View>
+        </View>
       </View>
-      <View style={styles.total}><AppText variant="caption" muted>Valoare afișată în fișă</AppText><AppText variant="title" style={{ color: colors.primary }}>{formatCurrency(sheet.totalCost)}</AppText></View>
+      <View style={[styles.heroSummary, { backgroundColor: colors.surfaceMuted }]}>
+        <ServiceSheetStatus status={sheet.status} />
+        <View style={styles.total}>
+          <AppText variant="caption" muted>Total fișă</AppText>
+          <AppText variant="heading" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={{ color: colors.primary }}>{formatCurrency(sheet.totalCost)}</AppText>
+        </View>
+      </View>
     </Card>
 
     <View style={styles.actions}>
-      <Button compact variant="outline" label="Editare" icon="create-outline" onPress={() => router.push(('/service/service-sheets/' + sheet.id + '/edit') as never)} />
-      <Button compact label="Schimbă status" icon="swap-horizontal-outline" onPress={() => setStatusOpen((value) => !value)} />
-      <Button compact variant={sheet.signatureUrl ? 'secondary' : 'outline'} label={sheet.signatureUrl ? 'Resemnează' : 'Semnează client'} icon="pencil-outline" onPress={() => setSigning(true)} />
-      <Button compact variant="outline" label="Export PDF" icon="download-outline" onPress={() => showToast('Exportul PDF va fi generat de API după publicare.', 'info')} />
+      <SheetAction mobile={mobile} icon="create-outline" label="Editează" color={colors.primary} onPress={() => router.push(('/service/service-sheets/' + sheet.id + '/edit') as never)} />
+      <SheetAction mobile={mobile} icon="swap-horizontal-outline" label="Schimbă status" color={palette.warning} selected={statusOpen} onPress={() => setStatusOpen((value) => !value)} />
+      <SheetAction mobile={mobile} icon="pencil-outline" label={sheet.signatureUrl ? 'Resemnează' : 'Semnează'} color={palette.purple} onPress={() => setSigning(true)} />
+      <SheetAction mobile={mobile} icon="download-outline" label="Export PDF" color={palette.cyan} onPress={() => showToast('Exportul PDF va fi generat de API după publicare.', 'info')} />
     </View>
 
-    {statusOpen ? <Card style={styles.statuses}>
-      <AppText variant="label">Alege statusul</AppText>
-      <View style={styles.statusGrid}>{([...statusOrder, 'WAITING', 'CANCELLED'] as Status[]).map((status) => <Pressable key={status} onPress={() => void changeStatus(status)}><ServiceSheetStatus status={status} /></Pressable>)}</View>
+    {statusOpen ? <Card style={[styles.panel, mobile && styles.cardMobile]} elevated>
+      <SectionTitle icon="git-branch-outline" title="Schimbă statusul" />
+      <View style={styles.statusGrid}>{selectableStatuses.map((status) => {
+        const selected = status === sheet.status;
+        return <Pressable
+          key={status}
+          accessibilityRole="button"
+          accessibilityState={{ selected }}
+          accessibilityLabel={`Status ${SERVICE_STATUS_LABELS[status]}`}
+          onPress={() => {
+            void Haptics.selectionAsync().catch(() => undefined);
+            void changeStatus(status);
+          }}
+          style={({ pressed }) => [
+            styles.statusOption,
+            mobile && styles.statusOptionMobile,
+            veryNarrow && styles.statusOptionVeryNarrow,
+            { backgroundColor: selected ? colors.primary : colors.surfaceMuted, borderColor: selected ? colors.primary : colors.border },
+            pressed && styles.pressed,
+          ]}
+        >
+          <AppText variant="caption" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.statusOptionLabel, { color: selected ? '#fff' : colors.text }]}>{SERVICE_STATUS_LABELS[status]}</AppText>
+          {selected ? <Ionicons name="checkmark-circle" size={17} color="#fff" /> : null}
+        </Pressable>;
+      })}</View>
     </Card> : null}
 
-    {financials ? <ClientFinanceOverviewCard
-      overview={financials}
-      showInternal
-      title="Situația financiară actuală a clientului"
-      subtitle="Separată de valorile istorice salvate în această fișă"
-      actionLabel="Deschide clientul"
-      actionIcon="person-outline"
-      onAction={() => router.push(`/service/clients/${sheet.clientId}`)}
-    /> : null}
+    {financials ? <FinanceSummary overview={financials} mobile={mobile} onOpenClient={() => router.push(`/service/clients/${sheet.clientId}`)} /> : null}
 
-    <View style={styles.columns}>
-      <Card style={styles.panel}>
-        <AppText variant="heading">Echipament și problemă</AppText>
-        <DataRow label="Echipament" value={[sheet.equipment, sheet.brand, sheet.model].filter(Boolean).join(' · ')} />
-        <DataRow label="Serie" value={sheet.serialNumber} />
-        <DataRow label="Accesorii" value={sheet.accessories} />
-        <DataRow label="Problemă declarată" value={sheet.reportedIssue} />
-        <DataRow label="Constatare" value={sheet.technicalAssessment} />
-        <DataRow label="Lucrări efectuate" value={sheet.workPerformed} />
-        <DataRow label="Piese" value={sheet.partsUsed} />
+    <View style={[styles.columns, mobile && styles.columnsMobile]}>
+      <Card style={[styles.panel, mobile && styles.cardMobile]}>
+        <SectionTitle icon="construct-outline" title="Problemă și lucrare" />
+        <View style={styles.compactDetails}>
+          <DataRow label="Serie" value={sheet.serialNumber} />
+          <DataRow label="Accesorii" value={sheet.accessories} />
+        </View>
+        <Narrative icon="alert-circle-outline" label="Problemă declarată" value={sheet.reportedIssue} />
+        <Narrative icon="search-outline" label="Constatare" value={sheet.technicalAssessment} />
+        <Narrative icon="checkmark-done-outline" label="Lucrări efectuate" value={sheet.workPerformed} />
+        <Narrative icon="hardware-chip-outline" label="Piese folosite" value={sheet.partsUsed} />
       </Card>
-      <Card style={styles.panel}>
-        <AppText variant="heading">Valorile acestei fișe</AppText>
-        <DataRow label="Piese afișate" value={formatCurrency(sheet.partsCost)} />
-        <DataRow label="Manoperă afișată" value={formatCurrency(sheet.laborCost)} />
-        <DataRow label="Total afișat" value={formatCurrency(sheet.totalCost)} accent />
-        {canViewFinancials ? <>
-          <DataRow label="Cheltuieli efective totale · intern" value={formatCurrency(sheet.directCosts)} />
-          <DataRow label="Valoare netă internă" value={formatCurrency(sheet.netValue)} accent />
-          <DataRow label="Comision colaborator" value={formatCurrency(sheet.collaboratorCommission ?? 0)} />
-        </> : null}
-        <DataRow label="Data primirii" value={formatDate(sheet.receivedAt, true)} />
-        <DataRow label="Termen estimat" value={formatDate(sheet.estimatedAt)} />
+
+      <Card style={[styles.panel, mobile && styles.cardMobile]}>
+        <SectionTitle icon="cash-outline" title="Valori și termene" />
+        <View style={styles.moneyGrid}>
+          <MoneyMetric label="Piese" value={formatCurrency(sheet.partsCost)} color={palette.cyan} />
+          <MoneyMetric label="Manoperă" value={formatCurrency(sheet.laborCost)} color={palette.purple} />
+          <MoneyMetric label="Total fișă" value={formatCurrency(sheet.totalCost)} color={colors.primary} />
+          {canViewFinancials ? <>
+            <MoneyMetric label="Cost intern" value={formatCurrency(sheet.directCosts)} color={palette.warning} />
+            <MoneyMetric label="Net intern" value={formatCurrency(sheet.netValue)} color={sheet.netValue >= 0 ? palette.success : palette.danger} />
+            <MoneyMetric label="Comision" value={formatCurrency(sheet.collaboratorCommission ?? 0)} color={palette.cyan} />
+          </> : null}
+        </View>
+        <View style={styles.compactDetails}>
+          <DataRow label="Data primirii" value={formatDate(sheet.receivedAt, true)} />
+          <DataRow label="Termen estimat" value={sheet.estimatedAt ? formatDate(sheet.estimatedAt) : undefined} />
+        </View>
       </Card>
     </View>
 
-    <Card style={styles.panel}>
-      <AppText variant="heading">Timeline status</AppText>
-      <View style={styles.timeline}>{statusOrder.map((status, index) => {
-        const currentIndex = statusOrder.indexOf(sheet.status);
-        const done = index <= currentIndex && currentIndex >= 0;
-        return <View key={status} style={styles.step}>
-          <View style={styles.rail}>
+    <Card style={[styles.panel, mobile && styles.cardMobile]}>
+      <SectionTitle icon="time-outline" title="Evoluția fișei" />
+      {sheet.status === 'CANCELLED' ? <View style={[styles.cancelledStatus, { backgroundColor: isDark ? `${palette.danger}18` : palette.dangerSoft, borderColor: `${palette.danger}45` }]}><Ionicons name="close-circle-outline" size={22} color={palette.danger} /><View style={styles.cancelledCopy}><AppText variant="label" style={{ color: palette.danger }}>Anulată</AppText><AppText variant="caption" muted>Status actual</AppText></View></View> : <View style={[styles.timeline, mobile && styles.timelineMobile]}>{statusOrder.map((status, index) => {
+        const done = index <= currentStatusIndex && currentStatusIndex >= 0;
+        const active = status === sheet.status;
+        return <View key={status} style={[styles.step, mobile && styles.stepMobile]}>
+          <View style={[styles.rail, mobile && styles.railMobile]}>
             <View style={[styles.dot, { backgroundColor: done ? palette.electric : colors.surfaceMuted, borderColor: done ? palette.electric : colors.border }]}>{done ? <Ionicons name="checkmark" size={13} color="#fff" /> : null}</View>
-            {index < statusOrder.length - 1 ? <View style={[styles.line, { backgroundColor: index < currentIndex ? palette.electric : colors.border }]} /> : null}
+            {index < statusOrder.length - 1 ? <View style={[styles.line, mobile && styles.lineMobile, { backgroundColor: index < currentStatusIndex ? palette.electric : colors.border }]} /> : null}
           </View>
-          <AppText variant="caption" style={{ color: done ? colors.text : colors.textMuted, fontWeight: done ? '800' : '500' }}>{SERVICE_STATUS_LABELS[status]}</AppText>
+          <View style={[styles.stepCopy, mobile && styles.stepCopyMobile]}>
+            <AppText variant="caption" style={{ color: done ? colors.text : colors.textMuted, fontWeight: done ? '800' : '500' }}>{SERVICE_STATUS_LABELS[status]}</AppText>
+            {active ? <AppText variant="caption" style={{ color: colors.primary, fontWeight: '800' }}>Status actual</AppText> : null}
+          </View>
         </View>;
-      })}</View>
+      })}</View>}
     </Card>
 
-    <Card style={styles.panel}>
-      <AppText variant="heading">Semnătura clientului</AppText>
+    <Card style={[styles.panel, mobile && styles.cardMobile]}>
+      <SectionTitle icon="pencil-outline" title="Semnătura clientului" />
       {sheet.signatureUrl ? <>
-        <Image source={{ uri: sheet.signatureUrl }} resizeMode="contain" style={[styles.signature, { backgroundColor: colors.surfaceMuted }]} />
-        <AppText variant="caption" muted>Semnat la {formatDate(sheet.signedAt, true)}</AppText>
-      </> : <View style={styles.noSignature}>
-        <Ionicons name="pencil-outline" size={29} color={colors.textMuted} />
-        <AppText muted>Fișa nu este încă semnată electronic.</AppText>
-        <Button compact label="Semnează acum" icon="pencil" onPress={() => setSigning(true)} />
+        <Image source={{ uri: sheet.signatureUrl }} resizeMode="contain" style={[styles.signature, veryNarrow && styles.signatureNarrow, { backgroundColor: colors.surfaceMuted }]} />
+        <View style={styles.signatureFooter}>
+          <View style={styles.signedCopy}>
+            <Ionicons name="checkmark-circle" size={18} color={palette.success} />
+            <AppText variant="caption" muted style={styles.clientText}>Semnat la {formatDate(sheet.signedAt, true)}</AppText>
+          </View>
+          <Button compact variant="outline" label="Resemnează" icon="pencil-outline" onPress={() => setSigning(true)} style={styles.touchButton} />
+        </View>
+      </> : <View style={[styles.noSignature, mobile && styles.noSignatureMobile, { backgroundColor: colors.surfaceMuted }]}>
+        <View style={[styles.noSignatureIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="pencil-outline" size={23} color={colors.primary} /></View>
+        <View style={styles.noSignatureCopy}>
+          <AppText variant="label">Nesemnată</AppText>
+          <AppText variant="caption" muted>Clientul poate semna direct pe telefon.</AppText>
+        </View>
+        <Button compact label="Semnează" icon="pencil" onPress={() => setSigning(true)} style={[styles.touchButton, mobile && styles.signatureButtonMobile]} />
       </View>}
     </Card>
 
@@ -150,28 +211,153 @@ export default function ServiceSheetDetails() {
   </Screen>;
 }
 
-function DataRow({ label, value, accent }: { label: string; value?: string; accent?: boolean }) {
+function SheetAction({ mobile, icon, label, color, selected = false, onPress }: { mobile: boolean; icon: keyof typeof Ionicons.glyphMap; label: string; color: string; selected?: boolean; onPress: () => void }) {
+  const { colors, isDark } = useAppTheme();
+  return <Pressable
+    accessibilityRole="button"
+    accessibilityLabel={label}
+    onPress={() => {
+      void Haptics.selectionAsync().catch(() => undefined);
+      onPress();
+    }}
+    style={({ pressed }) => [
+      styles.quickAction,
+      mobile && styles.quickActionMobile,
+      { backgroundColor: selected ? `${color}${isDark ? '32' : '14'}` : colors.surface, borderColor: selected || pressed ? `${color}80` : colors.border },
+      pressed && styles.pressed,
+    ]}
+  >
+    <View style={[styles.quickActionIcon, { backgroundColor: isDark ? `${color}28` : `${color}14` }]}><Ionicons name={icon} size={21} color={color} /></View>
+    <AppText variant="label" numberOfLines={2} style={styles.quickActionLabel}>{label}</AppText>
+  </Pressable>;
+}
+
+function FinanceSummary({ overview, mobile, onOpenClient }: { overview: ClientFinancialOverview; mobile: boolean; onOpenClient: () => void }) {
+  const { colors, isDark } = useAppTheme();
+  const { financials, summary } = overview;
+  const currency = financials.currencyCode || 'RON';
+  const money = (value: number) => formatFinanceMoney(value, currency);
+  const paid = financials.paymentStatus === 'PAID';
+
+  return <Card style={[styles.panel, mobile && styles.cardMobile]} elevated>
+    <View style={styles.sectionHeader}>
+      <View style={[styles.sectionIcon, { backgroundColor: isDark ? `${colors.primary}26` : colors.primarySoft }]}><Ionicons name="wallet-outline" size={20} color={colors.primary} /></View>
+      <View style={styles.sectionCopy}>
+        <AppText variant="heading" numberOfLines={1}>Finanțe</AppText>
+        {!mobile ? <AppText variant="caption" muted>Valorile actuale ale clientului</AppText> : null}
+      </View>
+      <View style={[styles.paymentBadge, { backgroundColor: paid ? (isDark ? `${palette.success}24` : palette.successSoft) : `${palette.warning}${isDark ? '24' : '18'}` }]}>
+        <Ionicons name={paid ? 'checkmark-circle' : 'time'} size={15} color={paid ? palette.success : palette.warning} />
+        <AppText variant="caption" style={{ color: paid ? palette.success : palette.warning, fontWeight: '800' }}>{paid ? 'Achitat' : 'Neachitat'}</AppText>
+      </View>
+    </View>
+    <View style={styles.moneyGrid}>
+      <MoneyMetric label="Total" value={money(summary.totalDue)} color={colors.primary} />
+      <MoneyMetric label="Încasat" value={money(summary.receivedAmount)} color={palette.success} />
+      <MoneyMetric label="Rest" value={money(summary.remainingDue)} color={summary.remainingDue > 0 ? palette.warning : palette.success} />
+      <MoneyMetric label="G-Shop Net" value={money(summary.gshopNet)} color={summary.gshopNet >= 0 ? palette.purple : palette.danger} />
+    </View>
+    <Button compact variant="outline" label="Deschide clientul" icon="person-outline" onPress={onOpenClient} style={[styles.touchButton, mobile && styles.fullWidthButton]} />
+  </Card>;
+}
+
+function SectionTitle({ icon, title }: { icon: keyof typeof Ionicons.glyphMap; title: string }) {
+  const { colors, isDark } = useAppTheme();
+  return <View style={styles.sectionHeader}>
+    <View style={[styles.sectionIcon, { backgroundColor: isDark ? `${colors.primary}26` : colors.primarySoft }]}><Ionicons name={icon} size={20} color={colors.primary} /></View>
+    <AppText variant="heading" style={styles.sectionCopy}>{title}</AppText>
+  </View>;
+}
+
+function MoneyMetric({ label, value, color }: { label: string; value: string; color: string }) {
+  const { colors, isDark } = useAppTheme();
+  return <View style={[styles.moneyMetric, { backgroundColor: isDark ? colors.surfaceMuted : '#F8FAFD', borderColor: colors.border }]}>
+    <AppText variant="caption" muted numberOfLines={1}>{label}</AppText>
+    <AppText variant="heading" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.62} style={{ color }}>{value}</AppText>
+  </View>;
+}
+
+function Narrative({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; label: string; value?: string }) {
   const { colors } = useAppTheme();
-  return <View style={[styles.dataRow, { borderBottomColor: colors.border }]}><AppText variant="caption" muted style={styles.dataLabel}>{label}</AppText><AppText variant="label" style={[styles.dataValue, { color: accent ? palette.success : colors.text }]}>{value || '—'}</AppText></View>;
+  if (!value?.trim()) return null;
+  return <View style={[styles.narrative, { backgroundColor: colors.surfaceMuted }]}>
+    <Ionicons name={icon} size={18} color={colors.primary} />
+    <View style={styles.narrativeCopy}>
+      <AppText variant="caption" muted>{label}</AppText>
+      <AppText>{value}</AppText>
+    </View>
+  </View>;
+}
+
+function DataRow({ label, value }: { label: string; value?: string }) {
+  const { colors } = useAppTheme();
+  if (!value?.trim()) return null;
+  return <View style={[styles.dataRow, { borderBottomColor: colors.border }]}>
+    <AppText variant="caption" muted style={styles.dataLabel}>{label}</AppText>
+    <AppText variant="label" style={styles.dataValue}>{value}</AppText>
+  </View>;
 }
 
 const styles = StyleSheet.create({
-  hero: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.xl },
-  heroCopy: { flex: 1, minWidth: 220, gap: spacing.sm },
-  total: { alignItems: 'flex-end' },
+  screen: { gap: spacing.md },
+  screenMobile: { paddingHorizontal: spacing.sm, gap: spacing.sm },
+  cardMobile: { padding: spacing.md, gap: spacing.md },
+  hero: { gap: spacing.md, overflow: 'hidden' },
+  heroMain: { minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  heroIcon: { width: 48, height: 48, flexShrink: 0, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  heroCopy: { flex: 1, minWidth: 0, gap: 2 },
+  clientLine: { minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  clientText: { flex: 1, minWidth: 0 },
+  heroSummary: { minHeight: 54, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  total: { flex: 1, minWidth: 0, alignItems: 'flex-end' },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  statuses: { gap: spacing.md },
+  quickAction: { minWidth: 0, minHeight: 66, flexGrow: 1, flexBasis: 190, borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  quickActionMobile: { flexBasis: '46%', minHeight: 62 },
+  quickActionIcon: { width: 38, height: 38, flexShrink: 0, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  quickActionLabel: { flex: 1, minWidth: 0 },
+  pressed: { opacity: 0.78, transform: [{ scale: 0.985 }] },
+  panel: { minWidth: 0, flex: 1, gap: spacing.md },
+  sectionHeader: { minWidth: 0, minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  sectionIcon: { width: 40, height: 40, flexShrink: 0, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  sectionCopy: { flex: 1, minWidth: 0 },
+  paymentBadge: { minHeight: 32, flexShrink: 0, borderRadius: radius.pill, paddingHorizontal: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: 5 },
   statusGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  statusOption: { minHeight: 44, minWidth: 0, flexGrow: 1, flexBasis: 170, borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  statusOptionMobile: { flexBasis: '46%' },
+  statusOptionVeryNarrow: { flexBasis: '100%' },
+  statusOptionLabel: { flex: 1, minWidth: 0, fontWeight: '800' },
   columns: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  panel: { minWidth: 290, flex: 1, gap: spacing.md },
-  dataRow: { flexDirection: 'row', paddingVertical: spacing.sm, gap: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth },
-  dataLabel: { flex: 1 },
-  dataValue: { flex: 1.5, textAlign: 'right' },
-  timeline: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  step: { minWidth: 90, flex: 1, alignItems: 'center', gap: spacing.sm },
-  rail: { flexDirection: 'row', alignItems: 'center', width: '100%' },
-  dot: { width: 28, height: 28, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  columnsMobile: { flexDirection: 'column', gap: spacing.sm },
+  compactDetails: { gap: 0 },
+  dataRow: { minWidth: 0, minHeight: 42, flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, gap: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth },
+  dataLabel: { flex: 0.8 },
+  dataValue: { flex: 1.2, minWidth: 0, textAlign: 'right' },
+  narrative: { borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  narrativeCopy: { flex: 1, minWidth: 0, gap: 3 },
+  moneyGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  moneyMetric: { minWidth: 0, minHeight: 68, flexGrow: 1, flexBasis: '46%', borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, justifyContent: 'center', gap: 2 },
+  touchButton: { minHeight: 44 },
+  fullWidthButton: { width: '100%', alignSelf: 'stretch' },
+  timeline: { flexDirection: 'row', justifyContent: 'space-between' },
+  cancelledStatus: { minHeight: 54, borderWidth: 1, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  cancelledCopy: { flex: 1, minWidth: 0, gap: 1 },
+  timelineMobile: { flexDirection: 'column' },
+  step: { minWidth: 74, flex: 1, alignItems: 'center', gap: spacing.sm },
+  stepMobile: { width: '100%', minWidth: 0, minHeight: 54, flexGrow: 0, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  rail: { width: '100%', flexDirection: 'row', alignItems: 'center' },
+  railMobile: { width: 28, alignSelf: 'stretch', flexDirection: 'column' },
+  dot: { width: 28, height: 28, flexShrink: 0, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   line: { height: 3, flex: 1 },
-  signature: { width: '100%', height: 180, borderRadius: radius.md },
-  noSignature: { alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xl },
+  lineMobile: { width: 2, minHeight: 26, height: 26, flex: 0 },
+  stepCopy: { alignItems: 'center', gap: 1 },
+  stepCopyMobile: { flex: 1, minWidth: 0, alignItems: 'flex-start', paddingTop: 5 },
+  signature: { width: '100%', height: 160, borderRadius: radius.md },
+  signatureNarrow: { height: 130 },
+  signatureFooter: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
+  signedCopy: { flex: 1, minWidth: 180, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  noSignature: { borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  noSignatureMobile: { flexWrap: 'wrap' },
+  noSignatureIcon: { width: 44, height: 44, flexShrink: 0, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  noSignatureCopy: { flex: 1, minWidth: 150, gap: 2 },
+  signatureButtonMobile: { width: '100%', alignSelf: 'stretch' },
 });

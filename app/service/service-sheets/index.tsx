@@ -11,7 +11,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { serviceSheetRepository } from '@/repositories/api-repositories';
-import { spacing } from '@/theme/tokens';
+import { radius, spacing } from '@/theme/tokens';
 import { ServiceSheet } from '@/types';
 import { formatFinanceMoney } from '@/utils/client-finance';
 import { formatDate } from '@/utils/format';
@@ -62,43 +62,93 @@ export default function ServiceSheetsScreen() {
     }
   };
 
+  const countLabel = sheets.length === 1 ? '1 fișă pentru 1 client' : `${sheets.length} fișe pentru ${sheets.length} clienți`;
+
   return <Screen header={<AppHeader title="Fișe de service" />} refreshing={state.refreshing} onRefresh={() => void state.reload(true)}>
     <View style={styles.heading}>
-      <AppText variant="title">Fișe de service</AppText>
-      <AppText muted>{sheets.length} {sheets.length === 1 ? 'client cu fișă' : 'clienți cu fișă'} în proprietatea activă</AppText>
-      <AppText variant="caption" muted>O fișă pentru fiecare client. Ține apăsat pe o fișă pentru toate acțiunile.</AppText>
+      <View style={styles.headingRow}>
+        <View style={styles.headingCopy}>
+          <AppText variant="title">Fișe de service</AppText>
+          <AppText muted>{countLabel} în proprietatea activă</AppText>
+        </View>
+        <View style={[styles.countBadge, { backgroundColor: colors.primarySoft }]}>
+          <Ionicons name="documents-outline" size={19} color={colors.primary} />
+          <AppText variant="label" style={{ color: colors.primary }}>{sheets.length}</AppText>
+        </View>
+      </View>
+      <View style={[styles.hint, { backgroundColor: colors.surfaceMuted }]}>
+        <Ionicons name="hand-left-outline" size={18} color={colors.primary} />
+        <AppText variant="caption" muted style={styles.hintCopy}>Atinge pentru deschidere. Ține apăsat sau folosește meniul pentru toate acțiunile.</AppText>
+      </View>
     </View>
 
     {state.loading ? <LoadingState rows={5} /> : state.error ? <ErrorState message={state.error.message} onRetry={() => void state.reload()} /> : !sheets.length ? <EmptyState
       icon="document-text-outline"
       title="Nicio fișă de service"
       message="Fișa de service se creează exclusiv din profilul clientului."
-    /> : <View style={styles.list}>{sheets.map((sheet) => <Pressable
-      key={sheet.id}
-      accessibilityRole="button"
-      accessibilityLabel={`${sheet.number}. Ține apăsat pentru acțiuni.`}
-      delayLongPress={450}
-      onLongPress={() => {
-        lastLongPressAt.current = Date.now();
-        setSelectedSheet(sheet);
-      }}
-      onPress={() => {
-        if (Date.now() - lastLongPressAt.current < 800) return;
-        openSheet(sheet);
-      }}
-      style={({ pressed }) => pressed && styles.pressed}
-    >
-      <Card style={styles.card}>
-        <View style={[styles.icon, { backgroundColor: colors.primarySoft }]}><Ionicons name="document-text-outline" size={23} color={colors.primary} /></View>
-        <View style={styles.cardCopy}>
-          <View style={styles.row}><AppText variant="heading" style={styles.number}>{sheet.number}</AppText><ServiceSheetStatus status={sheet.status} /></View>
-          <AppText variant="label">{sheet.equipment}{sheet.brand ? ` · ${sheet.brand}` : ''}{sheet.model ? ` ${sheet.model}` : ''}</AppText>
-          <AppText variant="caption" muted numberOfLines={1}>{sheet.client ? `${sheet.client.firstName} ${sheet.client.lastName}` : 'Client'} · {sheet.reportedIssue}</AppText>
-          <View style={styles.row}><AppText variant="caption" muted>{formatDate(sheet.receivedAt)}</AppText><AppText variant="label" style={{ color: colors.primary }}>{formatFinanceMoney(sheet.totalCost, sheet.currencyCode ?? 'RON')}</AppText></View>
-        </View>
-        <Ionicons name="ellipsis-vertical" size={20} color={colors.textMuted} />
-      </Card>
-    </Pressable>)}</View>}
+    /> : <View style={styles.list}>{sheets.map((sheet) => {
+      const clientName = sheet.client ? `${sheet.client.firstName} ${sheet.client.lastName}` : 'Client nespecificat';
+      const equipment = [sheet.equipment, sheet.brand, sheet.model].filter(Boolean).join(' · ') || 'Echipament nespecificat';
+
+      return <View key={sheet.id} style={styles.cardFrame}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${sheet.number}, ${clientName}`}
+          accessibilityHint="Atinge pentru vizualizare sau ține apăsat pentru toate acțiunile."
+          delayLongPress={450}
+          onLongPress={() => {
+            lastLongPressAt.current = Date.now();
+            setSelectedSheet(sheet);
+          }}
+          onPress={() => {
+            if (Date.now() - lastLongPressAt.current < 800) return;
+            openSheet(sheet);
+          }}
+          style={styles.cardPressable}
+        >
+          <Card style={styles.card}>
+            <View style={styles.cardHeader}>
+              <View style={[styles.icon, { backgroundColor: colors.primarySoft }]}>
+                <Ionicons name="document-text-outline" size={22} color={colors.primary} />
+              </View>
+              <View style={styles.cardTitle}>
+                <AppText variant="caption" muted>FIȘĂ DE SERVICE</AppText>
+                <AppText variant="heading" numberOfLines={1}>{sheet.number}</AppText>
+              </View>
+            </View>
+
+            <View style={styles.identity}>
+              <AppText variant="label" numberOfLines={1}>{clientName}</AppText>
+              <View style={styles.equipmentRow}>
+                <Ionicons name="hardware-chip-outline" size={16} color={colors.textMuted} />
+                <AppText variant="caption" muted numberOfLines={2} style={styles.equipmentCopy}>{equipment}</AppText>
+              </View>
+            </View>
+
+            <View style={[styles.meta, { borderTopColor: colors.border }]}>
+              <View style={styles.date}>
+                <Ionicons name="calendar-clear-outline" size={16} color={colors.textMuted} />
+                <AppText variant="caption" muted>{formatDate(sheet.receivedAt)}</AppText>
+              </View>
+              <ServiceSheetStatus status={sheet.status} />
+              <AppText variant="label" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={[styles.value, { color: colors.primary }]}>{formatFinanceMoney(sheet.totalCost, sheet.currencyCode ?? 'RON')}</AppText>
+            </View>
+          </Card>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Acțiuni pentru ${sheet.number}`}
+          hitSlop={4}
+          onPress={() => {
+            lastLongPressAt.current = Date.now();
+            setSelectedSheet(sheet);
+          }}
+          style={({ pressed }) => [styles.moreButton, { backgroundColor: pressed ? colors.primarySoft : colors.surfaceMuted }]}
+        >
+          <Ionicons name="ellipsis-horizontal" size={22} color={colors.text} />
+        </Pressable>
+      </View>;
+    })}</View>}
 
     <ServiceSheetActionsModal
       visible={Boolean(selectedSheet)}
@@ -113,12 +163,24 @@ export default function ServiceSheetsScreen() {
 }
 
 const styles = StyleSheet.create({
-  heading: { gap: spacing.xs },
+  heading: { gap: spacing.md, marginBottom: spacing.lg },
+  headingRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  headingCopy: { flex: 1, minWidth: 0, gap: 2 },
+  countBadge: { minWidth: 52, height: 44, paddingHorizontal: spacing.md, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  hint: { minHeight: 44, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  hintCopy: { flex: 1, minWidth: 0 },
   list: { gap: spacing.md },
-  card: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  cardCopy: { flex: 1, minWidth: 0, gap: spacing.xs },
-  icon: { width: 48, height: 48, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
-  number: { flex: 1, minWidth: 0 },
-  pressed: { opacity: 0.82, transform: [{ scale: 0.995 }] },
+  cardFrame: { position: 'relative', borderRadius: radius.lg },
+  cardPressable: { minHeight: 44, borderRadius: radius.lg },
+  card: { padding: spacing.md, gap: spacing.md },
+  cardHeader: { minHeight: 44, paddingRight: 56, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  cardTitle: { flex: 1, minWidth: 0, gap: 1 },
+  icon: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  moreButton: { position: 'absolute', zIndex: 2, top: spacing.md, right: spacing.md, width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  identity: { gap: spacing.xs },
+  equipmentRow: { minHeight: 24, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  equipmentCopy: { flex: 1, minWidth: 0 },
+  meta: { minHeight: 45, paddingTop: spacing.sm, borderTopWidth: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
+  date: { minHeight: 32, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  value: { marginLeft: 'auto', maxWidth: 126, textAlign: 'right' },
 });
