@@ -48,7 +48,7 @@ export default function DashboardScreen() {
         <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Fișe deschise" value={metrics.serviceSheetsOpen} icon="document-text-outline" color={palette.purple} />
         <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Fișe în lucru" value={metrics.serviceSheetsInProgress} icon="build-outline" color={palette.warning} />
         <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Fișe finalizate" value={metrics.serviceSheetsCompleted} icon="checkmark-done-outline" color={palette.success} />
-        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Plătit colaboratorilor" value={formatCurrency(metrics.collaboratorPayments)} icon="cash-outline" color={palette.cyan} helper="Ține apăsat" helperIcon="finger-print-outline" onLongPress={() => setFinanceOpen(true)} />
+        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Plătit colaboratorilor" value={formatCurrency(metrics.collaboratorPayments ?? 0)} icon="cash-outline" color={palette.cyan} helper="Ține apăsat" helperIcon="finger-print-outline" onLongPress={() => setFinanceOpen(true)} />
         <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Venit estimat" value={formatCurrency(metrics.estimatedRevenue)} icon="wallet-outline" color={palette.success} />
       </View>
     </View>
