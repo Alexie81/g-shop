@@ -156,6 +156,7 @@ export default function ClientDetailsScreen() {
       <ClientCollaboratorFinanceCard
         collaborator={financials.collaborator}
         currencyCode={financials.financials.currencyCode}
+        hasServiceSheet={Boolean(serviceSheet)}
         canEditAssignment={canEditClients}
         canManagePayment={canManageCollaborators}
         onEditAssignment={() => router.push(`/service/clients/${client.id}/edit`)}

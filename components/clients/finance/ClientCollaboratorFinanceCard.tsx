@@ -12,6 +12,7 @@ import { Modal, Pressable, StyleSheet, View } from 'react-native';
 type Props = {
   collaborator: ClientFinancialCollaborator | null;
   currencyCode: string;
+  hasServiceSheet: boolean;
   canEditAssignment: boolean;
   canManagePayment: boolean;
   onEditAssignment: () => void;
@@ -22,6 +23,7 @@ type Props = {
 export function ClientCollaboratorFinanceCard({
   collaborator,
   currencyCode,
+  hasServiceSheet,
   canEditAssignment,
   canManagePayment,
   onEditAssignment,
@@ -34,7 +36,7 @@ export function ClientCollaboratorFinanceCard({
   const [error, setError] = useState('');
 
   const changePayment = async () => {
-    if (!collaborator?.hasCommission) return;
+    if (!collaborator || (!collaborator.hasCommission && !hasServiceSheet)) return;
     setBusy('payment');
     setError('');
     try {
@@ -83,12 +85,12 @@ export function ClientCollaboratorFinanceCard({
           <Metric label="De achitat" value={formatFinanceMoney(collaborator.due, currencyCode)} color={palette.warning} />
         </View>
 
-        {!collaborator.hasCommission ? <View style={[styles.notice, { backgroundColor: colors.primarySoft }]}><Ionicons name="information-circle-outline" size={19} color={colors.primary} /><AppText variant="caption" style={styles.noticeCopy}>Comisionul este estimat. Plata devine disponibilă după crearea fișei de service.</AppText></View> : null}
+        {!collaborator.hasCommission ? <View style={[styles.notice, { backgroundColor: colors.primarySoft }]}><Ionicons name="information-circle-outline" size={19} color={colors.primary} /><AppText variant="caption" style={styles.noticeCopy}>{hasServiceSheet ? 'Comisionul este estimat și va fi sincronizat automat când îi schimbi starea plății.' : 'Comisionul este estimat. Plata devine disponibilă după crearea fișei de service.'}</AppText></View> : null}
         {error ? <View style={[styles.notice, { backgroundColor: `${palette.danger}12` }]}><Ionicons name="alert-circle-outline" size={19} color={palette.danger} /><AppText variant="caption" style={[styles.noticeCopy, { color: palette.danger }]}>{error}</AppText></View> : null}
 
         <View style={styles.actions}>
           {canEditAssignment ? <Button compact variant="outline" icon="create-outline" label="Editează atribuirea" onPress={onEditAssignment} style={styles.action} /> : null}
-          {canManagePayment ? <Button compact variant={paid ? 'outline' : 'primary'} icon={paid ? 'arrow-undo-outline' : 'checkmark-circle-outline'} label={paid ? 'Marchează neachitat' : 'Marchează achitat'} loading={busy === 'payment'} disabled={!collaborator.hasCommission} onPress={() => void changePayment()} style={styles.action} /> : null}
+          {canManagePayment ? <Button compact variant={paid ? 'outline' : 'primary'} icon={paid ? 'arrow-undo-outline' : 'checkmark-circle-outline'} label={paid ? 'Marchează neachitat' : 'Marchează achitat'} loading={busy === 'payment'} disabled={!collaborator.hasCommission && !hasServiceSheet} onPress={() => void changePayment()} style={styles.action} /> : null}
           {canEditAssignment ? <Button compact variant="danger" icon="person-remove-outline" label="Elimină atribuirea" disabled={busy !== ''} onPress={() => setRemoveOpen(true)} style={styles.action} /> : null}
         </View>
       </> : <View style={[styles.empty, { backgroundColor: colors.surfaceMuted }]}>
