@@ -31,7 +31,13 @@ export function PropertyProvider({ children }: PropsWithChildren) {
       setProperties(result);
       const storedId = await preferenceStorage.get(`property.${user.id}`);
       const stored = result.find((property) => property.id === storedId);
-      setActiveProperty((current) => result.find((property) => property.id === current?.id) ?? stored ?? null);
+      setActiveProperty((current) => {
+        const currentAllowed = result.find((property) => property.id === current?.id);
+        if (user.role === 'ADMIN' && !currentAllowed) return null;
+        const selected = currentAllowed ?? stored ?? result[0] ?? null;
+        if (selected && selected.id !== storedId) void preferenceStorage.set(`property.${user.id}`, selected.id);
+        return selected;
+      });
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Proprietățile nu au putut fi încărcate.');
     } finally { setLoading(false); }

@@ -4,8 +4,8 @@ import { useAppTheme } from '@/contexts/ThemeContext';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { ServiceSheet } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
-import { ComponentProps, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, Easing, Modal, PanResponder, Pressable, StyleSheet, View } from 'react-native';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -23,6 +23,33 @@ export function ServiceSheetActionsModal({ visible, sheet, onClose, onView, onEd
   const { colors } = useAppTheme();
   const [deleting, setDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const translateY = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) translateY.setValue(0);
+  }, [translateY, visible]);
+
+  const closeByDrag = useCallback(() => {
+    if (deleting) return;
+    Animated.timing(translateY, { toValue: 720, duration: 230, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(({ finished }) => {
+      if (!finished) return;
+      translateY.setValue(0);
+      setConfirmingDelete(false);
+      onClose();
+    });
+  }, [deleting, onClose, translateY]);
+
+  const panResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => false,
+    onMoveShouldSetPanResponder: (_event, gesture) => gesture.dy > 4 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+    onMoveShouldSetPanResponderCapture: (_event, gesture) => gesture.dy > 4 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+    onPanResponderMove: (_event, gesture) => translateY.setValue(Math.max(0, gesture.dy)),
+    onPanResponderRelease: (_event, gesture) => {
+      if (gesture.dy > 76 || gesture.vy > 0.65) { closeByDrag(); return; }
+      Animated.spring(translateY, { toValue: 0, damping: 20, stiffness: 230, mass: 0.8, useNativeDriver: true }).start();
+    },
+    onPanResponderTerminate: () => Animated.spring(translateY, { toValue: 0, damping: 20, stiffness: 230, mass: 0.8, useNativeDriver: true }).start(),
+  }), [closeByDrag, translateY]);
 
   if (!sheet) return null;
 
@@ -55,16 +82,18 @@ export function ServiceSheetActionsModal({ visible, sheet, onClose, onView, onEd
   return <Modal transparent visible={visible} animationType="fade" statusBarTranslucent onRequestClose={confirmingDelete ? cancelDelete : close}>
     <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
       <Pressable accessibilityRole="button" accessibilityLabel="Închide meniul fișei" style={StyleSheet.absoluteFill} onPress={confirmingDelete ? cancelDelete : close} />
-      <View style={[styles.sheet, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
-        <View style={[styles.handle, { backgroundColor: colors.border }]} />
+      <Animated.View style={[styles.sheet, { backgroundColor: colors.surfaceElevated, borderColor: colors.border, transform: [{ translateY }] }]}>
         {confirmingDelete ? <>
-          <View style={styles.header}>
-            <View style={[styles.sheetIcon, { backgroundColor: `${palette.danger}16` }]}><Ionicons name="trash-outline" size={24} color={palette.danger} /></View>
-            <View style={styles.headerCopy}>
-              <AppText variant="heading">Ștergi fișa?</AppText>
-              <AppText variant="caption" muted numberOfLines={2}>{sheet.number} · {sheet.client ? `${sheet.client.firstName} ${sheet.client.lastName}` : sheet.equipment}</AppText>
+          <View {...panResponder.panHandlers} accessibilityRole="adjustable" accessibilityLabel="Trage în jos pentru a închide" style={styles.draggableHeader}>
+            <View style={[styles.handle, { backgroundColor: colors.border }]} />
+            <View style={styles.header}>
+              <View style={[styles.sheetIcon, { backgroundColor: `${palette.danger}16` }]}><Ionicons name="trash-outline" size={24} color={palette.danger} /></View>
+              <View style={styles.headerCopy}>
+                <AppText variant="heading">Ștergi fișa?</AppText>
+                <AppText variant="caption" muted numberOfLines={2}>{sheet.number} | {sheet.client ? `${sheet.client.firstName} ${sheet.client.lastName}` : sheet.equipment}</AppText>
+              </View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Înapoi la acțiuni" disabled={deleting} onPress={cancelDelete} style={[styles.close, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="arrow-back" size={21} color={colors.text} /></Pressable>
             </View>
-            <Pressable accessibilityRole="button" accessibilityLabel="Înapoi la acțiuni" disabled={deleting} onPress={cancelDelete} style={[styles.close, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="arrow-back" size={21} color={colors.text} /></Pressable>
           </View>
           <View style={[styles.deleteNotice, { backgroundColor: `${palette.danger}0E`, borderColor: `${palette.danger}35` }]}>
             <Ionicons name="alert-circle-outline" size={22} color={palette.danger} />
@@ -72,13 +101,16 @@ export function ServiceSheetActionsModal({ visible, sheet, onClose, onView, onEd
           </View>
           <View style={styles.deleteActions}><Button variant="outline" label="Anulează" disabled={deleting} onPress={cancelDelete} style={styles.deleteButton} /><Button variant="danger" icon="trash-outline" label="Șterge fișa" loading={deleting} onPress={() => void confirmDelete()} style={styles.deleteButton} /></View>
         </> : <>
-          <View style={styles.header}>
-            <View style={[styles.sheetIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="document-text-outline" size={24} color={colors.primary} /></View>
-            <View style={styles.headerCopy}>
-              <AppText variant="heading">{sheet.number}</AppText>
-              <AppText variant="caption" muted numberOfLines={2}>{sheet.client ? `${sheet.client.firstName} ${sheet.client.lastName} · ` : ''}{sheet.equipment}</AppText>
+          <View {...panResponder.panHandlers} accessibilityRole="adjustable" accessibilityLabel="Trage în jos pentru a închide" style={styles.draggableHeader}>
+            <View style={[styles.handle, { backgroundColor: colors.border }]} />
+            <View style={styles.header}>
+              <View style={[styles.sheetIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="document-text-outline" size={24} color={colors.primary} /></View>
+              <View style={styles.headerCopy}>
+                <AppText variant="heading">{sheet.number}</AppText>
+                <AppText variant="caption" muted numberOfLines={2}>{sheet.client ? `${sheet.client.firstName} ${sheet.client.lastName} | ` : ''}{sheet.equipment}</AppText>
+              </View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Închide" onPress={close} style={[styles.close, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={21} color={colors.text} /></Pressable>
             </View>
-            <Pressable accessibilityRole="button" accessibilityLabel="Închide" onPress={close} style={[styles.close, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={21} color={colors.text} /></Pressable>
           </View>
           <View style={styles.actions}>
             <Action icon="eye-outline" color={colors.primary} label="Vizualizare fișă de service" description="Deschide toate detaliile fișei" onPress={() => closeThen(onView)} />
@@ -91,7 +123,7 @@ export function ServiceSheetActionsModal({ visible, sheet, onClose, onView, onEd
             <AppText variant="caption" muted style={styles.futureCopy}>PDF-ul și linkul public pentru WhatsApp vor fi generate de API într-o etapă viitoare.</AppText>
           </View>
         </>}
-      </View>
+      </Animated.View>
     </View>
   </Modal>;
 }
@@ -114,6 +146,7 @@ function Action({ icon, color, label, description, onPress, loading = false }: {
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
   sheet: { width: '100%', maxWidth: 560, alignSelf: 'center', borderWidth: 1, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.lg, paddingBottom: spacing.xxxl, gap: spacing.lg },
+  draggableHeader: { minHeight: 88, marginHorizontal: -spacing.lg, marginTop: -spacing.sm, paddingHorizontal: spacing.lg, gap: spacing.md },
   handle: { width: 48, height: 5, borderRadius: radius.pill, alignSelf: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   sheetIcon: { width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
