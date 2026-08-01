@@ -11,7 +11,14 @@ import { Animated, PanResponder, Pressable, StyleSheet, useWindowDimensions, Vie
 
 const avatarColors = [palette.electric, palette.purple, palette.success, palette.warning, palette.cyan];
 const SWIPE_LIMIT = 92;
-const SWIPE_TRIGGER = 62;
+const SWIPE_TRIGGER = 52;
+const FLING_TRIGGER = 30;
+
+function hasHorizontalIntent(dx: number, dy: number) {
+  const horizontal = Math.abs(dx);
+  const vertical = Math.abs(dy);
+  return horizontal > 12 && horizontal > vertical * 1.35;
+}
 
 type ClientCardProps = {
   client: Client;
@@ -31,19 +38,18 @@ export function ClientCard({ client, index = 0, onWhatsApp, onDeleteRequest }: C
   const finalized = client.status === 'FINALIZED';
   const statusColor = finalized ? palette.success : palette.danger;
 
-  const resetPosition = useCallback(() => Animated.spring(translateX, {
+  const resetPosition = useCallback((onComplete?: () => void) => Animated.spring(translateX, {
     toValue: 0,
     useNativeDriver: true,
     speed: 24,
     bounciness: 5,
-  }).start(), [translateX]);
+  }).start(() => onComplete?.()), [translateX]);
 
   const panResponder = useMemo(() => PanResponder.create({
-    onMoveShouldSetPanResponder: (_, gesture) => {
-      const horizontal = Math.abs(gesture.dx);
-      const vertical = Math.abs(gesture.dy);
-      return horizontal > 10 && horizontal > vertical * 1.45;
-    },
+    onStartShouldSetPanResponder: () => false,
+    onStartShouldSetPanResponderCapture: () => false,
+    onMoveShouldSetPanResponder: (_, gesture) => hasHorizontalIntent(gesture.dx, gesture.dy),
+    onMoveShouldSetPanResponderCapture: (_, gesture) => hasHorizontalIntent(gesture.dx, gesture.dy),
     onPanResponderGrant: () => {
       swipeStarted.current = true;
       translateX.stopAnimation();
@@ -52,26 +58,21 @@ export function ClientCard({ client, index = 0, onWhatsApp, onDeleteRequest }: C
       translateX.setValue(Math.max(-SWIPE_LIMIT, Math.min(SWIPE_LIMIT, gesture.dx)));
     },
     onPanResponderRelease: (_, gesture) => {
-      const action = gesture.dx >= SWIPE_TRIGGER
+      const swipedRight = gesture.dx >= SWIPE_TRIGGER || (gesture.dx >= FLING_TRIGGER && gesture.vx >= 0.45);
+      const swipedLeft = gesture.dx <= -SWIPE_TRIGGER || (gesture.dx <= -FLING_TRIGGER && gesture.vx <= -0.45);
+      const action = swipedRight
         ? () => onWhatsApp?.(client)
-        : gesture.dx <= -SWIPE_TRIGGER
+        : swipedLeft
           ? () => onDeleteRequest?.(client)
           : undefined;
-      Animated.spring(translateX, {
-        toValue: 0,
-        useNativeDriver: true,
-        speed: 25,
-        bounciness: 4,
-      }).start(() => {
-        swipeStarted.current = false;
-        action?.();
-      });
+      resetPosition(() => { swipeStarted.current = false; });
+      action?.();
     },
     onPanResponderTerminate: () => {
-      swipeStarted.current = false;
-      resetPosition();
+      resetPosition(() => { swipeStarted.current = false; });
     },
-    onShouldBlockNativeResponder: () => false,
+    onPanResponderTerminationRequest: () => false,
+    onShouldBlockNativeResponder: () => true,
   }), [client, onDeleteRequest, onWhatsApp, resetPosition, translateX]);
 
   const openDetails = () => {
