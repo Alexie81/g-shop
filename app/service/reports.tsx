@@ -27,6 +27,7 @@ type ReportPeriod = 'TODAY' | '7D' | '1M' | '1Y' | 'TOTAL' | 'CUSTOM';
 type ReportSeriesPoint = { label: string; revenue: number; costs: number; net: number; clients: number };
 type Report = {
   metrics: DashboardMetrics;
+  periodMetrics?: Pick<DashboardMetrics, 'clientsTotal' | 'clientsWaiting' | 'gshopNet' | 'revenueOnHold' | 'totalRevenue' | 'collaboratorTotal'>;
   commissions: Commission[];
   series: ReportSeriesPoint[];
   revenueByMonth: { label: string; value: number }[];
@@ -76,7 +77,7 @@ export default function ReportsScreen() {
       dashboardRepository.get(propertyId),
       apiRequest<Report>(query),
     ]);
-    return { ...report, metrics };
+    return { ...report, dashboardMetrics: metrics, metrics: report.periodMetrics ?? metrics };
   }, [propertyId, query]);
 
   const returnToMore = () => router.replace('/service/more');
@@ -101,9 +102,8 @@ export default function ReportsScreen() {
   const report = state.data;
   const series = report.series ?? (report.revenueByMonth ?? []).map((item) => ({ label: item.label, revenue: item.value, costs: 0, net: item.value, clients: 0 }));
   const periodRange = report.period ?? { from: '—', to: '—' };
+  const qrMetrics = report.dashboardMetrics ?? (report.metrics as DashboardMetrics);
   const cardBasis = mobile ? '47%' : '30%';
-  const seriesRevenue = series.reduce((sum, item) => sum + item.revenue, 0);
-  const seriesClients = series.reduce((sum, item) => sum + item.clients, 0);
 
   return <Screen header={<AppHeader title="Rapoarte" back onBack={returnToMore} />} scroll={false} bottomInset={false} style={styles.screen}>
     <View style={styles.reportRoot}>
@@ -154,7 +154,7 @@ export default function ReportsScreen() {
             /> : null}
           </View>
 
-          <SectionTitle icon="grid-outline" title="Aceleași date ca în dashboard" description="Valorile actuale, sincronizate online" />
+          <SectionTitle icon="grid-outline" title="Analiză date" description="Indicatorii financiari recalculați pentru intervalul ales" />
           <View style={styles.stats}>
             <StatCard style={{ flexGrow: 1, flexBasis: cardBasis }} label="Total clienți" value={report.metrics.clientsTotal} icon="people-outline" color={palette.electric} />
             <StatCard style={{ flexGrow: 1, flexBasis: cardBasis }} label="Clienți în așteptare" value={report.metrics.clientsWaiting} icon="time-outline" color={palette.warning} />
@@ -162,13 +162,6 @@ export default function ReportsScreen() {
             <StatCard style={{ flexGrow: 1, flexBasis: cardBasis }} label="Venituri on hold" value={formatCurrency(report.metrics.revenueOnHold)} icon="hourglass-outline" color={palette.warning} />
             <StatCard style={{ flexGrow: 1, flexBasis: cardBasis }} label="Total încasări" value={formatCurrency(report.metrics.totalRevenue)} icon="cash-outline" color={palette.success} />
             <StatCard style={{ flexGrow: 1, flexBasis: cardBasis }} label="Total colaboratori" value={formatCurrency(report.metrics.collaboratorTotal)} icon="people-circle-outline" color={palette.cyan} />
-          </View>
-
-          <View style={styles.periodSummary}>
-            <MiniMetric label="Volum fișe" value={formatCurrency(seriesRevenue)} icon="receipt-outline" color={palette.electric} />
-            <MiniMetric label="Costuri" value={formatCurrency(report.totalCosts)} icon="trending-down-outline" color={palette.danger} />
-            <MiniMetric label="Net perioadă" value={formatCurrency(report.netProfit)} icon="trending-up-outline" color={report.netProfit >= 0 ? palette.success : palette.danger} />
-            <MiniMetric label="Clienți noi" value={`${seriesClients}`} icon="person-add-outline" color={palette.cyan} />
           </View>
 
           <Card style={styles.panel}>
@@ -183,7 +176,7 @@ export default function ReportsScreen() {
             </Card>
             <Card style={[styles.panel, !mobile && styles.halfPanel]}>
               <SectionTitle compact icon="qr-code-outline" title="Activitate QR" description="Situația actuală a codurilor" />
-              <QRChart generated={report.metrics.qrGenerated} used={report.metrics.qrUsed} />
+              <QRChart generated={qrMetrics.qrGenerated ?? 0} used={qrMetrics.qrUsed ?? 0} />
             </Card>
           </View>
 
@@ -248,11 +241,6 @@ function DateButton({ label, value, onPress }: { label: string; value: string; o
 function SectionTitle({ icon, title, description, compact = false }: { icon: ComponentProps<typeof Ionicons>['name']; title: string; description: string; compact?: boolean }) {
   const { colors } = useAppTheme();
   return <View style={[styles.sectionTitle, compact && styles.sectionTitleCompact]}><View style={[styles.sectionIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name={icon} size={compact ? 19 : 21} color={colors.primary} /></View><View style={styles.sectionCopy}><AppText variant={compact ? 'heading' : 'title'}>{title}</AppText><AppText variant="caption" muted>{description}</AppText></View></View>;
-}
-
-function MiniMetric({ label, value, icon, color }: { label: string; value: string; icon: ComponentProps<typeof Ionicons>['name']; color: string }) {
-  const { colors } = useAppTheme();
-  return <View style={[styles.miniMetric, { backgroundColor: colors.surface, borderColor: colors.border }]}><View style={[styles.miniIcon, { backgroundColor: `${color}14` }]}><Ionicons name={icon} size={18} color={color} /></View><View style={styles.miniCopy}><AppText variant="caption" muted>{label}</AppText><AppText variant="label" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={{ color }}>{value}</AppText></View></View>;
 }
 
 function TrendChart({ data }: { data: ReportSeriesPoint[] }) {
@@ -359,10 +347,6 @@ const styles = StyleSheet.create({
   sectionIcon: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   sectionCopy: { minWidth: 0, flex: 1 },
   stats: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  periodSummary: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  miniMetric: { minWidth: 145, flex: 1, minHeight: 72, borderWidth: 1, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  miniIcon: { width: 38, height: 38, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
-  miniCopy: { minWidth: 0, flex: 1 },
   columns: { flexDirection: 'row', alignItems: 'stretch', gap: spacing.md },
   columnsMobile: { flexDirection: 'column' },
   panel: { minWidth: 0, gap: spacing.lg, overflow: 'hidden' },
