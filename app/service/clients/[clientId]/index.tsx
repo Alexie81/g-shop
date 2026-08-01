@@ -1,5 +1,6 @@
 import { ClientQRPanel } from '@/components/clients/ClientQRPanel';
 import { ClientAuditHistory } from '@/components/clients/ClientAuditHistory';
+import { ClientStatusBadge } from '@/components/clients/ClientStatusBadge';
 import { ClientFinanceOverviewCard, ClientFinanceSection } from '@/components/clients/finance';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { AppText } from '@/components/ui/AppText';
@@ -7,7 +8,6 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Screen } from '@/components/ui/Screen';
 import { ErrorState, LoadingState } from '@/components/ui/States';
-import { StatusBadge } from '@/components/ui/StatusBadge';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -21,7 +21,7 @@ import { ClientFinanceValue } from '@/utils/client-finance';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Linking, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 type Tab = 'Detalii' | 'Finanțe' | 'QR' | 'Colaboratori' | 'Istoric';
 
@@ -30,8 +30,10 @@ export default function ClientDetailsScreen() {
   const { user, hasPermission } = useAuth();
   const { colors } = useAppTheme(); const { showToast } = useToast(); const [tab, setTab] = useState<Tab>('Detalii');
   const [financeSaving, setFinanceSaving] = useState(false);
+  const [statusSaving, setStatusSaving] = useState(false);
   const isAdmin = user?.role === 'ADMIN';
   const canViewFinancials = hasPermission('financials.view');
+  const canEditClients = hasPermission('clients.update');
   const canEditFinancials = canViewFinancials && hasPermission('clients.update');
   const tabs: Tab[] = [
     'Detalii',
@@ -86,15 +88,31 @@ export default function ClientDetailsScreen() {
       financials: { ...next, financials: current.financials.financials },
     } : current);
   };
+  const changeClientStatus = async () => {
+    if (!canEditClients) return;
+    const finalized = client.status === 'FINALIZED';
+    setStatusSaving(true);
+    try {
+      const updated = await clientRepository.update(client.id, { status: finalized ? 'ACTIVE' : 'FINALIZED' });
+      state.setData((current) => current ? { ...current, client: updated } : current);
+      await reloadFinanceHistory();
+      showToast(finalized ? 'Clientul a fost redeschis.' : 'Clientul a fost finalizat.', 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Statusul clientului nu a putut fi actualizat.', 'error');
+      throw error;
+    } finally {
+      setStatusSaving(false);
+    }
+  };
   return <Screen header={<AppHeader title="Detalii client" back />} refreshing={state.refreshing} onRefresh={() => void state.reload(true)}>
     <Card style={styles.profile}>
       <View style={[styles.avatar, { backgroundColor: colors.primary }]}><AppText variant="title" style={{ color: '#fff' }}>{initials(client.firstName, client.lastName)}</AppText></View>
-      <View style={styles.profileInfo}><View style={styles.nameRow}><AppText variant="title">{fullName(client)}</AppText>{client.qr && client.qr.status !== 'NOT_GENERATED' ? <StatusBadge status={client.qr.status} /> : null}</View><AppText muted>{client.phone}{client.email ? ` · ${client.email}` : ''}</AppText><AppText variant="caption" muted>{client.city || 'Localitate nespecificată'} · Client din {formatDate(client.createdAt)}</AppText></View>
+      <View style={styles.profileInfo}><View style={styles.nameRow}><AppText variant="title">{fullName(client)}</AppText><ClientStatusBadge status={client.status} /></View><AppText muted>{client.phone}{client.email ? ` · ${client.email}` : ''}</AppText><AppText variant="caption" muted>{client.city || 'Localitate nespecificată'} · Client din {formatDate(client.createdAt)}</AppText></View>
       <Button compact variant="outline" icon="create-outline" label="Editează" onPress={() => router.push(`/service/clients/${client.id}/edit`)} />
     </Card>
     <View style={styles.actions}><Button compact variant="secondary" icon="call-outline" label="Sună" onPress={() => void contact(`tel:${client.phone}`)} /><Button compact variant="secondary" icon="logo-whatsapp" label="WhatsApp" onPress={() => void contact(`https://wa.me/${client.phone.replace(/\D/g, '')}`)} /><Button compact variant="secondary" icon="mail-outline" label="Email" disabled={!client.email} onPress={() => void contact(`mailto:${client.email}`)} /><Button compact icon="document-text-outline" label="Fișă de service" onPress={openServiceSheet} /></View>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.tabScroller, { borderBottomColor: colors.border }]} contentContainerStyle={styles.tabs}>{tabs.map((item) => <Pressable key={item} onPress={() => setTab(item)} style={[styles.tab, tab === item && { borderBottomColor: colors.primary }]}><AppText variant="caption" style={{ color: tab === item ? colors.primary : colors.textMuted, fontWeight: '800' }}>{item}</AppText></Pressable>)}</ScrollView>
-    {tab === 'Detalii' ? <Details client={client} financials={financials} onOpenFinancials={canViewFinancials ? () => setTab('Finanțe') : undefined} /> : tab === 'QR' ? <ClientQRPanel client={client} /> : tab === 'Finanțe' && financials ? <ClientFinanceSection
+    {tab === 'Detalii' ? <><Details client={client} financials={financials} onOpenFinancials={canViewFinancials ? () => setTab('Finanțe') : undefined} />{canEditClients ? <ClientLifecycleAction finalized={client.status === 'FINALIZED'} loading={statusSaving} onConfirm={changeClientStatus} /> : null}</> : tab === 'QR' ? <ClientQRPanel client={client} /> : tab === 'Finanțe' && financials ? <ClientFinanceSection
       value={financials.financials}
       expenses={financials.expenses}
       collaboratorCost={financials.summary.collaboratorCost}
@@ -123,6 +141,36 @@ function History({ items }: { items: AuditLog[] }) {
   return <ClientAuditHistory items={items} />;
 }
 
+function ClientLifecycleAction({ finalized, loading, onConfirm }: { finalized: boolean; loading: boolean; onConfirm: () => Promise<void> | void }) {
+  const { colors, isDark } = useAppTheme();
+  const [open, setOpen] = useState(false);
+  const tone = finalized ? palette.success : palette.danger;
+  const submit = async () => {
+    try {
+      await onConfirm();
+      setOpen(false);
+    } catch { /* The request layer and toast surface the actionable error. */ }
+  };
+  return <>
+    <Card style={[styles.lifecycle, { borderColor: `${tone}55`, backgroundColor: isDark ? `${tone}0D` : `${tone}08` }]}>
+      <View style={[styles.lifecycleIcon, { backgroundColor: `${tone}18` }]}><Ionicons name={finalized ? 'checkmark-done-outline' : 'flag-outline'} size={24} color={tone} /></View>
+      <View style={styles.lifecycleCopy}><AppText variant="heading">{finalized ? 'Client finalizat' : 'Finalizează clientul'}</AppText><AppText variant="caption" muted>{finalized ? 'Clientul este închis și apare în filtrul Finalizați.' : 'Închide activitatea clientului și mută-l în lista Finalizați.'}</AppText></View>
+      <Button compact variant={finalized ? 'outline' : 'danger'} icon={finalized ? 'refresh-outline' : 'checkmark-done-outline'} label={finalized ? 'Redeschide' : 'Finalizează'} loading={loading} onPress={() => setOpen(true)} />
+    </Card>
+    <Modal visible={open} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setOpen(false)}>
+      <View style={[styles.lifecycleOverlay, { backgroundColor: colors.overlay }]}>
+        <Pressable accessibilityLabel="Închide confirmarea" style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} />
+        <Card style={styles.lifecycleModal} elevated>
+          <View style={[styles.lifecycleModalIcon, { backgroundColor: `${tone}18` }]}><Ionicons name={finalized ? 'refresh-outline' : 'checkmark-done-outline'} size={30} color={tone} /></View>
+          <View style={styles.lifecycleModalCopy}><AppText variant="title">{finalized ? 'Redeschizi clientul?' : 'Finalizezi clientul?'}</AppText><AppText muted>{finalized ? 'Clientul va reveni în lista Activii și va putea fi lucrat în continuare.' : 'Clientul va apărea în lista Finalizați. Datele, fișa și istoricul rămân păstrate.'}</AppText></View>
+          <View style={styles.lifecycleModalActions}><Button variant="outline" label="Anulează" disabled={loading} onPress={() => setOpen(false)} style={styles.lifecycleModalButton} /><Button variant={finalized ? 'primary' : 'danger'} label={finalized ? 'Redeschide clientul' : 'Finalizează clientul'} icon={finalized ? 'refresh-outline' : 'checkmark-done-outline'} loading={loading} onPress={() => void submit()} style={styles.lifecycleModalButton} /></View>
+        </Card>
+      </View>
+    </Modal>
+  </>;
+}
+
 const styles = StyleSheet.create({
   profile: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flexWrap: 'wrap' }, avatar: { width: 62, height: 62, borderRadius: 31, alignItems: 'center', justifyContent: 'center' }, profileInfo: { flex: 1, minWidth: 220, gap: 3 }, nameRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm }, actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, tabScroller: { flexGrow: 0, borderBottomWidth: 1 }, tabs: { flexDirection: 'row' }, tab: { paddingVertical: spacing.md, paddingHorizontal: spacing.md, borderBottomWidth: 2, borderBottomColor: 'transparent' }, detailCard: { gap: spacing.lg }, detailGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg }, detailRow: { minWidth: 220, flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md }, smallIcon: { width: 36, height: 36, borderRadius: radius.sm, backgroundColor: '#EAF1FF', alignItems: 'center', justifyContent: 'center' }, empty: { alignItems: 'center', paddingVertical: spacing.xxxl, gap: spacing.md },
+  lifecycle: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.md }, lifecycleIcon: { width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' }, lifecycleCopy: { flex: 1, minWidth: 210, gap: 3 }, lifecycleOverlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg }, lifecycleModal: { width: '100%', maxWidth: 480, padding: spacing.xxl, gap: spacing.lg }, lifecycleModalIcon: { width: 62, height: 62, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' }, lifecycleModalCopy: { gap: spacing.sm }, lifecycleModalActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, lifecycleModalButton: { flexGrow: 1, flexBasis: 180 },
 });

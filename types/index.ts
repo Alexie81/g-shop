@@ -101,7 +101,7 @@ export interface Client extends BaseEntity {
   county?: string;
   postalCode?: string;
   notes?: string;
-  status: 'ACTIVE' | 'INACTIVE' | 'NEW' | 'REVIEW_REQUIRED';
+  status: 'ACTIVE' | 'INACTIVE' | 'NEW' | 'REVIEW_REQUIRED' | 'FINALIZED';
   collaboratorId?: UUID;
   commissionType?: CommissionType;
   commissionValue?: number;
