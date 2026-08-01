@@ -53,7 +53,7 @@ ORDER BY data_length + index_length DESC;
 - `GET /clients/{id}`
 - `PUT /clients/{id}`
 - `GET /clients/{id}/intake`
-- `POST /clients/{id}/qr` — endpoint compatibil și idempotent: returnează QR-ul existent fără să-i schimbe tokenul; creează unul doar pentru un client legacy care nu are QR
+- `POST /clients/{id}/qr` — endpoint compatibil și idempotent: returnează QR-ul existent fără să-i schimbe tokenul, elimină numai expirarea istorică dacă există și creează unul doar pentru un client legacy care nu are QR
 - `POST /clients/{id}/qr/share`
 - `POST /clients/{id}/qr/use`
 - `POST /qr/resolve`

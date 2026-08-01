@@ -299,7 +299,20 @@ try {
     }
     if ($method === 'POST' && path_match('/clients/{id}/qr', $path, $params)) {
         $user=require_permission('qr.generate');$client=get_client($params['id']);ensure_property($client['propertyId'],$user);
-        if(!empty($client['qr']))respond(client_for_user($client,$user));
+        if(!empty($client['qr'])){
+            $legacyStatuses=['EXPIRED','INVALIDATED','REGENERATED'];
+            $needsNormalization=$client['qr']['expiresAt']!==null||$client['qr']['invalidatedAt']!==null||in_array($client['qr']['status'],$legacyStatuses,true);
+            if($needsNormalization){
+                $normalizedStatus=!empty($client['qr']['usedAt'])?'USED':(in_array($client['qr']['status'],$legacyStatuses,true)?'GENERATED':$client['qr']['status']);
+                $now=now_utc();
+                db()->prepare('UPDATE client_qr SET status=?,expires_at=NULL,invalidated_at=NULL,updated_at=?,updated_by=? WHERE id=?')->execute([$normalizedStatus,$now,uuid_bin($user['id']),uuid_bin($client['qr']['id'])]);
+                $before=['status'=>$client['qr']['status'],'expiresAt'=>$client['qr']['expiresAt']];
+                $client=get_client($client['id']);
+                $after=['status'=>$client['qr']['status'],'expiresAt'=>$client['qr']['expiresAt']];
+                audit_log('QR_MADE_PERMANENT','qr','Cod QR legacy convertit în cod permanent','ClientQR',$client['qr']['id'],$client['propertyId'],$before,$after,$user);
+            }
+            respond(client_for_user($client,$user));
+        }
         $pdo=db();$pdo->beginTransaction();$createdQr=null;
         try{
             $lock=$pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE');$lock->execute([uuid_bin($client['id'])]);
