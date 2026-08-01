@@ -29,12 +29,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
       if (!stored) return;
       try {
         const parsed = JSON.parse(stored) as AuthSession;
+        sessionManager.setPersistence(true);
         sessionManager.set(parsed);
         const user = await apiRequest<User>('/auth/me');
         const restored = { ...parsed, user };
         sessionManager.set(restored);
         setSession(restored);
       } catch {
+        sessionManager.setPersistence(false);
         sessionManager.set(null);
         await secureSessionStorage.remove();
       }
@@ -43,6 +45,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const login = useCallback(async (username: string, password: string, remember: boolean) => {
     const next = await authRepository.login(username.trim(), password, `${Platform.OS} ${Platform.Version}`);
+    sessionManager.setPersistence(remember);
     sessionManager.set(next);
     setSession(next);
     if (remember) {
@@ -57,6 +60,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const logout = useCallback(async () => {
     try { await authRepository.logout(); } catch { /* Local logout must always succeed. */ }
     sessionManager.set(null);
+    sessionManager.setPersistence(false);
     setSession(null);
     await secureSessionStorage.remove();
   }, []);

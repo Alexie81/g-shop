@@ -3,6 +3,7 @@ import { secureSessionStorage } from '@/services/storage';
 
 const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'https://reparatiicalculatoare-bucuresti.ro/app-api').replace(/\/$/, '');
 let currentSession: AuthSession | null = null;
+let persistSession = false;
 let refreshing: Promise<AuthSession | null> | null = null;
 
 export class ApiError extends Error {
@@ -14,6 +15,7 @@ export class ApiError extends Error {
 export const sessionManager = {
   get: () => currentSession,
   set: (session: AuthSession | null) => { currentSession = session; },
+  setPersistence: (persist: boolean) => { persistSession = persist; },
 };
 
 type RequestOptions = RequestInit & { authenticated?: boolean; retry?: boolean };
@@ -29,7 +31,7 @@ async function refreshSession() {
       if (!response.ok) return null;
       const session = (await response.json()).data as AuthSession;
       currentSession = session;
-      await secureSessionStorage.set(JSON.stringify(session));
+      if (persistSession) await secureSessionStorage.set(JSON.stringify(session));
       return session;
     }).finally(() => { refreshing = null; });
   }
