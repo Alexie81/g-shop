@@ -163,10 +163,12 @@ function migrate_collaborator_presets(PDO $pdo): array {
 function client_finance_migration_state(PDO $pdo): array {
     $stmt = $pdo->query("SELECT table_name FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('client_financials','client_expenses','client_participants')");
     $tables = array_fill_keys(array_column($stmt->fetchAll(), 'table_name'), true);
+    $clientStatusType = (string)$pdo->query("SELECT column_type FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='clients' AND column_name='status' LIMIT 1")->fetchColumn();
     return [
         'clientFinancials' => isset($tables['client_financials']),
         'clientExpenses' => isset($tables['client_expenses']),
         'clientParticipants' => isset($tables['client_participants']),
+        'clientFinalizedStatus' => str_contains(strtoupper($clientStatusType), 'FINALIZED'),
     ];
 }
 function migrate_client_finance(PDO $pdo): array {
@@ -223,6 +225,10 @@ function migrate_client_finance(PDO $pdo): array {
                 CONSTRAINT fk_client_participant_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
             $changes[] = 'client_participants';
+        }
+        if (!$state['clientFinalizedStatus']) {
+            $pdo->exec("ALTER TABLE clients MODIFY COLUMN status ENUM('ACTIVE','INACTIVE','NEW','REVIEW_REQUIRED','FINALIZED') NOT NULL DEFAULT 'NEW'");
+            $changes[] = 'clients.status.FINALIZED';
         }
     } finally {
         $release = $pdo->prepare('SELECT RELEASE_LOCK(?)');
@@ -367,6 +373,10 @@ function validate_commission_settings(string $type, mixed $value): float {
     if (!is_numeric($value) || (float)$value < 0 || ($type !== 'FIXED' && (float)$value > 100)) fail('Valoarea comisionului nu este validă.', 422);
     return (float)$value;
 }
+function validated_client_status(mixed $value): string {
+    if(!is_string($value)||!in_array($value,['ACTIVE','INACTIVE','NEW','REVIEW_REQUIRED','FINALIZED'],true))fail('Statusul clientului nu este valid.',422);
+    return $value;
+}
 function commission_amount(float $totalValue, float $netValue, string $type, float $rateOrAmount): float {
     $totalValue = max(0, $totalValue);
     $netValue = max(0, $netValue);
@@ -476,9 +486,84 @@ function financial_summary(array $client, array $financial, array $expenses): ar
         'gshopNet'=>round($totalDue-$internalCosts-$collaboratorCost,2),
     ];
 }
+function client_collaborator_finance(array $client, array $summary): ?array {
+    $collaboratorId = (string)($client['collaboratorId'] ?? '');
+    if ($collaboratorId === '') return null;
+    $collaboratorStmt = db()->prepare('SELECT name,role FROM collaborators WHERE id=? LIMIT 1');
+    $collaboratorStmt->execute([uuid_bin($collaboratorId)]);
+    $collaborator = $collaboratorStmt->fetch();
+    if (!$collaborator) return null;
+    $totalsStmt = db()->prepare("SELECT COUNT(*) active_count,COALESCE(SUM(CASE WHEN status='PAID' AND paid_at IS NOT NULL THEN commission_value ELSE 0 END),0) paid,COALESCE(SUM(CASE WHEN status IN ('ESTIMATED','CALCULATED','APPROVED') OR (status='PAID' AND paid_at IS NULL) THEN commission_value ELSE 0 END),0) due,COALESCE(SUM(CASE WHEN status='PAID' AND paid_at IS NOT NULL THEN 1 ELSE 0 END),0) paid_count FROM commissions WHERE client_id=? AND collaborator_id=? AND is_active=1 AND status<>'CANCELLED'");
+    $totalsStmt->execute([uuid_bin($client['id']),uuid_bin($collaboratorId)]);
+    $totals = $totalsStmt->fetch();
+    $count = (int)($totals['active_count'] ?? 0);
+    $paid = round((float)($totals['paid'] ?? 0),2);
+    $due = round((float)($totals['due'] ?? 0),2);
+    $hasCommission = $count > 0;
+    if (!$hasCommission) $due = round((float)$summary['collaboratorCost'],2);
+    return [
+        'id'=>$collaboratorId,
+        'name'=>(string)$collaborator['name'],
+        'role'=>$collaborator['role']?:null,
+        'commissionType'=>$client['commissionType']??null,
+        'commissionValue'=>$client['commissionValue']!==null?(float)$client['commissionValue']:null,
+        'amount'=>round($paid+$due,2),
+        'paid'=>$paid,
+        'due'=>$due,
+        'status'=>$hasCommission && (int)$totals['paid_count']===$count?'PAID':'UNPAID',
+        'hasCommission'=>$hasCommission,
+    ];
+}
+function sync_client_commission(PDO $pdo, array $client, array $financial, array $expenses, array $user, bool $recreate): array {
+    $sheetStmt = $pdo->prepare('SELECT ' . uuid_sql('id') . ' id FROM service_sheets WHERE client_id=? AND is_active=1 ORDER BY updated_at DESC,created_at DESC LIMIT 1 FOR UPDATE');
+    $sheetStmt->execute([uuid_bin($client['id'])]);
+    $serviceSheetId = $sheetStmt->fetchColumn() ?: null;
+    $commissionStmt = $pdo->prepare('SELECT ' . uuid_sql('id') . ' id,' . uuid_sql('collaborator_id') . " collaborator_id,status,paid_at,total_value,direct_costs,net_value,type,rate_or_amount,commission_value FROM commissions WHERE client_id=? AND is_active=1 AND status<>'CANCELLED' ORDER BY created_at FOR UPDATE");
+    $commissionStmt->execute([uuid_bin($client['id'])]);
+    $existing = $commissionStmt->fetchAll();
+    $paid = array_values(array_filter($existing,fn($row)=>$row['status']==='PAID'&&!empty($row['paid_at'])));
+    if ($paid) return ['changed'=>false,'paid'=>true];
+
+    $collaboratorId = (string)($client['collaboratorId'] ?? '');
+    if ($serviceSheetId===null || $collaboratorId==='') {
+        $changed = (bool)$existing;
+        if ($existing) $pdo->prepare("UPDATE commissions SET status='CANCELLED',is_active=0,updated_at=?,updated_by=? WHERE client_id=? AND is_active=1 AND status<>'CANCELLED'")->execute([now_utc(),uuid_bin($user['id']),uuid_bin($client['id'])]);
+        $sheetUpdate=$pdo->prepare('UPDATE service_sheets SET collaborator_id=NULL,collaborator_commission=NULL,updated_at=?,updated_by=? WHERE client_id=? AND is_active=1');
+        $sheetUpdate->execute([now_utc(),uuid_bin($user['id']),uuid_bin($client['id'])]);
+        return ['changed'=>$changed||$sheetUpdate->rowCount()>0,'paid'=>false];
+    }
+
+    $summary = financial_summary($client,$financial,$expenses);
+    $totalValue = round((float)$summary['totalDue'],2);
+    $directCosts = round((float)$summary['internalCosts'],2);
+    $netValue = round(max(0,$totalValue-$directCosts),2);
+    $type = (string)$client['commissionType'];
+    $rateOrAmount = (float)$client['commissionValue'];
+    $amount = commission_amount($totalValue,$netValue,$type,$rateOrAmount);
+    $now = now_utc();
+    $single = count($existing)===1?$existing[0]:null;
+    $canUpdate = !$recreate && $single!==null && $single['collaborator_id']===$collaboratorId;
+    if ($canUpdate) {
+        $changed = (float)$single['total_value']!==$totalValue || (float)$single['direct_costs']!==$directCosts || (float)$single['net_value']!==$netValue || $single['type']!==$type || (float)$single['rate_or_amount']!==$rateOrAmount || (float)$single['commission_value']!==$amount;
+        if ($changed) {
+            $update=$pdo->prepare("UPDATE commissions SET total_value=?,direct_costs=?,net_value=?,type=?,rate_or_amount=?,commission_value=?,status='APPROVED',paid_at=NULL,updated_at=?,updated_by=? WHERE id=?");
+            $update->execute([$totalValue,$directCosts,$netValue,$type,$rateOrAmount,$amount,$now,uuid_bin($user['id']),uuid_bin($single['id'])]);
+        }
+    } else {
+        if ($existing) $pdo->prepare("UPDATE commissions SET status='CANCELLED',is_active=0,updated_at=?,updated_by=? WHERE client_id=? AND is_active=1 AND status<>'CANCELLED'")->execute([$now,uuid_bin($user['id']),uuid_bin($client['id'])]);
+        $commissionId=uuid_v4();
+        $insert=$pdo->prepare("INSERT INTO commissions (id,collaborator_id,client_id,service_sheet_id,property_id,total_value,direct_costs,net_value,type,rate_or_amount,commission_value,status,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,'APPROVED',1,?,?,?,?)");
+        $insert->execute([uuid_bin($commissionId),uuid_bin($collaboratorId),uuid_bin($client['id']),uuid_bin($serviceSheetId),uuid_bin($client['propertyId']),$totalValue,$directCosts,$netValue,$type,$rateOrAmount,$amount,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);
+        $changed = true;
+    }
+    $sheetUpdate=$pdo->prepare('UPDATE service_sheets SET collaborator_id=?,collaborator_commission=?,updated_at=?,updated_by=? WHERE client_id=? AND is_active=1');
+    $sheetUpdate->execute([uuid_bin($collaboratorId),$amount,$now,uuid_bin($user['id']),uuid_bin($client['id'])]);
+    return ['changed'=>$changed,'paid'=>false,'amount'=>$amount];
+}
 function client_financial_bundle(array $client): array {
     $financial = client_financial_record($client); $expenses = client_expenses($client['id']);
-    return ['financials'=>$financial,'summary'=>financial_summary($client,$financial,$expenses),'expenses'=>$expenses];
+    $summary=financial_summary($client,$financial,$expenses);
+    return ['financials'=>$financial,'summary'=>$summary,'expenses'=>$expenses,'collaborator'=>client_collaborator_finance($client,$summary)];
 }
 function validated_expense_description(mixed $value): string {
     if (!is_string($value)) fail('Descrierea cheltuielii este obligatorie.',422);
@@ -563,13 +648,13 @@ try {
         $open=(int)$scalar("SELECT COUNT(*) FROM service_sheets WHERE property_id=? AND is_active=1 AND status IN ('NEW','WAITING','VERIFYING','IN_PROGRESS','WAITING_PARTS')",[$p]);$progress=(int)$scalar("SELECT COUNT(*) FROM service_sheets WHERE property_id=? AND is_active=1 AND status='IN_PROGRESS'",[$p]);$completed=(int)$scalar("SELECT COUNT(*) FROM service_sheets WHERE property_id=? AND is_active=1 AND status IN ('COMPLETED','DELIVERED')",[$p]);
         $users=(int)$scalar('SELECT COUNT(*) FROM user_properties up JOIN users u ON u.id=up.user_id WHERE up.property_id=? AND u.is_active=1',[$p]);$collabs=(int)$scalar('SELECT COUNT(*) FROM collaborator_properties cp JOIN collaborators c ON c.id=cp.collaborator_id WHERE cp.property_id=? AND c.is_active=1',[$p]);
         $qrGenerated=(int)$scalar("SELECT COUNT(*) FROM client_qr WHERE property_id=? AND is_active=1 AND status IN ('GENERATED','SENT')",[$p]);$qrUsed=(int)$scalar("SELECT COUNT(*) FROM client_qr WHERE property_id=? AND is_active=1 AND status='USED'",[$p]);
-        $financeSql="SELECT COALESCE(cf.currency_code,'RON') currency_code,COALESCE(cf.exchange_rate_to_ron,1) exchange_rate_to_ron,COALESCE(cf.work_price,0) work_price,COALESCE(cf.diagnostic_fee,0) diagnostic_fee,COALESCE(cf.advance_paid,0) advance_paid,COALESCE(cf.discount_percent,0) discount_percent,COALESCE(cf.actual_parts_cost,0) actual_parts_cost,COALESCE(cf.payment_status,'UNPAID') payment_status,c.commission_type,c.commission_value,COALESCE(ex.total_expenses,0) total_expenses FROM clients c LEFT JOIN client_financials cf ON cf.client_id=c.id LEFT JOIN (SELECT client_id,SUM(amount) total_expenses FROM client_expenses GROUP BY client_id) ex ON ex.client_id=c.id WHERE c.property_id=? AND c.is_active=1 AND (cf.client_id IS NOT NULL OR ex.client_id IS NOT NULL)";
+        $financeSql="SELECT COALESCE(cf.currency_code,'RON') currency_code,COALESCE(cf.exchange_rate_to_ron,1) exchange_rate_to_ron,COALESCE(cf.work_price,0) work_price,COALESCE(cf.diagnostic_fee,0) diagnostic_fee,COALESCE(cf.advance_paid,0) advance_paid,COALESCE(cf.discount_percent,0) discount_percent,COALESCE(cf.actual_parts_cost,0) actual_parts_cost,COALESCE(cf.payment_status,'UNPAID') payment_status,c.commission_type,c.commission_value,COALESCE(ex.total_expenses,0) total_expenses,COALESCE(cm.commission_count,0) commission_count,COALESCE(cm.commission_total,0) commission_total FROM clients c LEFT JOIN client_financials cf ON cf.client_id=c.id LEFT JOIN (SELECT client_id,SUM(amount) total_expenses FROM client_expenses GROUP BY client_id) ex ON ex.client_id=c.id LEFT JOIN (SELECT client_id,COUNT(*) commission_count,SUM(commission_value) commission_total FROM commissions WHERE is_active=1 AND status<>'CANCELLED' GROUP BY client_id) cm ON cm.client_id=c.id WHERE c.property_id=? AND c.is_active=1 AND (cf.client_id IS NOT NULL OR ex.client_id IS NOT NULL)";
         $financeStmt=$pdo->prepare($financeSql);$financeStmt->execute([$p]);$financeRevenueRon=0.0;$financeHoldRon=0.0;$financeNetRon=0.0;$financeWaiting=0;
         foreach($financeStmt->fetchAll()as$row){
             $rate=(float)$row['exchange_rate_to_ron'];$subtotal=(float)$row['work_price']+(float)$row['diagnostic_fee'];$total=max(0,$subtotal-($subtotal*(float)$row['discount_percent']/100));
             $received=$row['payment_status']==='PAID'?$total:min((float)$row['advance_paid'],$total);$remaining=max(0,$total-$received);$internal=(float)$row['actual_parts_cost']+(float)$row['total_expenses'];
             $commissionValue=max(0,(float)($row['commission_value']??0));$commissionType=(string)($row['commission_type']??'');
-            if($commissionType==='PERCENT_TOTAL')$commission=$total*$commissionValue/100;elseif($commissionType==='PERCENT_NET')$commission=max(0,$total-$internal)*$commissionValue/100;elseif($commissionType==='FIXED')$commission=$commissionValue;else$commission=0.0;
+            if((int)$row['commission_count']>0)$commission=(float)$row['commission_total'];elseif($commissionType==='PERCENT_TOTAL')$commission=$total*$commissionValue/100;elseif($commissionType==='PERCENT_NET')$commission=max(0,$total-$internal)*$commissionValue/100;elseif($commissionType==='FIXED')$commission=$commissionValue;else$commission=0.0;
             $financeRevenueRon+=$received*$rate;$financeHoldRon+=$remaining*$rate;$financeNetRon+=($total-$internal-$commission)*$rate;if($remaining>0.004)$financeWaiting++;
         }
         $legacyStmt=$pdo->prepare("SELECT COALESCE(SUM(s.total_cost),0) total_revenue,COALESCE(SUM(CASE WHEN s.status IN ('NEW','WAITING','VERIFYING','IN_PROGRESS','WAITING_PARTS') THEN s.total_cost ELSE 0 END),0) revenue_on_hold,COALESCE(SUM(s.direct_costs),0) direct_costs,COUNT(DISTINCT CASE WHEN s.status IN ('NEW','WAITING','VERIFYING','IN_PROGRESS','WAITING_PARTS') THEN s.client_id END) clients_waiting FROM service_sheets s JOIN clients c ON c.id=s.client_id LEFT JOIN client_financials cf ON cf.client_id=c.id WHERE s.property_id=? AND c.is_active=1 AND cf.client_id IS NULL AND NOT EXISTS(SELECT 1 FROM client_expenses e WHERE e.client_id=c.id) AND s.is_active=1 AND s.status<>'CANCELLED'");$legacyStmt->execute([$p]);$legacy=$legacyStmt->fetch();
@@ -599,13 +684,22 @@ try {
         foreach($amountFields as$key=>$label)if(array_key_exists($key,$body))$next[$key]=validated_amount($body[$key],$label);
         if(array_key_exists('discountPercent',$body))$next['discountPercent']=validated_amount($body['discountPercent'],'Reducerea',100,true,2);
         if(array_key_exists('paymentStatus',$body)){if(!is_string($body['paymentStatus'])||!in_array($body['paymentStatus'],['UNPAID','PAID'],true))fail('Statusul plății nu este valid.',422);$next['paymentStatus']=$body['paymentStatus'];}
-        $beforeSnapshot=financial_mutable_snapshot($before);$nextSnapshot=financial_mutable_snapshot($next);$pdo=db();
+        $pdo=db();$pdo->beginTransaction();
+        $clientLock=$pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE');$clientLock->execute([uuid_bin($client['id'])]);
+        $lockedBefore=client_financial_record($client);$lockedNext=$lockedBefore;
+        foreach(['currencyCode','exchangeRateToRon','workPrice','diagnosticFee','advancePaid','discountPercent','actualPartsCost','displayedPartsCost','displayedLaborCost','paymentStatus']as$key)if(array_key_exists($key,$body))$lockedNext[$key]=$next[$key];
+        if(array_key_exists('currencyCode',$body)&&$lockedNext['currencyCode']==='RON'&&!array_key_exists('exchangeRateToRon',$body))$lockedNext['exchangeRateToRon']=1.0;
+        $before=$lockedBefore;$next=$lockedNext;$beforeSnapshot=financial_mutable_snapshot($before);$nextSnapshot=financial_mutable_snapshot($next);
         $expenseCountStmt=$pdo->prepare('SELECT COUNT(*) FROM client_expenses WHERE client_id=?');$expenseCountStmt->execute([uuid_bin($client['id'])]);$expenseCount=(int)$expenseCountStmt->fetchColumn();
         if(!financial_has_data($next)&&$expenseCount===0){
-            if($before['persisted']){$pdo->prepare('DELETE FROM client_financials WHERE client_id=?')->execute([uuid_bin($client['id'])]);audit_log('CLIENT_FINANCIALS_CLEARED','financials','Datele financiare ale clientului au fost golite','Client',$client['id'],$client['propertyId'],$beforeSnapshot,null,$user);}
+            $syncResult=sync_client_commission($pdo,$client,$next,[],$user,false);
+            if($before['persisted'])$pdo->prepare('DELETE FROM client_financials WHERE client_id=?')->execute([uuid_bin($client['id'])]);
+            $pdo->commit();
+            if($before['persisted'])audit_log('CLIENT_FINANCIALS_CLEARED','financials','Datele financiare ale clientului au fost golite','Client',$client['id'],$client['propertyId'],$beforeSnapshot,null,$user);
+            if($syncResult['changed'])audit_log('CLIENT_COMMISSION_RECALCULATED','commissions','Comisionul colaboratorului a fost recalculat din finanțele clientului','Client',$client['id'],$client['propertyId'],null,client_financial_bundle($client)['collaborator'],$user);
             respond(client_financial_bundle($client));
         }
-        if($before['persisted']&&$beforeSnapshot===$nextSnapshot)respond(client_financial_bundle($client));
+        if($before['persisted']&&$beforeSnapshot===$nextSnapshot){$pdo->rollBack();respond(client_financial_bundle($client));}
         $now=now_utc();
         if($before['persisted']){
             $stmt=$pdo->prepare('UPDATE client_financials SET currency_code=?,exchange_rate_to_ron=?,work_price=?,diagnostic_fee=?,advance_paid=?,discount_percent=?,actual_parts_cost=?,displayed_parts_cost=?,displayed_labor_cost=?,payment_status=?,updated_at=?,updated_by=? WHERE client_id=?');
@@ -614,7 +708,10 @@ try {
             $stmt=$pdo->prepare('INSERT INTO client_financials (client_id,currency_code,exchange_rate_to_ron,work_price,diagnostic_fee,advance_paid,discount_percent,actual_parts_cost,displayed_parts_cost,displayed_labor_cost,payment_status,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
             $stmt->execute([uuid_bin($client['id']),$next['currencyCode'],$next['exchangeRateToRon'],$next['workPrice'],$next['diagnosticFee'],$next['advancePaid'],$next['discountPercent'],$next['actualPartsCost'],$next['displayedPartsCost'],$next['displayedLaborCost'],$next['paymentStatus'],$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);
         }
-        $after=client_financial_record($client);$afterSnapshot=financial_mutable_snapshot($after);audit_log($before['persisted']?'CLIENT_FINANCIALS_UPDATED':'CLIENT_FINANCIALS_CREATED','financials','Datele financiare ale clientului au fost salvate','Client',$client['id'],$client['propertyId'],$before['persisted']?$beforeSnapshot:null,$afterSnapshot,$user);respond(client_financial_bundle($client));
+        $after=client_financial_record($client);$expenses=client_expenses($client['id']);$beforeCollaborator=client_collaborator_finance($client,financial_summary($client,$before,$expenses));$syncResult=sync_client_commission($pdo,$client,$after,$expenses,$user,false);$pdo->commit();
+        $afterSnapshot=financial_mutable_snapshot($after);audit_log($before['persisted']?'CLIENT_FINANCIALS_UPDATED':'CLIENT_FINANCIALS_CREATED','financials','Datele financiare ale clientului au fost salvate','Client',$client['id'],$client['propertyId'],$before['persisted']?$beforeSnapshot:null,$afterSnapshot,$user);
+        if($syncResult['changed'])audit_log('CLIENT_COMMISSION_RECALCULATED','commissions','Comisionul colaboratorului a fost recalculat din finanțele clientului','Client',$client['id'],$client['propertyId'],$beforeCollaborator,client_financial_bundle($client)['collaborator'],$user);
+        respond(client_financial_bundle($client));
     }
     if ($method === 'GET' && path_match('/clients/{id}/expenses',$path,$params)) {
         $user=require_permission('financials.view');$client=get_client(validated_uuid($params['id'],'Clientul'));ensure_property($client['propertyId'],$user);respond(client_expenses($client['id']));
@@ -643,6 +740,7 @@ try {
     if ($method === 'POST' && $path === '/clients') {
         $user=require_permission('clients.create');$body=json_body();$propertyId=trim((string)($body['propertyId']??''));ensure_property($propertyId,$user);
         foreach(['firstName','lastName','phone']as$key)if(trim((string)($body[$key]??''))==='')fail('Câmpuri obligatorii lipsă.',422);
+        $clientStatus=validated_client_status($body['status']??'NEW');
         $hasExplicitCollaborator=array_key_exists('collaboratorId',$body);$collaboratorId=$hasExplicitCollaborator?trim((string)($body['collaboratorId']??'')):'';$commissionType=null;$commissionValue=null;
         if(!$hasExplicitCollaborator){
             $collaborator=preset_collaborator_for_property($propertyId);
@@ -653,7 +751,7 @@ try {
         $id=uuid_v4();$now=now_utc();$pdo=db();$pdo->beginTransaction();
         try{
             $stmt=$pdo->prepare('INSERT INTO clients (id,property_id,first_name,last_name,phone,secondary_phone,email,address,city,county,postal_code,notes,status,collaborator_id,commission_type,commission_value,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?)');
-            $stmt->execute([uuid_bin($id),uuid_bin($propertyId),trim($body['firstName']),trim($body['lastName']),trim($body['phone']),$body['secondaryPhone']??null,$body['email']??null,$body['address']??null,$body['city']??null,$body['county']??null,$body['postalCode']??null,$body['notes']??null,$body['status']??'NEW',$collaboratorId!==''?uuid_bin($collaboratorId):null,$commissionType,$commissionValue,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);
+            $stmt->execute([uuid_bin($id),uuid_bin($propertyId),trim($body['firstName']),trim($body['lastName']),trim($body['phone']),$body['secondaryPhone']??null,$body['email']??null,$body['address']??null,$body['city']??null,$body['county']??null,$body['postalCode']??null,$body['notes']??null,$clientStatus,$collaboratorId!==''?uuid_bin($collaboratorId):null,$commissionType,$commissionValue,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);
             $qr=create_client_qr($pdo,$id,$propertyId,$user['id'],$now);
             $pdo->commit();
         }catch(Throwable$e){$pdo->rollBack();throw$e;}
@@ -661,16 +759,19 @@ try {
     }
     if ($method === 'PUT' && path_match('/clients/{id}', $path, $params)) {
         $user=require_permission('clients.update');$before=get_client($params['id']);ensure_property($before['propertyId'],$user);$body=json_body();
+        if(array_key_exists('status',$body))$body['status']=validated_client_status($body['status']);
+        $assignmentTouched=count(array_intersect(array_keys($body),['collaboratorId','commissionType','commissionValue']))>0;
         $removeCollaborator=array_key_exists('collaboratorId',$body)&&trim((string)($body['collaboratorId']??''))==='';
         if($removeCollaborator){unset($body['commissionType'],$body['commissionValue']);}
         if(array_key_exists('collaboratorId',$body)&&trim((string)($body['collaboratorId']??''))!==''){
-            $nextCollaboratorId=trim((string)$body['collaboratorId']);$collaborator=collaborator_for_property($nextCollaboratorId,$before['propertyId']);$changedCollaborator=($before['collaboratorId']??null)!==$nextCollaboratorId;
+            $nextCollaboratorId=validated_uuid(trim((string)$body['collaboratorId']),'Colaboratorul');$body['collaboratorId']=$nextCollaboratorId;$collaborator=collaborator_for_property($nextCollaboratorId,$before['propertyId']);$changedCollaborator=($before['collaboratorId']??null)!==$nextCollaboratorId;
             if(!array_key_exists('commissionType',$body)&&($changedCollaborator||empty($before['commissionType'])))$body['commissionType']=$collaborator['defaultCommissionType'];
             if(!array_key_exists('commissionValue',$body)&&($changedCollaborator||$before['commissionValue']===null))$body['commissionValue']=$collaborator['defaultCommissionValue'];
         }
         if(count(array_intersect(array_keys($body),['collaboratorId','commissionType','commissionValue']))>0){
             $effectiveCollaboratorId=array_key_exists('collaboratorId',$body)?trim((string)($body['collaboratorId']??'')):(string)($before['collaboratorId']??'');
-            if($effectiveCollaboratorId!==''){$effectiveType=(string)($body['commissionType']??$before['commissionType']??'');$effectiveValue=$body['commissionValue']??$before['commissionValue'];validate_commission_settings($effectiveType,$effectiveValue);}
+            if($effectiveCollaboratorId!==''){$effectiveType=(string)($body['commissionType']??$before['commissionType']??'');$effectiveValue=$body['commissionValue']??$before['commissionValue'];$body['commissionValue']=validate_commission_settings($effectiveType,$effectiveValue);}
+            elseif(array_key_exists('commissionType',$body)||array_key_exists('commissionValue',$body))fail('O regulă de comision necesită un colaborator atribuit.',422);
         }
         $map=['firstName'=>'first_name','lastName'=>'last_name','phone'=>'phone','secondaryPhone'=>'secondary_phone','email'=>'email','address'=>'address','city'=>'city','county'=>'county','postalCode'=>'postal_code','notes'=>'notes','status'=>'status','commissionType'=>'commission_type','commissionValue'=>'commission_value'];
         $sets=[];$args=[];
@@ -689,9 +790,38 @@ try {
             }
         }
         if(!$sets)fail('Nu există date de actualizat.',422);
-        $sets[]='updated_at=?';$args[]=now_utc();$sets[]='updated_by=?';$args[]=uuid_bin($user['id']);$args[]=uuid_bin($params['id']);
-        db()->prepare('UPDATE clients SET '.implode(',',$sets).' WHERE id=?')->execute($args);
-        $after=get_client($params['id']);audit_log('CLIENT_UPDATED','clients','Client actualizat: '.$after['firstName'].' '.$after['lastName'],'Client',$params['id'],$after['propertyId'],client_audit_snapshot($before),client_audit_snapshot($after),$user);respond(client_for_user($after,$user));
+        $nextCollaboratorId=array_key_exists('collaboratorId',$body)?(trim((string)($body['collaboratorId']??''))?:null):($before['collaboratorId']??null);
+        $nextCommissionType=$nextCollaboratorId!==null?($body['commissionType']??$before['commissionType']??null):null;
+        $nextCommissionValue=$nextCollaboratorId!==null?($body['commissionValue']??$before['commissionValue']??null):null;
+        $assignmentChanged=$assignmentTouched&&(($before['collaboratorId']??null)!==$nextCollaboratorId||($before['commissionType']??null)!==$nextCommissionType||(float)($before['commissionValue']??0)!==(float)($nextCommissionValue??0));
+        $now=now_utc();$sets[]='updated_at=?';$args[]=$now;$sets[]='updated_by=?';$args[]=uuid_bin($user['id']);$args[]=uuid_bin($params['id']);$pdo=db();$pdo->beginTransaction();
+        $clientLock=$pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE');$clientLock->execute([uuid_bin($params['id'])]);$lockedBefore=get_client($params['id']);
+        if($assignmentTouched&&(($lockedBefore['collaboratorId']??null)!==($before['collaboratorId']??null)||($lockedBefore['commissionType']??null)!==($before['commissionType']??null)||(float)($lockedBefore['commissionValue']??0)!==(float)($before['commissionValue']??0))){$pdo->rollBack();fail('Atribuirea colaboratorului a fost modificată între timp. Reîncarcă clientul.',409,['code'=>'CLIENT_COLLABORATOR_CHANGED']);}
+        if($assignmentChanged){$paidStmt=$pdo->prepare("SELECT 1 FROM commissions WHERE client_id=? AND is_active=1 AND status='PAID' AND paid_at IS NOT NULL LIMIT 1");$paidStmt->execute([uuid_bin($params['id'])]);if($paidStmt->fetchColumn()){$pdo->rollBack();fail('Comisionul colaboratorului este achitat. Marchează-l neachitat înainte să schimbi sau să ștergi atribuirea.',409,['code'=>'COLLABORATOR_COMMISSION_PAID']);}}
+        $beforeFinancial=client_financial_record($before);$expenses=client_expenses($before['id']);$beforeCollaborator=client_collaborator_finance($before,financial_summary($before,$beforeFinancial,$expenses));
+        try{$pdo->prepare('UPDATE clients SET '.implode(',',$sets).' WHERE id=?')->execute($args);$after=get_client($params['id']);if($assignmentChanged)sync_client_commission($pdo,$after,$beforeFinancial,$expenses,$user,true);$pdo->commit();}catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}
+        audit_log('CLIENT_UPDATED','clients','Client actualizat: '.$after['firstName'].' '.$after['lastName'],'Client',$params['id'],$after['propertyId'],client_audit_snapshot($before),client_audit_snapshot($after),$user);
+        if($assignmentChanged)audit_log('CLIENT_COLLABORATOR_SYNCED','commissions','Atribuirea și comisionul colaboratorului au fost sincronizate','Client',$after['id'],$after['propertyId'],$beforeCollaborator,client_financial_bundle($after)['collaborator'],$user);
+        respond(client_for_user($after,$user));
+    }
+    if ($method === 'DELETE' && path_match('/clients/{id}', $path, $params)) {
+        $user=require_permission('clients.update');$clientId=validated_uuid($params['id'],'Clientul');$before=get_client($clientId);ensure_property($before['propertyId'],$user);
+        if(empty($before['isActive']))respond(['deleted'=>true,'id'=>$clientId]);
+        $pdo=db();$pdo->beginTransaction();$now=now_utc();
+        $clientLock=$pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE');$clientLock->execute([uuid_bin($clientId)]);$locked=get_client($clientId);
+        if(empty($locked['isActive'])){$pdo->rollBack();respond(['deleted'=>true,'id'=>$clientId]);}
+        $paidStmt=$pdo->prepare("SELECT 1 FROM commissions WHERE client_id=? AND is_active=1 AND status='PAID' AND paid_at IS NOT NULL LIMIT 1");$paidStmt->execute([uuid_bin($clientId)]);
+        if($paidStmt->fetchColumn()){$pdo->rollBack();fail('Clientul are un comision de colaborator achitat. Marchează-l neachitat înainte să ștergi clientul.',409,['code'=>'COLLABORATOR_COMMISSION_PAID']);}
+        $sheetsStmt=$pdo->prepare('SELECT '.uuid_sql('id').' id,status FROM service_sheets WHERE client_id=? AND is_active=1 ORDER BY created_at FOR UPDATE');$sheetsStmt->execute([uuid_bin($clientId)]);$activeSheets=$sheetsStmt->fetchAll();
+        try{
+            $pdo->prepare("UPDATE clients SET status='INACTIVE',is_active=0,updated_at=?,updated_by=? WHERE id=?")->execute([$now,uuid_bin($user['id']),uuid_bin($clientId)]);
+            $pdo->prepare("UPDATE client_qr SET status='INVALIDATED',invalidated_at=COALESCE(invalidated_at,?),is_active=0,updated_at=?,updated_by=? WHERE client_id=? AND is_active=1")->execute([$now,$now,uuid_bin($user['id']),uuid_bin($clientId)]);
+            $sheetUpdate=$pdo->prepare("UPDATE service_sheets SET status='CANCELLED',is_active=0,updated_at=?,updated_by=? WHERE client_id=? AND is_active=1");$sheetUpdate->execute([$now,uuid_bin($user['id']),uuid_bin($clientId)]);
+            $historyInsert=$pdo->prepare("INSERT INTO service_sheet_status_history (id,service_sheet_id,old_status,new_status,changed_by,created_at) VALUES (?,?,?,'CANCELLED',?,?)");foreach($activeSheets as$sheet)if($sheet['status']!=='CANCELLED')$historyInsert->execute([uuid_bin(uuid_v4()),uuid_bin($sheet['id']),$sheet['status'],uuid_bin($user['id']),$now]);
+            $pdo->prepare("UPDATE commissions SET status='CANCELLED',is_active=0,paid_at=NULL,updated_at=?,updated_by=? WHERE client_id=? AND is_active=1")->execute([$now,uuid_bin($user['id']),uuid_bin($clientId)]);
+            $pdo->commit();
+        }catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}
+        $after=get_client($clientId);audit_log('CLIENT_DELETED','clients','Client șters: '.$after['firstName'].' '.$after['lastName'],'Client',$clientId,$after['propertyId'],client_audit_snapshot($before),client_audit_snapshot($after),$user);respond(['deleted'=>true,'id'=>$clientId]);
     }
     if ($method === 'POST' && path_match('/clients/{id}/qr', $path, $params)) {
         $user=require_permission('qr.generate');$client=get_client($params['id']);ensure_property($client['propertyId'],$user);
@@ -792,24 +922,22 @@ try {
         $clientId=(string)$body['clientId'];$client=get_client($clientId);
         if($client['propertyId']!==$propertyId)fail('Clientul nu aparține proprietății selectate.',422);
         $partsCost=max(0,(float)($body['partsCost']??0));$laborCost=max(0,(float)($body['laborCost']??0));$totalCost=max(0,(float)($body['totalCost']??($partsCost+$laborCost)));$directCosts=max(0,(float)($body['directCosts']??0));$netValue=max(0,$totalCost-$directCosts);
-        $collaboratorId=!empty($client['collaboratorId'])?(string)$client['collaboratorId']:null;$commissionType=$client['commissionType']??null;$commissionRate=$client['commissionValue']??null;$commissionValue=null;
-        if($collaboratorId!==null){
-            collaborator_for_property($collaboratorId,$propertyId);
-            if(in_array($commissionType,['PERCENT_NET','PERCENT_TOTAL','FIXED'],true)&&$commissionRate!==null)$commissionValue=commission_amount($totalCost,$netValue,$commissionType,(float)$commissionRate);
-        }
-        $id=uuid_v4();$commissionId=$commissionValue!==null?uuid_v4():null;$now=now_utc();$pdo=db();$pdo->beginTransaction();
+        if(!empty($client['collaboratorId']))collaborator_for_property((string)$client['collaboratorId'],$propertyId);
+        $id=uuid_v4();$now=now_utc();$pdo=db();$pdo->beginTransaction();$commissionCreated=false;
         try{
+            $clientLock=$pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE');$clientLock->execute([uuid_bin($clientId)]);
+            $client=get_client($clientId);$financial=client_financial_record($client);$expenses=client_expenses($clientId);$financeSummary=financial_summary($client,$financial,$expenses);$collaboratorId=!empty($client['collaboratorId'])?(string)$client['collaboratorId']:null;$commissionValue=$collaboratorId!==null?(float)$financeSummary['collaboratorCost']:null;
+            $existingStmt=$pdo->prepare('SELECT '.uuid_sql('id').' id FROM service_sheets WHERE client_id=? AND is_active=1 ORDER BY updated_at DESC,created_at DESC LIMIT 1 FOR UPDATE');$existingStmt->execute([uuid_bin($clientId)]);$existingId=$existingStmt->fetchColumn();
+            if($existingId){$pdo->rollBack();fail('Clientul are deja o fișă de service.',409,['code'=>'SERVICE_SHEET_ALREADY_EXISTS','serviceSheetId'=>$existingId]);}
             $seq=(int)$pdo->query("SELECT COUNT(*)+1 FROM service_sheets WHERE YEAR(created_at)=YEAR(UTC_TIMESTAMP())")->fetchColumn();$number='GS-'.gmdate('Y').'-'.str_pad((string)$seq,5,'0',STR_PAD_LEFT);
             $stmt=$pdo->prepare("INSERT INTO service_sheets (id,property_id,client_id,number,equipment,brand,model,serial_number,accessories,reported_issue,technical_assessment,work_performed,parts_used,parts_cost,labor_cost,total_cost,direct_costs,net_value,technician_id,collaborator_id,collaborator_commission,internal_notes,received_at,estimated_at,status,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'NEW',1,?,?,?,?)");
             $stmt->execute([uuid_bin($id),uuid_bin($propertyId),uuid_bin($clientId),$number,$body['equipment'],$body['brand']??null,$body['model']??null,$body['serialNumber']??null,$body['accessories']??null,$body['reportedIssue'],$body['technicalAssessment']??null,$body['workPerformed']??null,$body['partsUsed']??null,$partsCost,$laborCost,$totalCost,$directCosts,$netValue,!empty($body['technicianId'])?uuid_bin($body['technicianId']):null,$collaboratorId?uuid_bin($collaboratorId):null,$commissionValue,$body['internalNotes']??null,!empty($body['receivedAt'])?gmdate('Y-m-d H:i:s',strtotime((string)$body['receivedAt'])):$now,!empty($body['estimatedAt'])?gmdate('Y-m-d H:i:s',strtotime((string)$body['estimatedAt'])):null,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);
             $pdo->prepare("INSERT INTO service_sheet_status_history (id,service_sheet_id,old_status,new_status,changed_by,created_at) VALUES (?,?,NULL,'NEW',?,?)")->execute([uuid_bin(uuid_v4()),uuid_bin($id),uuid_bin($user['id']),$now]);
-            if($commissionId!==null){
-                $pdo->prepare("INSERT INTO commissions (id,collaborator_id,client_id,service_sheet_id,property_id,total_value,direct_costs,net_value,type,rate_or_amount,commission_value,status,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,'APPROVED',1,?,?,?,?)")->execute([uuid_bin($commissionId),uuid_bin($collaboratorId),uuid_bin($clientId),uuid_bin($id),uuid_bin($propertyId),$totalCost,$directCosts,$netValue,$commissionType,(float)$commissionRate,$commissionValue,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);
-            }
+            $syncResult=sync_client_commission($pdo,$client,$financial,$expenses,$user,false);$commissionCreated=!empty($syncResult['changed'])&&$collaboratorId!==null;
             $pdo->commit();
         }catch(Throwable$e){$pdo->rollBack();throw$e;}
         audit_log('SERVICE_SHEET_CREATED','service_sheets','Fișă creată: '.$number,'ServiceSheet',$id,$propertyId,null,$body,$user);
-        if($commissionId!==null)audit_log('COMMISSION_CREATED','commissions','Comision aprobat automat pentru fișa '.$number,'Commission',$commissionId,$propertyId,null,['clientId'=>$clientId,'serviceSheetId'=>$id,'collaboratorId'=>$collaboratorId,'type'=>$commissionType,'rateOrAmount'=>(float)$commissionRate,'totalValue'=>$totalCost,'directCosts'=>$directCosts,'netValue'=>$netValue,'status'=>'APPROVED','commissionValue'=>$commissionValue],$user);
+        if($commissionCreated)audit_log('COMMISSION_CREATED','commissions','Comision aprobat automat pentru fișa '.$number,'Client',$clientId,$propertyId,null,client_financial_bundle($client)['collaborator'],$user);
         respond(get_sheet($id),201);
     }
     if ($method==='PUT'&&path_match('/service-sheets/{id}',$path,$params)) {
@@ -824,19 +952,34 @@ try {
         foreach($map as$key=>$column)if(array_key_exists($key,$body)){$sets[]="$column=?";$value=$body[$key];if(in_array($key,['estimatedAt','completedAt'],true))$value=$value?gmdate('Y-m-d H:i:s',strtotime((string)$value)):null;elseif($value==='')$value=null;$args[]=$value;}
         if(!$sets)fail('Nu există date de actualizat.',422);$now=now_utc();$sets[]='updated_at=?';$args[]=$now;$sets[]='updated_by=?';$args[]=uuid_bin($user['id']);$args[]=uuid_bin($params['id']);$pdo=db();$pdo->beginTransaction();
         try{
+            $clientLock=$pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE');$clientLock->execute([uuid_bin($before['clientId'])]);
             $pdo->prepare('UPDATE service_sheets SET '.implode(',',$sets).' WHERE id=?')->execute($args);
             if(isset($body['status'])&&$body['status']!==$before['status'])$pdo->prepare('INSERT INTO service_sheet_status_history (id,service_sheet_id,old_status,new_status,changed_by,created_at) VALUES (?,?,?,?,?,?)')->execute([uuid_bin(uuid_v4()),uuid_bin($params['id']),$before['status'],$body['status'],uuid_bin($user['id']),$now]);
             $after=get_sheet($params['id']);$recalculated=0;
             if($financeChanged){
-                $commissionUpdate=$pdo->prepare("UPDATE commissions SET total_value=?,direct_costs=?,net_value=?,commission_value=ROUND(CASE WHEN type='PERCENT_NET' THEN ?*rate_or_amount/100 WHEN type='PERCENT_TOTAL' THEN ?*rate_or_amount/100 ELSE rate_or_amount END,2),updated_at=?,updated_by=? WHERE service_sheet_id=? AND is_active=1 AND status NOT IN ('PAID','CANCELLED')");
-                $commissionUpdate->execute([$after['totalCost'],$after['directCosts'],$after['netValue'],$after['netValue'],$after['totalCost'],$now,uuid_bin($user['id']),uuid_bin($params['id'])]);$recalculated=$commissionUpdate->rowCount();
-                if($recalculated>0){$amountStmt=$pdo->prepare("SELECT commission_value FROM commissions WHERE service_sheet_id=? AND is_active=1 AND status NOT IN ('PAID','CANCELLED') ORDER BY created_at DESC LIMIT 1");$amountStmt->execute([uuid_bin($params['id'])]);$newCommission=$amountStmt->fetchColumn();$pdo->prepare('UPDATE service_sheets SET collaborator_commission=? WHERE id=?')->execute([$newCommission,uuid_bin($params['id'])]);}
+                $client=get_client($before['clientId']);$syncResult=sync_client_commission($pdo,$client,client_financial_record($client),client_expenses($client['id']),$user,false);$recalculated=!empty($syncResult['changed'])?1:0;
             }
             $pdo->commit();
         }catch(Throwable$e){$pdo->rollBack();throw$e;}
         $after=get_sheet($params['id']);audit_log('SERVICE_SHEET_UPDATED','service_sheets','Fișă actualizată: '.$after['number'],'ServiceSheet',$params['id'],$after['propertyId'],$before,$after,$user);
         if($financeChanged&&$recalculated>0)audit_log('COMMISSION_RECALCULATED','commissions','Comision recalculat pentru fișa '.$after['number'],'ServiceSheet',$params['id'],$after['propertyId'],['totalCost'=>$before['totalCost'],'directCosts'=>$before['directCosts'],'netValue'=>$before['netValue'],'collaboratorCommission'=>$before['collaboratorCommission']],['totalCost'=>$after['totalCost'],'directCosts'=>$after['directCosts'],'netValue'=>$after['netValue'],'collaboratorCommission'=>$after['collaboratorCommission']],$user);
         respond($after);
+    }
+    if ($method==='DELETE'&&path_match('/service-sheets/{id}',$path,$params)) {
+        $user=require_permission('service_sheets.update');$before=get_sheet($params['id']);ensure_property($before['propertyId'],$user);
+        if(empty($before['isActive']))respond(['deleted'=>true,'id'=>$before['id']]);
+        $pdo=db();$pdo->beginTransaction();$now=now_utc();
+        $clientLock=$pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE');$clientLock->execute([uuid_bin($before['clientId'])]);
+        $paidStmt=$pdo->prepare("SELECT 1 FROM commissions WHERE service_sheet_id=? AND is_active=1 AND status='PAID' AND paid_at IS NOT NULL LIMIT 1");$paidStmt->execute([uuid_bin($before['id'])]);
+        if($paidStmt->fetchColumn()){$pdo->rollBack();fail('Fișa are un comision de colaborator achitat. Marchează-l neachitat înainte să ștergi fișa.',409,['code'=>'COLLABORATOR_COMMISSION_PAID']);}
+        try{
+            $pdo->prepare("UPDATE service_sheets SET is_active=0,status='CANCELLED',updated_at=?,updated_by=? WHERE id=?")->execute([$now,uuid_bin($user['id']),uuid_bin($before['id'])]);
+            if($before['status']!=='CANCELLED')$pdo->prepare("INSERT INTO service_sheet_status_history (id,service_sheet_id,old_status,new_status,changed_by,created_at) VALUES (?,?,?,'CANCELLED',?,?)")->execute([uuid_bin(uuid_v4()),uuid_bin($before['id']),$before['status'],uuid_bin($user['id']),$now]);
+            $pdo->prepare("UPDATE commissions SET status='CANCELLED',is_active=0,paid_at=NULL,updated_at=?,updated_by=? WHERE service_sheet_id=? AND is_active=1")->execute([$now,uuid_bin($user['id']),uuid_bin($before['id'])]);
+            $pdo->commit();
+        }catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}
+        $after=get_sheet($before['id']);audit_log('SERVICE_SHEET_DELETED','service_sheets','Fișă ștearsă: '.$before['number'],'ServiceSheet',$before['id'],$before['propertyId'],$before,$after,$user);
+        respond(['deleted'=>true,'id'=>$before['id']]);
     }
     if ($method==='POST'&&path_match('/service-sheets/{id}/signature',$path,$params)) { $user=require_permission('service_sheets.sign');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);$body=json_body();$data=(string)($body['signature']??'');if(!preg_match('#^data:image/png;base64,(.+)$#',$data,$match))fail('Formatul semnăturii nu este valid.',422);$binary=base64_decode($match[1],true);if($binary===false||strlen($binary)<100||strlen($binary)>1500000)fail('Semnătura este invalidă sau prea mare.',422);$directory=__DIR__.'/uploads/signatures';if(!is_dir($directory)&&!mkdir($directory,0755,true)&&!is_dir($directory))throw new RuntimeException('Directorul pentru semnături nu poate fi creat.');$filename=$sheet['id'].'.png';if(file_put_contents($directory.'/'.$filename,$binary,LOCK_EX)===false)throw new RuntimeException('Semnătura nu poate fi salvată.');$pathValue='uploads/signatures/'.$filename;$now=now_utc();db()->prepare('UPDATE service_sheets SET signature_path=?,signed_at=?,updated_at=?,updated_by=? WHERE id=?')->execute([$pathValue,$now,$now,uuid_bin($user['id']),uuid_bin($sheet['id'])]);audit_log('SERVICE_SHEET_SIGNED','service_sheets','Semnătură client salvată pentru '.$sheet['number'],'ServiceSheet',$sheet['id'],$sheet['propertyId'],null,['signedAt'=>$now],$user);respond(get_sheet($sheet['id'])); }
 
@@ -925,9 +1068,12 @@ try {
         if($propertyId===''||$collaboratorId===''||$clientId===''||!array_key_exists('paid',$body)||!is_bool($body['paid']))fail('Proprietatea, colaboratorul, clientul și starea plății sunt obligatorii.',422);
         ensure_property($propertyId,$user);$client=get_client($clientId);if($client['propertyId']!==$propertyId)fail('Clientul nu aparține proprietății selectate.',422);
         $link=db()->prepare('SELECT c.name FROM collaborators c JOIN collaborator_properties cp ON cp.collaborator_id=c.id WHERE c.id=? AND cp.property_id=? LIMIT 1');$link->execute([uuid_bin($collaboratorId),uuid_bin($propertyId)]);$collaboratorName=$link->fetchColumn();if(!$collaboratorName)fail('Colaboratorul nu aparține proprietății selectate.',422);
-        $select=db()->prepare('SELECT '.uuid_sql('id').' id,status,commission_value,paid_at FROM commissions WHERE property_id=? AND collaborator_id=? AND client_id=? AND is_active=1 AND status<>\'CANCELLED\'');$select->execute([uuid_bin($propertyId),uuid_bin($collaboratorId),uuid_bin($clientId)]);$before=$select->fetchAll();if(!$before)fail('Nu există comisioane pentru acest colaborator și client.',404);
-        $paid=(bool)$body['paid'];$status=$paid?'PAID':'APPROVED';$now=now_utc();$pdo=db();
-        if($paid){$update=$pdo->prepare("UPDATE commissions SET status='PAID',paid_at=COALESCE(paid_at,?),updated_at=?,updated_by=? WHERE property_id=? AND collaborator_id=? AND client_id=? AND is_active=1 AND status<>'CANCELLED'");$update->execute([$now,$now,uuid_bin($user['id']),uuid_bin($propertyId),uuid_bin($collaboratorId),uuid_bin($clientId)]);}else{$update=$pdo->prepare("UPDATE commissions SET status='APPROVED',paid_at=NULL,updated_at=?,updated_by=? WHERE property_id=? AND collaborator_id=? AND client_id=? AND is_active=1 AND status<>'CANCELLED'");$update->execute([$now,uuid_bin($user['id']),uuid_bin($propertyId),uuid_bin($collaboratorId),uuid_bin($clientId)]);}
+        $pdo=db();$pdo->beginTransaction();$clientLock=$pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE');$clientLock->execute([uuid_bin($clientId)]);
+        $client=get_client($clientId);$select=$pdo->prepare('SELECT '.uuid_sql('id').' id,status,commission_value,paid_at FROM commissions WHERE property_id=? AND collaborator_id=? AND client_id=? AND is_active=1 AND status<>\'CANCELLED\' FOR UPDATE');$select->execute([uuid_bin($propertyId),uuid_bin($collaboratorId),uuid_bin($clientId)]);$before=$select->fetchAll();
+        if(!$before&&($client['collaboratorId']??null)===$collaboratorId){sync_client_commission($pdo,$client,client_financial_record($client),client_expenses($clientId),$user,false);$select->execute([uuid_bin($propertyId),uuid_bin($collaboratorId),uuid_bin($clientId)]);$before=$select->fetchAll();}
+        if(!$before){$pdo->rollBack();fail('Nu există o fișă activă cu un comision pentru acest colaborator și client.',404);}
+        $paid=(bool)$body['paid'];$status=$paid?'PAID':'APPROVED';$now=now_utc();
+        try{if($paid){$update=$pdo->prepare("UPDATE commissions SET status='PAID',paid_at=COALESCE(paid_at,?),updated_at=?,updated_by=? WHERE property_id=? AND collaborator_id=? AND client_id=? AND is_active=1 AND status<>'CANCELLED'");$update->execute([$now,$now,uuid_bin($user['id']),uuid_bin($propertyId),uuid_bin($collaboratorId),uuid_bin($clientId)]);}else{$update=$pdo->prepare("UPDATE commissions SET status='APPROVED',paid_at=NULL,updated_at=?,updated_by=? WHERE property_id=? AND collaborator_id=? AND client_id=? AND is_active=1 AND status<>'CANCELLED'");$update->execute([$now,uuid_bin($user['id']),uuid_bin($propertyId),uuid_bin($collaboratorId),uuid_bin($clientId)]);}$pdo->commit();}catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}
         $amount=(float)array_sum(array_map(fn($row)=>(float)$row['commission_value'],$before));$beforeStatuses=implode(',',array_values(array_unique(array_column($before,'status'))));
         audit_log($paid?'COLLABORATOR_PAYMENT_MARKED_PAID':'COLLABORATOR_PAYMENT_MARKED_DUE','commissions',($paid?'Comisioane marcate achitate':'Comisioane marcate de achitat').' pentru '.$client['firstName'].' '.$client['lastName'].' / '.$collaboratorName,'Client',$clientId,$propertyId,['status'=>$beforeStatuses,'amount'=>$amount,'affectedCount'=>count($before)],['status'=>$status,'amount'=>$amount,'affectedCount'=>count($before)],$user);
         respond(['updated'=>$update->rowCount(),'status'=>$status,'paid'=>$paid,'paidAt'=>$paid?iso_date($now):null]);

@@ -47,7 +47,7 @@ ORDER BY data_length + index_length DESC;
 - `GET /properties`
 - `GET /dashboard?propertyId={uuid}`
 - `POST /admin/migrations/collaborator-presets` — migrare administrativă idempotentă pentru instalările existente; necesită `settings.manage`
-- `POST /admin/migrations/client-finance` — creează idempotent structurile compacte pentru finanțe, cheltuieli și participanți; necesită `settings.manage`
+- `POST /admin/migrations/client-finance` — creează idempotent structurile compacte pentru finanțe, cheltuieli și participanți și adaugă statusul client `FINALIZED`; necesită `settings.manage`
 
 ### Clienți și QR
 
@@ -55,7 +55,8 @@ ORDER BY data_length + index_length DESC;
 - `POST /clients` — creează atomic clientul și codul său QR permanent; răspunsul include direct obiectul `qr` cu status `GENERATED`
 - `GET /clients/{id}`
 - `PUT /clients/{id}`
-- `GET /clients/{id}/financials` — returnează `{ financials, summary, expenses }`; necesită `financials.view`
+- `DELETE /clients/{id}` — ștergere logică tranzacțională pentru swipe: dezactivează clientul și QR-ul, anulează fișa activă și comisioanele neachitate; refuză cu `409` dacă există un comision achitat
+- `GET /clients/{id}/financials` — returnează `{ financials, summary, expenses, collaborator }`; necesită `financials.view`. `collaborator` este `null` sau `{ id, name, role, commissionType, commissionValue, amount, paid, due, status, hasCommission }`
 - `PUT /clients/{id}/financials` — salvează numai valorile de intrare; necesită `financials.view` și `clients.update`
 - `GET|POST /clients/{id}/expenses`
 - `PUT|DELETE /clients/{id}/expenses/{expenseId}`
@@ -89,12 +90,14 @@ Valorile calculate nu sunt stocate. API-ul folosește următoarele formule în m
 
 Participanții sunt salvați compact ca legături client–utilizator. `PUT /clients/{id}/participants` primește `{ "userIds": ["uuid"] }`, acceptă maximum 100 de ID-uri unice și refuză utilizatorii inactivi sau din altă proprietate. Toate mutațiile financiare, de cheltuieli și participanți sunt auditate pe entitatea `Client`, pentru ca evenimentele să apară în istoricul clientului.
 
+Salvarea finanțelor recalculează comisionul activ neachitat al fișei unice din `totalDue`, `internalCosts` și regula clientului, apoi actualizează `service_sheets.collaborator_commission`. Un comision achitat nu este rescris retroactiv. Înainte de crearea fișei, `collaborator.amount` și `due` sunt estimări, iar `hasCommission` este `false`. Marcarea achitat/neachitat repară automat cazul legacy în care există client, colaborator și fișă activă, dar lipsește rândul din `commissions`.
+
 La actualizarea unei instalări existente, apelează `POST /admin/migrations/client-finance` imediat după publicarea API-ului și înainte de folosirea dashboard-ului sau a fișelor. Reapelarea endpointului este sigură; acesta creează numai tabelele lipsă sub blocare MySQL.
 
 ### Service
 
-- `GET|POST /service-sheets`
-- `GET|PUT /service-sheets/{id}`
+- `GET|POST /service-sheets` — `POST` permite o singură fișă activă pentru fiecare client
+- `GET|PUT|DELETE /service-sheets/{id}` — ștergerea este logică și păstrează auditul
 - `POST /service-sheets/{id}/signature`
 - `GET /collaborators?propertyId={uuid}`
 - `GET /collaborators/{id}?propertyId={uuid}`
@@ -103,6 +106,8 @@ La actualizarea unei instalări existente, apelează `POST /admin/migrations/cli
 - `DELETE /collaborators/{id}?propertyId={uuid}`
 - `GET /collaborator-finances?propertyId={uuid}` — totaluri achitate/de achitat, grupate pe colaborator și client
 - `PUT /commissions/client-status` — marchează comisioanele unui client ca achitate sau de achitat; body: `{ "propertyId": "uuid", "collaboratorId": "uuid", "clientId": "uuid", "paid": true|false }`
+
+Crearea unei fișe blochează tranzacțional rândul clientului și verifică existența unei fișe active, astfel încât două cereri simultane nu pot crea duplicate. Dacă fișa există, API-ul răspunde `409` cu `errors.code = SERVICE_SHEET_ALREADY_EXISTS` și `errors.serviceSheetId`. Duplicatele istorice nu sunt șterse automat. `DELETE` marchează fișa inactivă și anulată, dezactivează comisioanele ei și permite ulterior crearea unei noi fișe pentru client; dacă are un comision achitat, răspunde `409` până când acesta este marcat neachitat.
 
 `POST /collaborators` primește datele colaboratorului și `propertyIds`, validează regula implicită de comision și returnează obiectul complet creat. `PUT /collaborators/{id}` primește obligatoriu `propertyId` în body, plus câmpurile care trebuie modificate. Modificarea regulii implicite se aplică atribuirilor viitoare și nu rescrie comisioanele istorice.
 
