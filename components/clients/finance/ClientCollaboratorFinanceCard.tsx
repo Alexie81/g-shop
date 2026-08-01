@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   identity: { borderWidth: 1, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   avatar: { width: 46, height: 46, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  metric: { minWidth: 0, flexGrow: 1, flexBasis: 105, borderWidth: 1, borderRadius: radius.md, padding: spacing.md, gap: spacing.xs },
+  metric: { minWidth: 0, flexGrow: 1, flexBasis: '30%', borderWidth: 1, borderRadius: radius.md, padding: spacing.md, gap: spacing.xs },
   notice: { borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   noticeCopy: { flex: 1 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },

@@ -319,6 +319,7 @@ export interface CollaboratorFinanceClient {
   clientId: UUID;
   clientName: string;
   serviceSheetsCount: number;
+  hasCommission?: boolean;
   paid: number;
   due: number;
   total: number;

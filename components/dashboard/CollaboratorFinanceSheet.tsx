@@ -134,10 +134,10 @@ export function CollaboratorFinanceSheet({ visible, propertyId, collaboratorId, 
                 <MiniMetric label="De achitat" value={formatCurrency(collaborator.due)} color={palette.warning} />
               </View>
               <View style={styles.clients}>{collaborator.clients.map((client) => {
-                const key = `${collaborator.collaboratorId}:${client.clientId}`; const hasDue = client.due > 0;
+                const key = `${collaborator.collaboratorId}:${client.clientId}`; const hasDue = client.due > 0; const canSetPayment = client.hasCommission || client.serviceSheetsCount > 0;
                 return <View key={client.clientId} style={[styles.client, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
                   <View style={styles.clientTop}><View style={styles.clientCopy}><AppText variant="label">{client.clientName}</AppText><AppText variant="caption" muted>{client.serviceSheetsCount} {client.serviceSheetsCount === 1 ? 'fișă' : 'fișe'} · {formatDate(client.lastActivityAt)}</AppText></View><View style={styles.amounts}><AppText variant="caption" style={{ color: palette.success, fontWeight: '800' }}>{formatCurrency(client.paid)} achitat</AppText><AppText variant="caption" style={{ color: palette.warning, fontWeight: '800' }}>{formatCurrency(client.due)} de achitat</AppText></View></View>
-                  <Button compact variant={hasDue ? 'primary' : 'outline'} icon={hasDue ? 'checkmark-circle-outline' : 'arrow-undo-outline'} label={hasDue ? 'Marchează achitat' : 'Marchează neachitat'} loading={updating === key} onPress={() => void setPaid(collaborator.collaboratorId, client.clientId, hasDue)} />
+                  <Button compact variant={hasDue ? 'primary' : 'outline'} icon={canSetPayment ? (hasDue ? 'checkmark-circle-outline' : 'arrow-undo-outline') : 'document-outline'} label={canSetPayment ? (hasDue ? 'Marchează achitat' : 'Marchează neachitat') : 'Disponibil după fișa de service'} disabled={!canSetPayment} loading={updating === key} onPress={() => void setPaid(collaborator.collaboratorId, client.clientId, hasDue)} />
                 </View>;
               })}</View>
             </Card>;
