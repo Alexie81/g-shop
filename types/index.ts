@@ -169,7 +169,7 @@ export interface ServiceSheet extends BaseEntity {
   client?: Pick<Client, 'id' | 'firstName' | 'lastName' | 'phone'>;
 }
 
-export type CommissionType = 'PERCENT_NET' | 'FIXED';
+export type CommissionType = 'PERCENT_NET' | 'PERCENT_TOTAL' | 'FIXED';
 export type CommissionStatus = 'ESTIMATED' | 'CALCULATED' | 'APPROVED' | 'PAID' | 'CANCELLED';
 
 export interface Collaborator extends BaseEntity {
@@ -178,6 +178,7 @@ export interface Collaborator extends BaseEntity {
   email?: string;
   role?: string;
   propertyIds: UUID[];
+  isPreset: boolean;
   defaultCommissionType: CommissionType;
   defaultCommissionValue: number;
   bankAccount?: string;
@@ -287,6 +288,13 @@ export interface AuditLog extends BaseEntity {
 
 export interface DashboardMetrics {
   clientsTotal: number;
+  totalRevenue: number;
+  clientsWaiting: number;
+  revenueOnHold: number;
+  gshopNet: number;
+  collaboratorTotal: number;
+  collaboratorPaid: number;
+  collaboratorOnHold: number;
   clientsNew: number;
   serviceSheetsOpen: number;
   serviceSheetsInProgress: number;
