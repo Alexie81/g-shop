@@ -9,11 +9,13 @@ type AuthContextValue = {
   session: AuthSession | null;
   user: User | null;
   ready: boolean;
+  requiresPropertySelection: boolean;
   savedUsername: string;
   login: (username: string, password: string, remember: boolean) => Promise<void>;
   logout: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   updateProfile: (firstName: string, lastName: string) => Promise<User>;
+  completePropertySelection: () => void;
   hasPermission: (permission: Permission) => boolean;
 };
 
@@ -22,6 +24,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [ready, setReady] = useState(false);
+  const [requiresPropertySelection, setRequiresPropertySelection] = useState(false);
   const [savedUsername, setSavedUsername] = useState('');
 
   useEffect(() => sessionManager.subscribe(setSession), []);
@@ -36,6 +39,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         sessionManager.set(parsed);
         const user = await apiRequest<User>('/auth/me');
         const restored = { ...parsed, user };
+        setRequiresPropertySelection(false);
         sessionManager.set(restored);
         setSession(restored);
       } catch {
@@ -48,6 +52,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const login = useCallback(async (username: string, password: string, remember: boolean) => {
     const next = await authRepository.login(username.trim(), password, `${Platform.OS} ${Platform.Version}`);
+    setRequiresPropertySelection(next.user.role === 'ADMIN');
     sessionManager.setPersistence(remember);
     sessionManager.set(next);
     setSession(next);
@@ -65,6 +70,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     sessionManager.set(null);
     sessionManager.setPersistence(false);
     setSession(null);
+    setRequiresPropertySelection(false);
     await secureSessionStorage.remove();
   }, []);
 
@@ -85,13 +91,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
     session,
     user: session?.user ?? null,
     ready,
+    requiresPropertySelection,
     savedUsername,
     login,
     logout,
     changePassword: authRepository.changePassword,
     updateProfile,
+    completePropertySelection: () => setRequiresPropertySelection(false),
     hasPermission: (permission) => session?.user.role === 'ADMIN' || session?.user.permissions.includes(permission) === true,
-  }), [login, logout, ready, savedUsername, session, updateProfile]);
+  }), [login, logout, ready, requiresPropertySelection, savedUsername, session, updateProfile]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

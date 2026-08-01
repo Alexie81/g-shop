@@ -133,7 +133,7 @@ export default function ProfileScreen() {
         </View>
         {property.id === activeProperty?.id ? <AppText variant="caption" style={{ color: colors.primary, fontWeight: '800' }}>ACTIVĂ</AppText> : null}
       </View>)}
-      <Button variant="outline" label="Schimbă proprietatea" icon="swap-horizontal-outline" onPress={() => router.push('/select-property')} />
+      <Button variant="outline" label="Schimbă proprietatea" icon="swap-horizontal-outline" onPress={() => router.push('/select-property?manual=1')} />
     </Card>
 
     <Card style={styles.section}>

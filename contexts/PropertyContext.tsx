@@ -16,7 +16,7 @@ type PropertyContextValue = {
 const PropertyContext = createContext<PropertyContextValue | null>(null);
 
 export function PropertyProvider({ children }: PropsWithChildren) {
-  const { user } = useAuth();
+  const { user, requiresPropertySelection, completePropertySelection } = useAuth();
   const [properties, setProperties] = useState<Property[]>([]);
   const [activeProperty, setActiveProperty] = useState<Property | null>(null);
   const [loading, setLoading] = useState(false);
@@ -33,7 +33,7 @@ export function PropertyProvider({ children }: PropsWithChildren) {
       const stored = result.find((property) => property.id === storedId);
       setActiveProperty((current) => {
         const currentAllowed = result.find((property) => property.id === current?.id);
-        if (user.role === 'ADMIN' && !currentAllowed) return null;
+        if (user.role === 'ADMIN' && requiresPropertySelection) return null;
         const selected = currentAllowed ?? stored ?? result[0] ?? null;
         if (selected && selected.id !== storedId) void preferenceStorage.set(`property.${user.id}`, selected.id);
         return selected;
@@ -41,14 +41,15 @@ export function PropertyProvider({ children }: PropsWithChildren) {
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Proprietățile nu au putut fi încărcate.');
     } finally { setLoading(false); }
-  }, [user]);
+  }, [requiresPropertySelection, user]);
 
   useEffect(() => { void reload(); }, [reload]);
 
   const selectProperty = useCallback(async (property: Property) => {
     setActiveProperty(property);
+    completePropertySelection();
     if (user) await preferenceStorage.set(`property.${user.id}`, property.id);
-  }, [user]);
+  }, [completePropertySelection, user]);
 
   const value = useMemo(() => ({ properties, activeProperty, loading, error, selectProperty, reload }), [activeProperty, error, loading, properties, reload, selectProperty]);
   return <PropertyContext.Provider value={value}>{children}</PropertyContext.Provider>;

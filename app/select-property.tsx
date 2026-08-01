@@ -8,14 +8,15 @@ import { palette, radius, spacing } from '@/theme/tokens';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Redirect, router } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function SelectPropertyScreen() {
-  const { user, ready } = useAuth();
-  const { properties, loading, error, selectProperty, reload } = useProperty();
+  const { user, ready, requiresPropertySelection } = useAuth();
+  const { properties, activeProperty, loading, error, selectProperty, reload } = useProperty();
+  const { manual } = useLocalSearchParams<{ manual?: string }>();
   const { colors, isDark } = useAppTheme();
   const [selecting, setSelecting] = useState('');
   const entrance = useRef(new Animated.Value(0)).current;
@@ -33,6 +34,7 @@ export default function SelectPropertyScreen() {
 
   if (!ready || loading) return <RouteLoader />;
   if (!user) return <Redirect href="/(auth)/login" />;
+  if (activeProperty && !requiresPropertySelection && manual !== '1') return <Redirect href={activeProperty.type === 'SERVICE' ? '/service/dashboard' : '/shop/home'} />;
 
   const choose = async (id: string) => {
     const property = properties.find((item) => item.id === id);
