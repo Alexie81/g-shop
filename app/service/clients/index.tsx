@@ -13,7 +13,7 @@ import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { clientRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { Client } from '@/types';
-import { fullName } from '@/utils/format';
+import { fullName, normalizePhoneForWhatsApp } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
@@ -78,12 +78,11 @@ export default function ClientsScreen() {
   const activeSort = sortOptions.find((item) => item.value === sort);
 
   const openWhatsApp = async (client: Client) => {
-    const rawPhone = client.phone.replace(/\D/g, '');
-    if (!rawPhone) {
+    const internationalPhone = normalizePhoneForWhatsApp(client.phone);
+    if (!internationalPhone) {
       showToast('Clientul nu are un număr de telefon valid.', 'error');
       return;
     }
-    const internationalPhone = rawPhone.startsWith('0') ? `40${rawPhone.slice(1)}` : rawPhone;
     try {
       await Linking.openURL(`https://wa.me/${internationalPhone}`);
     } catch {
