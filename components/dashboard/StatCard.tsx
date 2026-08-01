@@ -8,9 +8,9 @@ import { Platform, Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'rea
 
 export function StatCard({ label, value, icon, color, helper, helperIcon = 'trending-up', detail, onLongPress, style }: { label: string; value: string | number; icon: ComponentProps<typeof Ionicons>['name']; color: string; helper?: string; helperIcon?: ComponentProps<typeof Ionicons>['name']; detail?: string; onLongPress?: () => void; style?: StyleProp<ViewStyle> }) {
   const { colors, isDark } = useAppTheme();
-  const card = <Card elevated style={[
+  const renderCard = (pressed = false) => <Card elevated style={[
     styles.card,
-    { borderColor: isDark ? `${color}38` : colors.border },
+    { borderColor: pressed ? color : isDark ? `${color}38` : colors.border },
     detail ? styles.cardWithDetail : null,
     onLongPress ? styles.pressableCard : style,
   ]}>
@@ -26,14 +26,23 @@ export function StatCard({ label, value, icon, color, helper, helperIcon = 'tren
     </View>
     <View style={[styles.accent, { backgroundColor: color }]} />
   </Card>;
-  if (!onLongPress) return card;
-  return <Pressable accessibilityRole="button" accessibilityLabel={`${label}. Ține apăsat pentru detalii.`} delayLongPress={420} onPress={Platform.OS === 'web' ? onLongPress : undefined} onLongPress={onLongPress} style={({ pressed }) => [style, pressed && styles.pressed]}>{card}</Pressable>;
+  if (!onLongPress) return renderCard();
+  return <Pressable
+    accessibilityRole="button"
+    accessibilityLabel={`${label}. Ține apăsat pentru detalii.`}
+    accessibilityHint="Deschide situația detaliată."
+    accessibilityActions={[{ name: 'activate', label: 'Deschide detaliile' }]}
+    onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === 'activate') onLongPress(); }}
+    delayLongPress={420}
+    onPress={Platform.OS === 'web' ? onLongPress : undefined}
+    onLongPress={onLongPress}
+    style={style}
+  >{({ pressed }) => renderCard(pressed)}</Pressable>;
 }
 const styles = StyleSheet.create({
   card: { minWidth: 0, minHeight: 128, padding: spacing.lg, justifyContent: 'space-between', overflow: 'hidden' },
   cardWithDetail: { minHeight: 154, paddingBottom: spacing.xl },
   pressableCard: { width: '100%' },
-  pressed: { opacity: 0.84, transform: [{ scale: 0.985 }] },
   glow: { position: 'absolute', width: 92, height: 92, borderRadius: 46, top: -48, right: -36 },
   topRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.sm },
   icon: { width: 42, height: 42, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
