@@ -113,6 +113,47 @@ CREATE TABLE IF NOT EXISTS clients (
   CONSTRAINT fk_client_collaborator FOREIGN KEY (collaborator_id) REFERENCES collaborators(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS client_financials (
+  client_id BINARY(16) PRIMARY KEY,
+  currency_code CHAR(3) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL DEFAULT 'RON',
+  exchange_rate_to_ron DECIMAL(14,6) UNSIGNED NOT NULL DEFAULT 1.000000,
+  work_price DECIMAL(12,2) UNSIGNED NOT NULL DEFAULT 0,
+  diagnostic_fee DECIMAL(12,2) UNSIGNED NOT NULL DEFAULT 0,
+  advance_paid DECIMAL(12,2) UNSIGNED NOT NULL DEFAULT 0,
+  discount_percent DECIMAL(5,2) UNSIGNED NOT NULL DEFAULT 0,
+  actual_parts_cost DECIMAL(12,2) UNSIGNED NOT NULL DEFAULT 0,
+  displayed_parts_cost DECIMAL(12,2) UNSIGNED NOT NULL DEFAULT 0,
+  displayed_labor_cost DECIMAL(12,2) UNSIGNED NOT NULL DEFAULT 0,
+  payment_status ENUM('UNPAID','PAID') NOT NULL DEFAULT 'UNPAID',
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  created_by BINARY(16) NOT NULL,
+  updated_by BINARY(16) NOT NULL,
+  CONSTRAINT fk_client_financial_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS client_expenses (
+  id BINARY(16) PRIMARY KEY,
+  client_id BINARY(16) NOT NULL,
+  description VARCHAR(120) NOT NULL,
+  amount DECIMAL(12,2) UNSIGNED NOT NULL,
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  created_by BINARY(16) NOT NULL,
+  updated_by BINARY(16) NOT NULL,
+  INDEX idx_client_expenses_client (client_id),
+  CONSTRAINT fk_client_expense_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS client_participants (
+  client_id BINARY(16) NOT NULL,
+  user_id BINARY(16) NOT NULL,
+  PRIMARY KEY (client_id, user_id),
+  INDEX idx_client_participants_user (user_id),
+  CONSTRAINT fk_client_participant_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+  CONSTRAINT fk_client_participant_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS client_qr (
   id BINARY(16) PRIMARY KEY,
   client_id BINARY(16) NOT NULL,

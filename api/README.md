@@ -47,6 +47,7 @@ ORDER BY data_length + index_length DESC;
 - `GET /properties`
 - `GET /dashboard?propertyId={uuid}`
 - `POST /admin/migrations/collaborator-presets` — migrare administrativă idempotentă pentru instalările existente; necesită `settings.manage`
+- `POST /admin/migrations/client-finance` — creează idempotent structurile compacte pentru finanțe, cheltuieli și participanți; necesită `settings.manage`
 
 ### Clienți și QR
 
@@ -54,6 +55,11 @@ ORDER BY data_length + index_length DESC;
 - `POST /clients` — creează atomic clientul și codul său QR permanent; răspunsul include direct obiectul `qr` cu status `GENERATED`
 - `GET /clients/{id}`
 - `PUT /clients/{id}`
+- `GET /clients/{id}/financials` — returnează `{ financials, summary, expenses }`; necesită `financials.view`
+- `PUT /clients/{id}/financials` — salvează numai valorile de intrare; necesită `financials.view` și `clients.update`
+- `GET|POST /clients/{id}/expenses`
+- `PUT|DELETE /clients/{id}/expenses/{expenseId}`
+- `GET|PUT /clients/{id}/participants` — listă completă a utilizatorilor activi ai proprietății, cu `isAssigned`; exclusiv administratorului
 - `GET /clients/{id}/intake`
 - `POST /clients/{id}/qr` — endpoint compatibil și idempotent: returnează QR-ul existent fără să-i schimbe tokenul, elimină numai expirarea istorică dacă există și creează unul doar pentru un client legacy care nu are QR
 - `POST /clients/{id}/qr/share`
@@ -62,6 +68,28 @@ ORDER BY data_length + index_length DESC;
 - `GET|POST /public/client-form/{token}`
 
 Codurile QR sunt generate exclusiv de API și salvate în MySQL, în aceeași tranzacție cu clientul. Un cod nou nu expiră (`expiresAt: null`) și nu poate fi regenerat sau înlocuit. Valorile istorice din `expires_at` și statusurile vechi rămân în schemă pentru compatibilitatea datelor existente, însă orice QR activ este tratat ca permanent. Cererile repetate către endpointul de generare nu adaugă rânduri și nu produc evenimente de audit false. Formularul public poate fi trimis o singură dată (`409` la repetare), inclusiv când sosesc cereri simultane, dar același QR rămâne permanent valid pentru scanare. Operațiile autentificate verifică întotdeauna că QR-ul aparține unei proprietăți accesibile utilizatorului, iar tokenul și URL-ul public sunt returnate numai utilizatorilor cu permisiunea `qr.share`.
+
+### Finanțele clientului
+
+`client_financials` este o extensie 1:1 a clientului și nu primește rând la crearea clientului. Un `PUT` cu toate valorile zero, moneda `RON`, curs `1` și status `UNPAID` elimină rândul existent dacă nu există cheltuieli; astfel nu sunt păstrate înregistrări goale. Câmpurile acceptate sunt `currencyCode`, `exchangeRateToRon`, `workPrice`, `diagnosticFee`, `advancePaid`, `discountPercent`, `actualPartsCost`, `displayedPartsCost`, `displayedLaborCost` și `paymentStatus` (`UNPAID` sau `PAID`). Moneda este un cod de trei litere, RON folosește obligatoriu cursul `1`, iar celelalte monede au un curs pozitiv către RON.
+
+Valorile calculate nu sunt stocate. API-ul folosește următoarele formule în moneda clientului:
+
+- `subtotal = workPrice + diagnosticFee`;
+- `discountAmount = subtotal × discountPercent / 100`;
+- `totalDue = subtotal - discountAmount`;
+- `receivedAmount = totalDue` pentru `PAID`, altfel `min(advancePaid, totalDue)`;
+- `remainingDue = totalDue - receivedAmount`;
+- `additionalExpenses = suma cheltuielilor`;
+- `internalCosts = actualPartsCost + additionalExpenses`;
+- comisionul colaboratorului se calculează din atribuirea curentă a clientului: procent din total, procent din `max(totalDue - internalCosts, 0)` sau sumă fixă;
+- `gshopNet = totalDue - internalCosts - collaboratorCost`.
+
+`displayedPartsCost` și `displayedLaborCost` sunt doar defalcări pentru afișare și precompletarea fișei de service; nu se adună din nou în total. Fiecare cheltuială conține doar `description` și `amount`, în moneda unică a clientului, pentru a evita repetarea cursului în fiecare rând. Prima cheltuială creează atomic rândul financiar implicit, iar acesta este păstrat cât timp există cheltuieli. Dashboard-ul convertește valorile noi în RON cu `exchangeRateToRon`: `totalRevenue` însumează valorile încasate, iar `revenueOnHold` valorile rămase. Pentru clienții fără rând în `client_financials` folosește fișele de service existente, fără dublare.
+
+Participanții sunt salvați compact ca legături client–utilizator. `PUT /clients/{id}/participants` primește `{ "userIds": ["uuid"] }`, acceptă maximum 100 de ID-uri unice și refuză utilizatorii inactivi sau din altă proprietate. Toate mutațiile financiare, de cheltuieli și participanți sunt auditate pe entitatea `Client`, pentru ca evenimentele să apară în istoricul clientului.
+
+La actualizarea unei instalări existente, apelează `POST /admin/migrations/client-finance` imediat după publicarea API-ului și înainte de folosirea dashboard-ului sau a fișelor. Reapelarea endpointului este sigură; acesta creează numai tabelele lipsă sub blocare MySQL.
 
 ### Service
 
