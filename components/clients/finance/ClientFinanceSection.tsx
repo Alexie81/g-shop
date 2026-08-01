@@ -131,7 +131,7 @@ export function ClientFinanceSection({
   return <View style={[styles.root, mobile && styles.rootMobile]}>
     <Card style={[styles.hero, mobile && styles.cardMobile, { backgroundColor: isDark ? colors.surfaceElevated : '#F8FBFF' }]} elevated>
       <View style={styles.heroHeader}>
-        <View style={styles.heroIdentity}>
+        <View style={[styles.heroIdentity, mobile && styles.heroIdentityMobile]}>
           <View style={[styles.heroIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="wallet-outline" size={25} color={colors.primary} /></View>
           <View style={styles.headerCopy}>
             <AppText variant="title">Finanțele clientului</AppText>
@@ -141,15 +141,15 @@ export function ClientFinanceSection({
         <PaymentStatus value={normalizedValue.paymentStatus} disabled={disabled} onChange={(next) => update('paymentStatus', next)} />
       </View>
       <View style={[styles.metrics, mobile && styles.compactGap]}>
-        <FinanceMetric icon="receipt-outline" label="Total" value={money(calculations.totalDue)} helper={ronEquivalent(calculations.totalDue)} color={colors.primary} />
-        <FinanceMetric icon="checkmark-circle-outline" label="Încasat" value={money(calculations.receivedAmount)} helper={ronEquivalent(calculations.receivedAmount)} color={palette.success} />
-        <FinanceMetric icon="time-outline" label="Rest de plată" value={money(calculations.remainingDue)} helper={ronEquivalent(calculations.remainingDue)} color={calculations.remainingDue > 0 ? palette.warning : palette.success} />
-        <FinanceMetric icon="trending-up-outline" label="G-Shop Net" value={money(calculations.gshopNet)} helper={ronEquivalent(calculations.gshopNet)} color={calculations.gshopNet >= 0 ? palette.purple : palette.danger} />
+        <FinanceMetric mobile={mobile} icon="receipt-outline" label="Total" value={money(calculations.totalDue)} helper={ronEquivalent(calculations.totalDue)} color={colors.primary} />
+        <FinanceMetric mobile={mobile} icon="checkmark-circle-outline" label="Încasat" value={money(calculations.receivedAmount)} helper={ronEquivalent(calculations.receivedAmount)} color={palette.success} />
+        <FinanceMetric mobile={mobile} icon="time-outline" label="Rest de plată" value={money(calculations.remainingDue)} helper={ronEquivalent(calculations.remainingDue)} color={calculations.remainingDue > 0 ? palette.warning : palette.success} />
+        <FinanceMetric mobile={mobile} icon="trending-up-outline" label="G-Shop Net" value={money(calculations.gshopNet)} helper={ronEquivalent(calculations.gshopNet)} color={calculations.gshopNet >= 0 ? palette.purple : palette.danger} />
       </View>
     </Card>
 
-    <View style={styles.columns}>
-      <Card style={[styles.formCard, mobile && styles.cardMobile]}>
+    <View style={[styles.columns, mobile && styles.columnsMobile]}>
+      <Card style={[styles.formCard, !mobile && styles.formCardDesktop, mobile && styles.formCardMobile, mobile && styles.cardMobile]}>
         <SectionTitle icon="cash-outline" color={colors.primary} title="Valori comerciale" subtitle="Sumele comunicate și încasate de la client" />
         <Pressable
           accessibilityRole="button"
@@ -171,10 +171,10 @@ export function ClientFinanceSection({
           disabled={disabled}
         /> : null}
         <View style={[styles.fieldGrid, mobile && styles.compactGap]}>
-          <FinanceNumberField style={styles.gridField} label={`Preț lucrare (${currency.code})`} value={normalizedValue.workPrice} onChange={(next) => update('workPrice', next)} disabled={disabled} helper={mobile ? undefined : 'Valoarea principală a lucrării'} />
-          <FinanceNumberField style={styles.gridField} label={`Diagnosticare (${currency.code})`} value={normalizedValue.diagnosticFee} onChange={(next) => update('diagnosticFee', next)} disabled={disabled} />
-          <FinanceNumberField style={styles.gridField} label={`Avans încasat (${currency.code})`} value={normalizedValue.advancePaid} onChange={(next) => update('advancePaid', next)} disabled={disabled} helper={!mobile && normalizedValue.paymentStatus === 'PAID' ? 'Statusul Achitat marchează întregul total ca încasat' : undefined} />
-          <FinanceNumberField style={styles.gridField} label="Reducere" value={normalizedValue.discountPercent} onChange={(next) => update('discountPercent', next)} disabled={disabled} percentage error={discountInvalid ? 'Reducerea trebuie să fie între 0 și 100%.' : undefined} />
+          <FinanceNumberField style={[styles.gridField, mobile && styles.gridFieldMobile]} label={`Preț lucrare (${currency.code})`} value={normalizedValue.workPrice} onChange={(next) => update('workPrice', next)} disabled={disabled} helper={mobile ? undefined : 'Valoarea principală a lucrării'} />
+          <FinanceNumberField style={[styles.gridField, mobile && styles.gridFieldMobile]} label={`Diagnosticare (${currency.code})`} value={normalizedValue.diagnosticFee} onChange={(next) => update('diagnosticFee', next)} disabled={disabled} />
+          <FinanceNumberField style={[styles.gridField, mobile && styles.gridFieldMobile]} label={`Avans încasat (${currency.code})`} value={normalizedValue.advancePaid} onChange={(next) => update('advancePaid', next)} disabled={disabled} helper={!mobile && normalizedValue.paymentStatus === 'PAID' ? 'Statusul Achitat marchează întregul total ca încasat' : undefined} />
+          <FinanceNumberField style={[styles.gridField, mobile && styles.gridFieldMobile]} label="Reducere" value={normalizedValue.discountPercent} onChange={(next) => update('discountPercent', next)} disabled={disabled} percentage error={discountInvalid ? 'Reducerea trebuie să fie între 0 și 100%.' : undefined} />
         </View>
         <View style={[styles.calculationStrip, { backgroundColor: colors.surfaceMuted }]}>
           <CalculationLine label="Subtotal" value={money(calculations.subtotal)} />
@@ -184,7 +184,7 @@ export function ClientFinanceSection({
         </View>
       </Card>
 
-      <Card style={[styles.formCard, mobile && styles.cardMobile]}>
+      <Card style={[styles.formCard, !mobile && styles.formCardDesktop, mobile && styles.formCardMobile, mobile && styles.cardMobile]}>
         <SectionTitle icon="construct-outline" color={palette.purple} title="Costuri și defalcare" subtitle="Vizibil pentru echipă; costul efectiv rămâne intern" />
         <FinanceNumberField label={`Cost efectiv piese (${currency.code})`} value={normalizedValue.actualPartsCost} onChange={(next) => update('actualPartsCost', next)} disabled={disabled} helper="Cost intern, scăzut din G-Shop Net" />
         <View style={[styles.internalDivider, { borderTopColor: colors.border }]}>
@@ -192,8 +192,8 @@ export function ClientFinanceSection({
           <AppText variant="caption" muted>Informativă: nu se adună din nou la total.</AppText>
         </View>
         <View style={[styles.fieldGrid, mobile && styles.compactGap]}>
-          <FinanceNumberField style={styles.gridField} label={`Piese afișate (${currency.code})`} value={normalizedValue.displayedPartsCost} onChange={(next) => update('displayedPartsCost', next)} disabled={disabled} />
-          <FinanceNumberField style={styles.gridField} label={`Manoperă afișată (${currency.code})`} value={normalizedValue.displayedLaborCost} onChange={(next) => update('displayedLaborCost', next)} disabled={disabled} />
+          <FinanceNumberField style={[styles.gridField, mobile && styles.gridFieldMobile]} label={`Piese afișate (${currency.code})`} value={normalizedValue.displayedPartsCost} onChange={(next) => update('displayedPartsCost', next)} disabled={disabled} />
+          <FinanceNumberField style={[styles.gridField, mobile && styles.gridFieldMobile]} label={`Manoperă afișată (${currency.code})`} value={normalizedValue.displayedLaborCost} onChange={(next) => update('displayedLaborCost', next)} disabled={disabled} />
         </View>
         {breakdownDiffers ? <View style={[styles.notice, { backgroundColor: `${palette.warning}13`, borderColor: `${palette.warning}50` }]}>
           <Ionicons name="information-circle-outline" size={20} color={palette.warning} />
@@ -210,12 +210,12 @@ export function ClientFinanceSection({
       </Card>
     </View>
 
-    <Card style={[styles.formCard, mobile && styles.cardMobile]}>
+    <Card style={[styles.formCard, !mobile && styles.formCardDesktop, mobile && styles.formCardMobile, mobile && styles.cardMobile]}>
       <View style={styles.sectionHeaderRow}>
         <SectionTitle icon="receipt-outline" color={palette.warning} title="Cheltuieli suplimentare" subtitle="Costuri interne scăzute din profitul G-Shop" />
         {onAddExpense && !disabled ? <Button compact variant="outline" label="Adaugă" icon="add" onPress={() => { setEditingExpense(null); setExpenseOpen(true); }} /> : null}
       </View>
-      {expenses.length ? <View style={styles.expenseList}>{expenses.map((expense) => <View key={expense.id} style={[styles.expenseRow, { borderColor: colors.border, backgroundColor: colors.surfaceMuted }]}>
+      {expenses.length ? <View style={styles.expenseList}>{expenses.map((expense) => <View key={expense.id} style={[styles.expenseRow, mobile && styles.expenseRowMobile, { borderColor: colors.border, backgroundColor: colors.surfaceMuted }]}>
         <View style={[styles.expenseIcon, { backgroundColor: `${palette.warning}18` }]}><Ionicons name="receipt-outline" size={19} color={palette.warning} /></View>
         <View style={styles.headerCopy}><AppText variant="label">{expense.description}</AppText><AppText variant="caption" muted>{expense.updatedAt || expense.createdAt ? formatDate(expense.updatedAt ?? expense.createdAt, true) : 'Cheltuială internă'}</AppText></View>
         <AppText variant="heading">{money(expense.amount)}</AppText>
@@ -232,11 +232,11 @@ export function ClientFinanceSection({
       loading={saving}
       disabled={disabled || exchangeInvalid || discountInvalid}
       onPress={() => void save()}
-      style={styles.saveButton}
+      style={[styles.saveButton, mobile && styles.saveButtonMobile]}
     /> : null}
 
     {isAdmin ? <View style={styles.historyArea}>
-      <Card style={[styles.formCard, mobile && styles.cardMobile]}>
+      <Card style={[styles.formCard, !mobile && styles.formCardDesktop, mobile && styles.formCardMobile, mobile && styles.cardMobile]}>
         <SectionTitle icon="time-outline" color={palette.purple} title="Istoric client" subtitle="Cine a făcut modificarea, ce a schimbat și momentul exact" />
         {historyLoading ? <LoadingRows /> : <ClientAuditHistory items={history ?? []} compact limit={30} />}
       </Card>
@@ -261,9 +261,9 @@ function PaymentStatus({ value, disabled, onChange }: { value: 'UNPAID' | 'PAID'
   </View>;
 }
 
-function FinanceMetric({ icon, label, value, helper, color }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string; helper?: string; color: string }) {
+function FinanceMetric({ icon, label, value, helper, color, mobile }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string; helper?: string; color: string; mobile: boolean }) {
   const { colors } = useAppTheme();
-  return <View style={[styles.metric, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+  return <View style={[styles.metric, mobile && styles.metricMobile, { backgroundColor: colors.surface, borderColor: colors.border }]}>
     <View style={[styles.metricIcon, { backgroundColor: `${color}16` }]}><Ionicons name={icon} size={19} color={color} /></View>
     <AppText variant="caption" muted>{label}</AppText>
     <AppText variant="heading" numberOfLines={1} adjustsFontSizeToFit style={{ color }}>{value}</AppText>
@@ -292,27 +292,33 @@ function LoadingRows() {
 
 const styles = StyleSheet.create({
   root: { gap: spacing.lg },
-  rootMobile: { gap: spacing.md },
+  rootMobile: { width: '100%', alignSelf: 'stretch', gap: spacing.md },
   hero: { gap: spacing.xl, overflow: 'hidden' },
   cardMobile: { padding: spacing.md, gap: spacing.md },
   heroHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.md },
   heroIdentity: { flex: 1, flexBasis: 220, minWidth: 220, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  heroIdentityMobile: { minWidth: 0, flexBasis: 'auto' },
   heroIcon: { width: 50, height: 50, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   headerCopy: { flex: 1, minWidth: 0 },
   metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   metric: { flexGrow: 1, flexBasis: 130, minWidth: 128, borderWidth: 1, borderRadius: radius.md, padding: spacing.md, gap: spacing.xs },
+  metricMobile: { flexBasis: '46%', minWidth: 0, flexShrink: 1 },
   metricIcon: { width: 34, height: 34, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.xs },
   statusControl: { flexDirection: 'row', padding: 4, borderRadius: radius.pill, borderWidth: 1 },
   statusOption: { minHeight: 34, borderRadius: radius.pill, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: 5 },
   columns: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg },
-  formCard: { flex: 1, flexBasis: 420, minWidth: 0, gap: spacing.lg },
-  sectionTitle: { flex: 1, minWidth: 220, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  columnsMobile: { width: '100%', flexDirection: 'column', flexWrap: 'nowrap', gap: spacing.md },
+  formCard: { minWidth: 0, gap: spacing.lg },
+  formCardDesktop: { flex: 1, flexBasis: 420 },
+  formCardMobile: { width: '100%', alignSelf: 'stretch', flexGrow: 0, flexShrink: 1 },
+  sectionTitle: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   sectionIcon: { width: 42, height: 42, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   sectionHeaderRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   currencyButton: { minHeight: 62, borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   currencyCode: { width: 58, height: 42, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   fieldGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  gridField: { flexGrow: 1, flexBasis: 135, minWidth: 128 },
+  gridField: { flexGrow: 1, flexBasis: 210, minWidth: 210 },
+  gridFieldMobile: { flexBasis: '46%', minWidth: 0, flexShrink: 1 },
   compactGap: { gap: spacing.sm },
   calculationStrip: { borderRadius: radius.md, padding: spacing.md, gap: spacing.sm },
   calculationLine: { minHeight: 24, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md },
@@ -322,6 +328,7 @@ const styles = StyleSheet.create({
   netBreakdown: { borderWidth: 1, borderRadius: radius.md, padding: spacing.md, gap: spacing.sm },
   expenseList: { gap: spacing.sm },
   expenseRow: { minHeight: 66, borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  expenseRowMobile: { flexWrap: 'wrap' },
   expenseIcon: { width: 38, height: 38, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   iconButton: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
   expenseTotal: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: spacing.md, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -329,6 +336,7 @@ const styles = StyleSheet.create({
   emptyCopy: { flex: 1, gap: spacing.xs },
   error: { borderWidth: 1, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   saveButton: { alignSelf: 'flex-end', minWidth: 250 },
+  saveButtonMobile: { width: '100%', minWidth: 0, alignSelf: 'stretch' },
   historyArea: { marginTop: spacing.lg },
   loadingRows: { gap: spacing.sm },
   loadingRow: { height: 64, borderRadius: radius.md, opacity: 0.65 },
