@@ -73,7 +73,7 @@ export default function DashboardScreen() {
       <DashboardSectionTitle title="Acțiuni rapide" subtitle="Ajungi imediat la comenzile folosite frecvent" icon="flash-outline" />
       <View style={styles.actions}>
         <QuickAction style={{ flexGrow: 1, flexBasis: actionCardBasis }} label="Adaugă client" icon="person-add-outline" onPress={() => router.push('/service/clients/create')} />
-        <QuickAction style={{ flexGrow: 1, flexBasis: actionCardBasis }} label="Creează fișă" icon="document-text-outline" accent={palette.purple} onPress={() => router.push('/service/service-sheets/create')} />
+        <QuickAction style={{ flexGrow: 1, flexBasis: actionCardBasis }} label="Creează fișă" icon="document-text-outline" accent={palette.purple} onPress={() => router.push({ pathname: '/service/service-sheets/create', params: { returnTo: '/service/dashboard' } })} />
         <QuickAction style={{ flexGrow: 1, flexBasis: actionCardBasis }} label="Scanează QR" icon="scan-outline" accent={palette.success} onPress={() => router.push('/service/qr-scanner')} />
         <QuickAction style={{ flexGrow: 1, flexBasis: actionCardBasis }} label="Atribuie colaborator" icon="people-circle-outline" accent={palette.cyan} onPress={() => router.push('/service/collaborators')} />
       </View>
