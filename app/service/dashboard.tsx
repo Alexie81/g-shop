@@ -8,6 +8,7 @@ import { Screen } from '@/components/ui/Screen';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { ErrorState, LoadingState } from '@/components/ui/States';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAppTheme } from '@/contexts/ThemeContext';
 import { useProperty } from '@/contexts/PropertyContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { dashboardRepository, interventionRepository, serviceSheetRepository } from '@/repositories/api-repositories';
@@ -16,10 +17,15 @@ import { formatCurrency, formatDate } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
 export default function DashboardScreen() {
   const { user } = useAuth(); const { activeProperty } = useProperty(); const propertyId = activeProperty?.id ?? '';
+  const { width } = useWindowDimensions();
+  const statColumns = width < 600 ? 2 : width < 950 ? 3 : 6;
+  const actionColumns = width < 600 ? 2 : width < 900 ? 3 : 5;
+  const statCardBasis = statColumns === 3 ? 170 : 150;
+  const actionCardBasis = actionColumns === 3 ? 160 : actionColumns === 5 ? 145 : 150;
   const state = useAsyncData(async () => { const [metrics, interventions, sheets] = await Promise.all([dashboardRepository.get(propertyId), interventionRepository.list(propertyId), serviceSheetRepository.list(propertyId)]); return { metrics, interventions: interventions.data.slice(0, 3), sheets: sheets.data.slice(0, 3) }; }, [propertyId]);
   const hour = new Date().getHours(); const greeting = hour < 12 ? 'Bună dimineața' : hour < 18 ? 'Bună ziua' : 'Bună seara';
   if (state.loading) return <Screen header={<AppHeader />}><LoadingState rows={6} /></Screen>;
@@ -27,24 +33,28 @@ export default function DashboardScreen() {
   const { metrics, interventions, sheets } = state.data;
   return <Screen header={<AppHeader />} refreshing={state.refreshing} onRefresh={() => void state.reload(true)}>
     <LinearGradient colors={['#082376', '#075CFF', '#0D78FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}><View style={styles.heroCopy}><AppText variant="title" style={{ color: '#fff' }}>{greeting}, {user?.firstName}! <AppText style={{ color: '#FFD75C' }}>👋</AppText></AppText><AppText style={{ color: '#DDE8FF' }}>Ai control complet asupra activității din {activeProperty?.name}.</AppText></View><View style={styles.heroGraphic}><Ionicons name="analytics" size={74} color="#8CB7FF" /></View></LinearGradient>
-    <SectionHeader title="Privire de ansamblu" />
-    <View style={styles.stats}>
-      <StatCard label="Clienți" value={metrics.clientsTotal} icon="people-outline" color={palette.electric} helper={`+${metrics.clientsNew} noi`} />
-      <StatCard label="Intervenții active" value={metrics.interventionsActive} icon="construct-outline" color={palette.warning} />
-      <StatCard label="Fișe deschise" value={metrics.serviceSheetsOpen} icon="document-text-outline" color={palette.purple} />
-      <StatCard label="Fișe finalizate" value={metrics.serviceSheetsCompleted} icon="checkmark-done-outline" color={palette.success} />
-      <StatCard label="Colaboratori" value={metrics.collaboratorsActive} icon="person-add-outline" color={palette.cyan} />
-      <StatCard label="Venit estimat" value={formatCurrency(metrics.estimatedRevenue)} icon="wallet-outline" color={palette.success} />
+    <View style={styles.section}>
+      <DashboardSectionTitle title="Privire de ansamblu" subtitle="Indicatorii esențiali ai proprietății" icon="grid-outline" />
+      <View style={styles.stats}>
+        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Clienți" value={metrics.clientsTotal} icon="people-outline" color={palette.electric} helper={`+${metrics.clientsNew} noi`} />
+        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Intervenții active" value={metrics.interventionsActive} icon="construct-outline" color={palette.warning} />
+        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Fișe deschise" value={metrics.serviceSheetsOpen} icon="document-text-outline" color={palette.purple} />
+        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Fișe finalizate" value={metrics.serviceSheetsCompleted} icon="checkmark-done-outline" color={palette.success} />
+        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Colaboratori" value={metrics.collaboratorsActive} icon="person-add-outline" color={palette.cyan} />
+        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Venit estimat" value={formatCurrency(metrics.estimatedRevenue)} icon="wallet-outline" color={palette.success} />
+      </View>
     </View>
-    <SectionHeader title="Acțiuni rapide" />
-    <View style={styles.actions}>
-      <QuickAction label="Adaugă client" icon="person-add-outline" onPress={() => router.push('/service/clients/create')} />
-      <QuickAction label="Creează fișă" icon="document-text-outline" accent={palette.purple} onPress={() => router.push('/service/service-sheets/create')} />
-      <QuickAction label="Scanează QR" icon="scan-outline" accent={palette.success} onPress={() => router.push('/service/qr-scanner')} />
-      <QuickAction label="Adaugă intervenție" icon="calendar-outline" accent={palette.warning} onPress={() => router.push('/service/interventions/create')} />
-      <QuickAction label="Atribuie colaborator" icon="people-circle-outline" accent={palette.cyan} onPress={() => router.push('/service/collaborators')} />
+    <View style={styles.section}>
+      <DashboardSectionTitle title="Acțiuni rapide" subtitle="Ajungi imediat la comenzile folosite frecvent" icon="flash-outline" />
+      <View style={styles.actions}>
+        <QuickAction style={{ flexGrow: 1, flexBasis: actionCardBasis }} label="Adaugă client" icon="person-add-outline" onPress={() => router.push('/service/clients/create')} />
+        <QuickAction style={{ flexGrow: 1, flexBasis: actionCardBasis }} label="Creează fișă" icon="document-text-outline" accent={palette.purple} onPress={() => router.push('/service/service-sheets/create')} />
+        <QuickAction style={{ flexGrow: 1, flexBasis: actionCardBasis }} label="Scanează QR" icon="scan-outline" accent={palette.success} onPress={() => router.push('/service/qr-scanner')} />
+        <QuickAction style={{ flexGrow: 1, flexBasis: actionCardBasis }} label="Adaugă intervenție" icon="calendar-outline" accent={palette.warning} onPress={() => router.push('/service/interventions/create')} />
+        <QuickAction style={{ flexGrow: 1, flexBasis: actionColumns === 2 ? '100%' : actionCardBasis }} label="Atribuie colaborator" icon="people-circle-outline" accent={palette.cyan} onPress={() => router.push('/service/collaborators')} />
+      </View>
     </View>
-    <View style={styles.columns}>
+    <View style={[styles.columns, styles.lowerSection]}>
       <Card style={styles.panel}><SectionHeader title="Activitate QR azi" action="Vezi clienții" onAction={() => router.push('/service/clients')} /><QRChart generated={metrics.qrGenerated} used={metrics.qrUsed} waiting={metrics.qrUnused} /><AppText variant="caption" style={{ color: palette.success, textAlign: 'right' }}>↗ actualizat în timp real</AppText></Card>
       <Card style={styles.panel}><SectionHeader title="Programări recente" action="Toate" onAction={() => router.push('/service/interventions')} />{interventions.length ? interventions.map((item) => <View key={item.id} style={styles.activity}><View style={[styles.activityIcon, { backgroundColor: '#FFF4DE' }]}><Ionicons name="calendar-outline" size={18} color={palette.warning} /></View><View style={{ flex: 1 }}><AppText variant="label">{item.title}</AppText><AppText variant="caption" muted>{item.client ? `${item.client.firstName} ${item.client.lastName}` : 'Client'} · {formatDate(item.scheduledAt, true)}</AppText></View></View>) : <AppText muted>Nu sunt programări recente.</AppText>}</Card>
     </View>
@@ -52,4 +62,28 @@ export default function DashboardScreen() {
   </Screen>;
 }
 
-const styles = StyleSheet.create({ hero: { minHeight: 164, borderRadius: radius.xl, padding: spacing.xxl, flexDirection: 'row', alignItems: 'center', overflow: 'hidden', marginBottom: spacing.md }, heroCopy: { flex: 1, gap: spacing.sm, maxWidth: 620 }, heroGraphic: { width: 110, height: 110, borderRadius: 55, backgroundColor: '#FFFFFF16', alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-8deg' }] }, stats: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginBottom: spacing.sm }, actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginBottom: spacing.sm }, columns: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }, panel: { minWidth: 290, flex: 1, gap: spacing.lg }, activity: { flexDirection: 'row', alignItems: 'center', gap: spacing.md }, activityIcon: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' }, sheetRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#8090A040' } });
+function DashboardSectionTitle({ title, subtitle, icon }: { title: string; subtitle: string; icon: keyof typeof Ionicons.glyphMap }) {
+  const { colors, isDark } = useAppTheme();
+  return <View style={styles.sectionHeading}>
+    <View style={[styles.sectionIcon, { backgroundColor: isDark ? `${colors.primary}22` : colors.primarySoft }]}><Ionicons name={icon} size={18} color={colors.primary} /></View>
+    <View style={styles.sectionCopy}><AppText variant="heading">{title}</AppText><AppText variant="caption" muted>{subtitle}</AppText></View>
+  </View>;
+}
+
+const styles = StyleSheet.create({
+  hero: { minHeight: 164, borderRadius: radius.xl, padding: spacing.xxl, flexDirection: 'row', alignItems: 'center', overflow: 'hidden' },
+  heroCopy: { flex: 1, gap: spacing.sm, maxWidth: 620 },
+  heroGraphic: { width: 110, height: 110, borderRadius: 55, backgroundColor: '#FFFFFF16', alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-8deg' }] },
+  section: { gap: spacing.lg, marginTop: spacing.xxxl },
+  sectionHeading: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  sectionIcon: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  sectionCopy: { minWidth: 0, flex: 1, gap: 1 },
+  stats: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  lowerSection: { marginTop: spacing.xxxl },
+  columns: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  panel: { minWidth: 290, flex: 1, gap: spacing.lg },
+  activity: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
+  activityIcon: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  sheetRow: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#8090A040' },
+});
