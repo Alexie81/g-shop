@@ -126,6 +126,15 @@ function client_audit_snapshot(array $client): array {
     $client['qrGenerated'] = $hasQr;
     return $client;
 }
+function user_has_permission(array $user, string $permission): bool {
+    return $user['role'] === 'ADMIN' || in_array($permission, $user['permissions'], true);
+}
+function client_for_user(array $client, array $user): array {
+    if (!empty($client['qr']) && !user_has_permission($user, 'qr.share')) {
+        unset($client['qr']['token'], $client['qr']['publicUrl']);
+    }
+    return $client;
+}
 function sheet_select(): string {
     return 'SELECT ' . uuid_sql('s.id') . ' id,' . uuid_sql('s.property_id') . ' property_id,' . uuid_sql('s.client_id') . ' client_id,s.number,s.equipment,s.brand,s.model,s.serial_number,s.accessories,s.reported_issue,s.technical_assessment,s.work_performed,s.parts_used,s.parts_cost,s.labor_cost,s.total_cost,s.direct_costs,s.net_value,' . uuid_sql('s.technician_id') . ' technician_id,' . uuid_sql('s.collaborator_id') . ' collaborator_id,s.collaborator_commission,s.internal_notes,s.signature_path,s.signed_at,s.received_at,s.estimated_at,s.completed_at,s.status,s.is_active,s.created_at,s.updated_at,' . uuid_sql('s.created_by') . ' created_by,' . uuid_sql('s.updated_by') . ' updated_by,' . uuid_sql('c.id') . ' c_id,c.first_name c_first_name,c.last_name c_last_name,c.phone c_phone FROM service_sheets s JOIN clients c ON c.id=s.client_id';
 }
@@ -233,10 +242,10 @@ try {
     if ($method === 'GET' && $path === '/clients') {
         $user=require_permission('clients.view');$propertyId=(string)($_GET['propertyId']??'');ensure_property($propertyId,$user);$query=trim((string)($_GET['query']??''));$qrStatus=trim((string)($_GET['qrStatus']??''));$page=max(1,(int)($_GET['page']??1));$pageSize=min(100,max(1,(int)($_GET['pageSize']??50)));$where=['c.property_id=?','c.is_active=1'];$args=[uuid_bin($propertyId)];
         if($query!==''){$where[]='(c.first_name LIKE ? OR c.last_name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?)';$like='%'.$query.'%';array_push($args,$like,$like,$like,$like);} if($qrStatus==='NOT_GENERATED')$where[]='q.id IS NULL';elseif($qrStatus!==''){$where[]='q.status=?';$args[]=$qrStatus;}
-        $sql=client_select().' WHERE '.implode(' AND ',$where).' ORDER BY c.updated_at DESC LIMIT '.$pageSize.' OFFSET '.(($page-1)*$pageSize);$stmt=db()->prepare($sql);$stmt->execute($args);$data=array_map('map_client',$stmt->fetchAll());
+        $sql=client_select().' WHERE '.implode(' AND ',$where).' ORDER BY c.updated_at DESC LIMIT '.$pageSize.' OFFSET '.(($page-1)*$pageSize);$stmt=db()->prepare($sql);$stmt->execute($args);$data=array_map(fn($row)=>client_for_user(map_client($row),$user),$stmt->fetchAll());
         $countSql='SELECT COUNT(DISTINCT c.id) FROM clients c LEFT JOIN client_qr q ON q.client_id=c.id AND q.is_active=1 WHERE '.implode(' AND ',$where);$count=db()->prepare($countSql);$count->execute($args);$total=(int)$count->fetchColumn();respond(['data'=>$data,'page'=>$page,'pageSize'=>$pageSize,'total'=>$total,'totalPages'=>(int)ceil($total/$pageSize)]);
     }
-    if ($method === 'GET' && path_match('/clients/{id}', $path, $params)) { $user=require_permission('clients.view');$client=get_client($params['id']);ensure_property($client['propertyId'],$user);respond($client); }
+    if ($method === 'GET' && path_match('/clients/{id}', $path, $params)) { $user=require_permission('clients.view');$client=get_client($params['id']);ensure_property($client['propertyId'],$user);respond(client_for_user($client,$user)); }
     if ($method === 'POST' && $path === '/clients') {
         $user=require_permission('clients.create');$body=json_body();$propertyId=trim((string)($body['propertyId']??''));ensure_property($propertyId,$user);
         foreach(['firstName','lastName','phone']as$key)if(trim((string)($body[$key]??''))==='')fail('Câmpuri obligatorii lipsă.',422);
@@ -254,7 +263,7 @@ try {
             $qr=create_client_qr($pdo,$id,$propertyId,$user['id'],$now);
             $pdo->commit();
         }catch(Throwable$e){$pdo->rollBack();throw$e;}
-        $created=get_client($id);audit_log('CLIENT_CREATED','clients','Client creat: '.trim($body['firstName'].' '.$body['lastName']),'Client',$id,$propertyId,null,client_audit_snapshot($created),$user);audit_log('QR_GENERATED','qr','QR generat automat pentru '.$created['firstName'].' '.$created['lastName'],'ClientQR',$qr['id'],$propertyId,null,$qr,$user);respond($created,201);
+        $created=get_client($id);audit_log('CLIENT_CREATED','clients','Client creat: '.trim($body['firstName'].' '.$body['lastName']),'Client',$id,$propertyId,null,client_audit_snapshot($created),$user);audit_log('QR_GENERATED','qr','QR generat automat pentru '.$created['firstName'].' '.$created['lastName'],'ClientQR',$qr['id'],$propertyId,null,$qr,$user);respond(client_for_user($created,$user),201);
     }
     if ($method === 'PUT' && path_match('/clients/{id}', $path, $params)) {
         $user=require_permission('clients.update');$before=get_client($params['id']);ensure_property($before['propertyId'],$user);$body=json_body();
@@ -286,11 +295,11 @@ try {
         if(!$sets)fail('Nu există date de actualizat.',422);
         $sets[]='updated_at=?';$args[]=now_utc();$sets[]='updated_by=?';$args[]=uuid_bin($user['id']);$args[]=uuid_bin($params['id']);
         db()->prepare('UPDATE clients SET '.implode(',',$sets).' WHERE id=?')->execute($args);
-        $after=get_client($params['id']);audit_log('CLIENT_UPDATED','clients','Client actualizat: '.$after['firstName'].' '.$after['lastName'],'Client',$params['id'],$after['propertyId'],client_audit_snapshot($before),client_audit_snapshot($after),$user);respond($after);
+        $after=get_client($params['id']);audit_log('CLIENT_UPDATED','clients','Client actualizat: '.$after['firstName'].' '.$after['lastName'],'Client',$params['id'],$after['propertyId'],client_audit_snapshot($before),client_audit_snapshot($after),$user);respond(client_for_user($after,$user));
     }
     if ($method === 'POST' && path_match('/clients/{id}/qr', $path, $params)) {
         $user=require_permission('qr.generate');$client=get_client($params['id']);ensure_property($client['propertyId'],$user);
-        if(!empty($client['qr']))respond($client);
+        if(!empty($client['qr']))respond(client_for_user($client,$user));
         $pdo=db();$pdo->beginTransaction();$createdQr=null;
         try{
             $lock=$pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE');$lock->execute([uuid_bin($client['id'])]);
@@ -300,17 +309,69 @@ try {
         }catch(Throwable$e){$pdo->rollBack();throw$e;}
         $client=get_client($client['id']);
         if($createdQr!==null)audit_log('QR_GENERATED','qr','QR generat pentru client legacy: '.$client['firstName'].' '.$client['lastName'],'ClientQR',$createdQr['id'],$client['propertyId'],null,$createdQr,$user);
-        respond($client);
+        respond(client_for_user($client,$user));
     }
     if ($method === 'POST' && path_match('/clients/{id}/qr/share', $path, $params)) { $user=require_permission('qr.share');$client=get_client($params['id']);ensure_property($client['propertyId'],$user);if(empty($client['qr']))fail('Clientul nu are un QR activ.',422);$body=json_body();$methodName=strtoupper((string)($body['method']??'NATIVE'));$allowed=['WHATSAPP','EMAIL','SMS','COPY','NATIVE'];if(!in_array($methodName,$allowed,true))$methodName='NATIVE';$now=now_utc();db()->prepare("UPDATE client_qr SET status=IF(status='USED','USED','SENT'),sent_at=?,updated_at=?,updated_by=? WHERE id=?")->execute([$now,$now,uuid_bin($user['id']),uuid_bin($client['qr']['id'])]);db()->prepare("INSERT INTO qr_shares (id,qr_id,client_id,property_id,user_id,method,status,sent_at) VALUES (?,?,?,?,?,?, 'SENT',?)")->execute([uuid_bin(uuid_v4()),uuid_bin($client['qr']['id']),uuid_bin($client['id']),uuid_bin($client['propertyId']),uuid_bin($user['id']),$methodName,$now]);audit_log('QR_SHARED','qr','Cod QR trimis prin '.$methodName,'ClientQR',$client['qr']['id'],$client['propertyId'],null,['method'=>$methodName],$user);respond(['shared'=>true]); }
-    if ($method === 'POST' && path_match('/clients/{id}/qr/use', $path, $params)) { $user=require_permission('qr.generate');$client=get_client($params['id']);ensure_property($client['propertyId'],$user);if(empty($client['qr']))fail('QR inexistent.',404);$now=now_utc();db()->prepare("UPDATE client_qr SET status='USED',used_at=?,updated_at=?,updated_by=? WHERE id=?")->execute([$now,$now,uuid_bin($user['id']),uuid_bin($client['qr']['id'])]);audit_log('QR_MARKED_USED','qr','Cod QR marcat ca folosit','ClientQR',$client['qr']['id'],$client['propertyId'],null,null,$user);respond(get_client($client['id'])); }
+    if ($method === 'POST' && path_match('/clients/{id}/qr/use', $path, $params)) { $user=require_permission('qr.generate');$client=get_client($params['id']);ensure_property($client['propertyId'],$user);if(empty($client['qr']))fail('QR inexistent.',404);$now=now_utc();db()->prepare("UPDATE client_qr SET status='USED',used_at=?,updated_at=?,updated_by=? WHERE id=?")->execute([$now,$now,uuid_bin($user['id']),uuid_bin($client['qr']['id'])]);audit_log('QR_MARKED_USED','qr','Cod QR marcat ca folosit','ClientQR',$client['qr']['id'],$client['propertyId'],null,null,$user);respond(client_for_user(get_client($client['id']),$user)); }
     if ($method === 'GET' && path_match('/clients/{id}/intake', $path, $params)) { $user=require_permission('clients.view');$client=get_client($params['id']);ensure_property($client['propertyId'],$user);$stmt=db()->prepare('SELECT payload FROM client_intakes WHERE client_id=? AND is_active=1 ORDER BY submitted_at DESC LIMIT 1');$stmt->execute([uuid_bin($client['id'])]);$payload=$stmt->fetchColumn();respond($payload?json_decode($payload,true):null); }
 
     if (($method==='GET'||$method==='POST') && path_match('/public/client-form/{token}', $path, $params)) {
-        $token=$params['token'];$stmt=db()->prepare('SELECT '.uuid_sql('q.id').' id,'.uuid_sql('q.client_id').' client_id,'.uuid_sql('q.property_id').' property_id,q.status,c.first_name,p.name property_name FROM client_qr q JOIN clients c ON c.id=q.client_id JOIN properties p ON p.id=q.property_id WHERE q.token=? AND q.is_active=1 LIMIT 1');$stmt->execute([uuid_bin($token)]);$qr=$stmt->fetch();if(!$qr)fail('Linkul este invalid.',404);
-        if($method==='GET'){if($qr['status']!=='USED')db()->prepare('UPDATE client_qr SET opened_at=COALESCE(opened_at,?),updated_at=? WHERE id=?')->execute([now_utc(),now_utc(),uuid_bin($qr['id'])]);respond(['clientFirstName'=>$qr['first_name'],'propertyName'=>$qr['property_name'],'expiresAt'=>null,'used'=>$qr['status']==='USED']);}
-        if($qr['status']==='USED')fail('Formularul a fost deja trimis pentru acest cod QR.',409);
-        $body=json_body();if(strlen(trim((string)($body['fullName']??'')))<3||strlen(preg_replace('/\D/','',(string)($body['phone']??'')))<9||strlen(trim((string)($body['problem']??'')))<10)fail('Completează numele, telefonul și problema.',422);if(empty($body['gdpr'])||empty($body['accuracy'])||empty($body['terms']))fail('Acordurile sunt obligatorii.',422);$pdo=db();$pdo->beginTransaction();try{$now=now_utc();$intakeId=uuid_v4();$pdo->prepare('INSERT INTO client_intakes (id,client_id,qr_id,property_id,payload,submitted_at,is_active) VALUES (?,?,?,?,?,?,1) ON DUPLICATE KEY UPDATE payload=VALUES(payload),submitted_at=VALUES(submitted_at),is_active=1')->execute([uuid_bin($intakeId),uuid_bin($qr['client_id']),uuid_bin($qr['id']),uuid_bin($qr['property_id']),json_encode($body,JSON_UNESCAPED_UNICODE),$now]);$pdo->prepare("UPDATE client_qr SET status='USED',used_at=?,updated_at=? WHERE id=?")->execute([$now,$now,uuid_bin($qr['id'])]);$pdo->prepare("UPDATE clients SET first_name=?,last_name=?,phone=?,email=?,address=?,city=?,county=?,status='REVIEW_REQUIRED',updated_at=? WHERE id=?")->execute([explode(' ',trim($body['fullName']),2)[0],explode(' ',trim($body['fullName']),2)[1]??'',trim($body['phone']),$body['email']??null,$body['address']??null,$body['city']??null,$body['county']??null,$now,uuid_bin($qr['client_id'])]);$requestId=uuid_v4();$pdo->prepare("INSERT INTO service_requests (id,property_id,client_id,intake_id,status,created_at,updated_at) VALUES (?,?,?,?, 'NEW',?,?)")->execute([uuid_bin($requestId),uuid_bin($qr['property_id']),uuid_bin($qr['client_id']),uuid_bin($intakeId),$now,$now]);$pdo->prepare("INSERT INTO notifications (id,user_id,property_id,title,message,type,created_at) SELECT ?,up.user_id,?,'Solicitare nouă','Un client a completat formularul QR.','INFO',? FROM user_properties up WHERE up.property_id=?")->execute([uuid_bin(uuid_v4()),uuid_bin($qr['property_id']),$now,uuid_bin($qr['property_id'])]);$pdo->commit();audit_log('PUBLIC_FORM_SUBMITTED','qr','Clientul a completat formularul public','Client',$qr['client_id'],$qr['property_id'],null,['requestId'=>$requestId],[]);respond(['submitted'=>true,'requestId'=>$requestId],201);}catch(Throwable$e){$pdo->rollBack();throw$e;}
+        $token=$params['token'];
+        $stmt=db()->prepare('SELECT '.uuid_sql('q.id').' id,'.uuid_sql('q.client_id').' client_id,'.uuid_sql('q.property_id').' property_id,q.status,c.first_name,p.name property_name FROM client_qr q JOIN clients c ON c.id=q.client_id JOIN properties p ON p.id=q.property_id WHERE q.token=? AND q.is_active=1 LIMIT 1');
+        $stmt->execute([uuid_bin($token)]);
+        $qr=$stmt->fetch();
+        if(!$qr)fail('Linkul este invalid.',404);
+        if($method==='GET'){
+            if($qr['status']!=='USED')db()->prepare('UPDATE client_qr SET opened_at=COALESCE(opened_at,?),updated_at=? WHERE id=?')->execute([now_utc(),now_utc(),uuid_bin($qr['id'])]);
+            respond(['clientFirstName'=>$qr['first_name'],'propertyName'=>$qr['property_name'],'expiresAt'=>null,'used'=>$qr['status']==='USED']);
+        }
+
+        $body=json_body();
+        if(strlen(trim((string)($body['fullName']??'')))<3||strlen(preg_replace('/\D/','',(string)($body['phone']??'')))<9||strlen(trim((string)($body['problem']??'')))<10)fail('Completează numele, telefonul și problema.',422);
+        if(empty($body['gdpr'])||empty($body['accuracy'])||empty($body['terms']))fail('Acordurile sunt obligatorii.',422);
+
+        $pdo=db();
+        $pdo->beginTransaction();
+        try{
+            $lock=$pdo->prepare('SELECT status FROM client_qr WHERE id=? AND is_active=1 FOR UPDATE');
+            $lock->execute([uuid_bin($qr['id'])]);
+            $lockedStatus=$lock->fetchColumn();
+            if($lockedStatus===false){
+                $pdo->rollBack();
+                fail('Linkul este invalid.',404);
+            }
+            if($lockedStatus==='USED'){
+                $pdo->rollBack();
+                fail('Formularul a fost deja trimis pentru acest cod QR.',409);
+            }
+
+            $now=now_utc();
+            $intakeId=uuid_v4();
+            $pdo->prepare('INSERT INTO client_intakes (id,client_id,qr_id,property_id,payload,submitted_at,is_active) VALUES (?,?,?,?,?,?,1)')->execute([uuid_bin($intakeId),uuid_bin($qr['client_id']),uuid_bin($qr['id']),uuid_bin($qr['property_id']),json_encode($body,JSON_UNESCAPED_UNICODE),$now]);
+            $pdo->prepare("UPDATE client_qr SET status='USED',used_at=?,updated_at=? WHERE id=?")->execute([$now,$now,uuid_bin($qr['id'])]);
+            $nameParts=explode(' ',trim($body['fullName']),2);
+            $pdo->prepare("UPDATE clients SET first_name=?,last_name=?,phone=?,email=?,address=?,city=?,county=?,status='REVIEW_REQUIRED',updated_at=? WHERE id=?")->execute([$nameParts[0],$nameParts[1]??'',trim($body['phone']),$body['email']??null,$body['address']??null,$body['city']??null,$body['county']??null,$now,uuid_bin($qr['client_id'])]);
+            $requestId=uuid_v4();
+            $pdo->prepare("INSERT INTO service_requests (id,property_id,client_id,intake_id,status,created_at,updated_at) VALUES (?,?,?,?, 'NEW',?,?)")->execute([uuid_bin($requestId),uuid_bin($qr['property_id']),uuid_bin($qr['client_id']),uuid_bin($intakeId),$now,$now]);
+
+            $recipients=$pdo->prepare('SELECT user_id FROM user_properties WHERE property_id=?');
+            $recipients->execute([uuid_bin($qr['property_id'])]);
+            $notification=$pdo->prepare("INSERT INTO notifications (id,user_id,property_id,title,message,type,created_at) VALUES (?,?,?,'Solicitare nouă','Un client a completat formularul QR.','INFO',?)");
+            foreach($recipients->fetchAll(PDO::FETCH_COLUMN) as $recipientId){
+                $notification->execute([uuid_bin(uuid_v4()),$recipientId,uuid_bin($qr['property_id']),$now]);
+            }
+
+            $pdo->commit();
+            audit_log('PUBLIC_FORM_SUBMITTED','qr','Clientul a completat formularul public','Client',$qr['client_id'],$qr['property_id'],null,['requestId'=>$requestId],[]);
+            respond(['submitted'=>true,'requestId'=>$requestId],201);
+        }catch(PDOException$e){
+            if($pdo->inTransaction())$pdo->rollBack();
+            if((int)($e->errorInfo[1]??0)===1062)fail('Formularul a fost deja trimis pentru acest cod QR.',409);
+            throw$e;
+        }catch(Throwable$e){
+            if($pdo->inTransaction())$pdo->rollBack();
+            throw$e;
+        }
     }
     if ($method==='POST'&&$path==='/qr/resolve') { $user=require_permission('qr.scan');$body=json_body();$raw=(string)($body['data']??'');if(!preg_match('/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})/',$raw,$match))fail('Cod QR G-Shop invalid.',422);$stmt=db()->prepare('SELECT '.uuid_sql('q.id').' id,'.uuid_sql('q.client_id').' client_id,'.uuid_sql('q.property_id').' property_id,q.status,c.first_name,c.last_name FROM client_qr q JOIN clients c ON c.id=q.client_id WHERE q.token=? AND q.is_active=1 LIMIT 1');$stmt->execute([uuid_bin($match[1])]);$qr=$stmt->fetch();if(!$qr)fail('Codul este invalid.',404);ensure_property($qr['property_id'],$user);$requestedPropertyId=trim((string)($body['propertyId']??''));if($requestedPropertyId!==''&&$requestedPropertyId!==$qr['property_id'])fail('Codul QR nu aparține proprietății selectate.',422);$action=(string)($body['action']??'OPEN_PROFILE');if(!in_array($action,['OPEN_PROFILE','CHECK_IN','DROP_OFF','PICK_UP'],true))$action='OPEN_PROFILE';db()->prepare('INSERT INTO qr_scan_logs (id,qr_id,client_id,property_id,scanned_by,action,device,status,created_at) VALUES (?,?,?,?,?,?,?,?,?)')->execute([uuid_bin(uuid_v4()),uuid_bin($qr['id']),uuid_bin($qr['client_id']),uuid_bin($qr['property_id']),uuid_bin($user['id']),$action,substr((string)($body['device']??''),0,100),'VALID',now_utc()]);audit_log('QR_SCANNED','qr','QR scanat: '.$action,'ClientQR',$qr['id'],$qr['property_id'],null,['action'=>$action,'device'=>$body['device']??null],$user);respond(['clientId'=>$qr['client_id'],'clientName'=>$qr['first_name'].' '.$qr['last_name']]); }
 

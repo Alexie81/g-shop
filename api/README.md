@@ -59,7 +59,7 @@ ORDER BY data_length + index_length DESC;
 - `POST /qr/resolve`
 - `GET|POST /public/client-form/{token}`
 
-Codurile QR sunt generate exclusiv de API și salvate în MySQL, în aceeași tranzacție cu clientul. Un cod nou nu expiră (`expiresAt: null`) și nu poate fi regenerat sau înlocuit. Valorile istorice din `expires_at` și statusurile vechi rămân în schemă pentru compatibilitatea datelor existente, însă orice QR activ este tratat ca permanent. Cererile repetate către endpointul de generare nu adaugă rânduri și nu produc evenimente de audit false. Formularul public poate fi trimis o singură dată (`409` la repetare), dar același QR rămâne permanent valid pentru scanare. Operațiile autentificate verifică întotdeauna că QR-ul aparține unei proprietăți accesibile utilizatorului.
+Codurile QR sunt generate exclusiv de API și salvate în MySQL, în aceeași tranzacție cu clientul. Un cod nou nu expiră (`expiresAt: null`) și nu poate fi regenerat sau înlocuit. Valorile istorice din `expires_at` și statusurile vechi rămân în schemă pentru compatibilitatea datelor existente, însă orice QR activ este tratat ca permanent. Cererile repetate către endpointul de generare nu adaugă rânduri și nu produc evenimente de audit false. Formularul public poate fi trimis o singură dată (`409` la repetare), inclusiv când sosesc cereri simultane, dar același QR rămâne permanent valid pentru scanare. Operațiile autentificate verifică întotdeauna că QR-ul aparține unei proprietăți accesibile utilizatorului, iar tokenul și URL-ul public sunt returnate numai utilizatorilor cu permisiunea `qr.share`.
 
 ### Service
 
