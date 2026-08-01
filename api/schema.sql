@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS collaborators (
   phone VARCHAR(24) NULL,
   email VARCHAR(140) NULL,
   role VARCHAR(70) NULL,
-  default_commission_type ENUM('PERCENT_NET','FIXED') NOT NULL DEFAULT 'PERCENT_NET',
+  default_commission_type ENUM('PERCENT_NET','PERCENT_TOTAL','FIXED') NOT NULL DEFAULT 'PERCENT_NET',
   default_commission_value DECIMAL(10,2) NOT NULL DEFAULT 0,
   bank_account VARCHAR(34) NULL,
   notes TEXT NULL,
@@ -77,7 +77,9 @@ CREATE TABLE IF NOT EXISTS collaborators (
 CREATE TABLE IF NOT EXISTS collaborator_properties (
   collaborator_id BINARY(16) NOT NULL,
   property_id BINARY(16) NOT NULL,
+  is_preset TINYINT(1) NULL DEFAULT NULL,
   PRIMARY KEY (collaborator_id, property_id),
+  UNIQUE KEY uq_cp_property_preset (property_id, is_preset),
   CONSTRAINT fk_cp_collaborator FOREIGN KEY (collaborator_id) REFERENCES collaborators(id) ON DELETE CASCADE,
   CONSTRAINT fk_cp_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -97,7 +99,7 @@ CREATE TABLE IF NOT EXISTS clients (
   notes TEXT NULL,
   status ENUM('ACTIVE','INACTIVE','NEW','REVIEW_REQUIRED') NOT NULL DEFAULT 'NEW',
   collaborator_id BINARY(16) NULL,
-  commission_type ENUM('PERCENT_NET','FIXED') NULL,
+  commission_type ENUM('PERCENT_NET','PERCENT_TOTAL','FIXED') NULL,
   commission_value DECIMAL(10,2) NULL,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
   created_at DATETIME NOT NULL,
@@ -280,7 +282,7 @@ CREATE TABLE IF NOT EXISTS commissions (
   total_value DECIMAL(12,2) NOT NULL,
   direct_costs DECIMAL(12,2) NOT NULL,
   net_value DECIMAL(12,2) NOT NULL,
-  type ENUM('PERCENT_NET','FIXED') NOT NULL,
+  type ENUM('PERCENT_NET','PERCENT_TOTAL','FIXED') NOT NULL,
   rate_or_amount DECIMAL(10,2) NOT NULL,
   commission_value DECIMAL(12,2) NOT NULL,
   status ENUM('ESTIMATED','CALCULATED','APPROVED','PAID','CANCELLED') NOT NULL DEFAULT 'ESTIMATED',

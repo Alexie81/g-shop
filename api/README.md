@@ -45,6 +45,7 @@ ORDER BY data_length + index_length DESC;
 
 - `GET /properties`
 - `GET /dashboard?propertyId={uuid}`
+- `POST /admin/migrations/collaborator-presets` — migrare administrativă idempotentă pentru instalările existente; necesită `settings.manage`
 
 ### Clienți și QR
 
@@ -75,6 +76,12 @@ Codurile QR sunt generate exclusiv de API și salvate în MySQL, în aceeași tr
 - `PUT /commissions/client-status` — marchează comisioanele unui client ca achitate sau de achitat; body: `{ "propertyId": "uuid", "collaboratorId": "uuid", "clientId": "uuid", "paid": true|false }`
 
 `POST /collaborators` primește datele colaboratorului și `propertyIds`, validează regula implicită de comision și returnează obiectul complet creat. `PUT /collaborators/{id}` primește obligatoriu `propertyId` în body, plus câmpurile care trebuie modificate. Modificarea regulii implicite se aplică atribuirilor viitoare și nu rescrie comisioanele istorice.
+
+Regula implicită acceptă `FIXED` (sumă fixă), `PERCENT_NET` (procent din valoarea totală minus costurile directe) și `PERCENT_TOTAL` (procent din total). Câmpul boolean `isPreset` este evaluat în contextul proprietății cerute. O proprietate poate avea cel mult un colaborator presetat; activarea unuia îl înlocuiește atomic pe cel anterior. La creare, `isPreset: true` se aplică tuturor valorilor din `propertyIds`; la actualizare se aplică numai valorii `propertyId` din body.
+
+Un client nou care nu include deloc câmpul `collaboratorId` moștenește colaboratorul presetat al proprietății împreună cu tipul și valoarea sa implicită. Trimiterea explicită a `collaboratorId: null` sau `collaboratorId: ""` creează ori actualizează clientul fără colaborator și șterge regula sa de comision. Din client, colaboratorul, tipul și valoarea comisionului pot fi schimbate fără a modifica regula implicită a colaboratorului.
+
+După publicarea peste o instalare existentă, autentifică un administrator și apelează o singură dată `POST /admin/migrations/collaborator-presets`. Endpointul adaugă coloana compactă `collaborator_properties.is_preset`, unicitatea pe proprietate și extinde cele trei tipuri `ENUM`; poate fi reapelat în siguranță și nu rulează verificări DDL în cererile normale.
 
 `DELETE /collaborators/{id}` este o ștergere logică sigură: colaboratorul dispare din lista activă, iar datele, legăturile și istoricul financiar rămân în baza de date. Cererea este refuzată cu `409` dacă există clienți activi atribuiți sau comisioane neachitate. Pentru un colaborator legat de mai multe proprietăți, utilizatorul trebuie să aibă acces la toate proprietățile înainte de ștergerea globală.
 
