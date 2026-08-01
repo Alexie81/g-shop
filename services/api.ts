@@ -38,7 +38,7 @@ async function refreshSession() {
     }).then(async (response) => {
       if (!response.ok) return null;
       const session = (await response.json()).data as AuthSession;
-      currentSession = session;
+      sessionManager.set(session);
       if (persistSession) await secureSessionStorage.set(JSON.stringify(session));
       return session;
     }).finally(() => { refreshing = null; });
