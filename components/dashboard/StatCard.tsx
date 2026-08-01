@@ -8,7 +8,12 @@ import { Platform, Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'rea
 
 export function StatCard({ label, value, icon, color, helper, helperIcon = 'trending-up', detail, onLongPress, style }: { label: string; value: string | number; icon: ComponentProps<typeof Ionicons>['name']; color: string; helper?: string; helperIcon?: ComponentProps<typeof Ionicons>['name']; detail?: string; onLongPress?: () => void; style?: StyleProp<ViewStyle> }) {
   const { colors, isDark } = useAppTheme();
-  const card = <Card elevated style={[styles.card, { borderColor: isDark ? `${color}38` : colors.border }, onLongPress ? styles.pressableCard : null, style]}>
+  const card = <Card elevated style={[
+    styles.card,
+    { borderColor: isDark ? `${color}38` : colors.border },
+    detail ? styles.cardWithDetail : null,
+    onLongPress ? styles.pressableCard : style,
+  ]}>
     <View pointerEvents="none" style={[styles.glow, { backgroundColor: isDark ? `${color}12` : `${color}0D` }]} />
     <View style={styles.topRow}>
       <View style={[styles.icon, { backgroundColor: isDark ? `${color}26` : `${color}14` }]}><Ionicons name={icon} size={21} color={color} /></View>
@@ -26,6 +31,7 @@ export function StatCard({ label, value, icon, color, helper, helperIcon = 'tren
 }
 const styles = StyleSheet.create({
   card: { minWidth: 0, minHeight: 128, padding: spacing.lg, justifyContent: 'space-between', overflow: 'hidden' },
+  cardWithDetail: { minHeight: 154, paddingBottom: spacing.xl },
   pressableCard: { width: '100%' },
   pressed: { opacity: 0.84, transform: [{ scale: 0.985 }] },
   glow: { position: 'absolute', width: 92, height: 92, borderRadius: 46, top: -48, right: -36 },
