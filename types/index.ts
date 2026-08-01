@@ -232,6 +232,7 @@ export interface ServiceSheet extends BaseEntity {
   propertyId: UUID;
   clientId: UUID;
   number: string;
+  currencyCode?: string;
   equipment: string;
   brand?: string;
   model?: string;
