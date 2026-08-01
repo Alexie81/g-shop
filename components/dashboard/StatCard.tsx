@@ -4,7 +4,7 @@ import { useAppTheme } from '@/contexts/ThemeContext';
 import { radius, spacing } from '@/theme/tokens';
 import { Ionicons } from '@expo/vector-icons';
 import { ComponentProps } from 'react';
-import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { Platform, Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 
 export function StatCard({ label, value, icon, color, helper, helperIcon = 'trending-up', onLongPress, style }: { label: string; value: string | number; icon: ComponentProps<typeof Ionicons>['name']; color: string; helper?: string; helperIcon?: ComponentProps<typeof Ionicons>['name']; onLongPress?: () => void; style?: StyleProp<ViewStyle> }) {
   const { colors, isDark } = useAppTheme();
@@ -21,7 +21,7 @@ export function StatCard({ label, value, icon, color, helper, helperIcon = 'tren
     <View style={[styles.accent, { backgroundColor: color }]} />
   </Card>;
   if (!onLongPress) return card;
-  return <Pressable accessibilityRole="button" accessibilityLabel={`${label}. Ține apăsat pentru detalii.`} delayLongPress={420} onLongPress={onLongPress} style={({ pressed }) => [style, pressed && styles.pressed]}>{card}</Pressable>;
+  return <Pressable accessibilityRole="button" accessibilityLabel={`${label}. Ține apăsat pentru detalii.`} delayLongPress={420} onPress={Platform.OS === 'web' ? onLongPress : undefined} onLongPress={onLongPress} style={({ pressed }) => [style, pressed && styles.pressed]}>{card}</Pressable>;
 }
 const styles = StyleSheet.create({
   card: { minWidth: 0, minHeight: 128, padding: spacing.lg, justifyContent: 'space-between', overflow: 'hidden' },
