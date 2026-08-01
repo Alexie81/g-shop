@@ -5,6 +5,7 @@ export interface AuthRepository {
   logout(): Promise<void>;
   forgotPassword(email: string): Promise<void>;
   changePassword(currentPassword: string, newPassword: string): Promise<void>;
+  updateProfile(firstName: string, lastName: string): Promise<User>;
 }
 
 export interface PropertyRepository { list(): Promise<Property[]>; }

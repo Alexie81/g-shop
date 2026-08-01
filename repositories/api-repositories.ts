@@ -6,6 +6,7 @@ export const authRepository: AuthRepository = {
   logout: () => apiRequest('/auth/logout', { method: 'POST' }),
   forgotPassword: (email) => apiRequest('/auth/forgot-password', { method: 'POST', authenticated: false, body: JSON.stringify({ email }) }),
   changePassword: (currentPassword, newPassword) => apiRequest('/auth/change-password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) }),
+  updateProfile: (firstName, lastName) => apiRequest('/auth/profile', { method: 'PUT', body: JSON.stringify({ firstName, lastName }) }),
 };
 
 export const propertyRepository: PropertyRepository = { list: () => apiRequest('/properties') };

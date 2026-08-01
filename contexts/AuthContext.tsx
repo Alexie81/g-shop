@@ -13,6 +13,7 @@ type AuthContextValue = {
   login: (username: string, password: string, remember: boolean) => Promise<void>;
   logout: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  updateProfile: (firstName: string, lastName: string) => Promise<User>;
   hasPermission: (permission: Permission) => boolean;
 };
 
@@ -67,6 +68,19 @@ export function AuthProvider({ children }: PropsWithChildren) {
     await secureSessionStorage.remove();
   }, []);
 
+  const updateProfile = useCallback(async (firstName: string, lastName: string) => {
+    const updatedUser = await authRepository.updateProfile(firstName.trim(), lastName.trim());
+    const current = sessionManager.get();
+    if (!current) throw new Error('Sesiunea curentă nu mai este disponibilă.');
+
+    const next = { ...current, user: { ...current.user, ...updatedUser } };
+    sessionManager.set(next);
+    try {
+      if (await secureSessionStorage.get()) await secureSessionStorage.set(JSON.stringify(next));
+    } catch { /* The in-memory profile remains current even if device storage is unavailable. */ }
+    return next.user;
+  }, []);
+
   const value = useMemo<AuthContextValue>(() => ({
     session,
     user: session?.user ?? null,
@@ -75,8 +89,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
     login,
     logout,
     changePassword: authRepository.changePassword,
+    updateProfile,
     hasPermission: (permission) => session?.user.role === 'ADMIN' || session?.user.permissions.includes(permission) === true,
-  }), [login, logout, ready, savedUsername, session]);
+  }), [login, logout, ready, savedUsername, session, updateProfile]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
