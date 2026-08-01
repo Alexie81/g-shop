@@ -49,19 +49,23 @@ export function CollaboratorFinanceSheet({ visible, propertyId, onClose, onChang
   }, [onClose, sheetHeight]);
 
   const panResponder = useRef(PanResponder.create({
-    onMoveShouldSetPanResponder: (_event, gesture) => Math.abs(gesture.dy) > 5 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+    onStartShouldSetPanResponder: () => true,
+    onStartShouldSetPanResponderCapture: () => true,
+    onMoveShouldSetPanResponder: (_event, gesture) => Math.abs(gesture.dy) > 2 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+    onMoveShouldSetPanResponderCapture: (_event, gesture) => Math.abs(gesture.dy) > 2 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
     onPanResponderGrant: () => { sheetHeight.stopAnimation((value) => { dragStart.current = value; currentHeight.current = value; }); },
     onPanResponderMove: (_event, gesture) => {
       const next = Math.max(0, Math.min(expandedRef.current, dragStart.current - gesture.dy));
       currentHeight.current = next; sheetHeight.setValue(next);
     },
     onPanResponderRelease: (_event, gesture) => {
-      if (gesture.dy > 72 || gesture.vy > 0.8) { closeByDrag(); return; }
-      if (gesture.dy < -50 || gesture.vy < -0.65) { animateTo(expandedRef.current); return; }
+      if (gesture.dy > 56 || gesture.vy > 0.65) { closeByDrag(); return; }
+      if (gesture.dy < -24 || gesture.vy < -0.4) { animateTo(expandedRef.current); return; }
       const midpoint = (collapsedRef.current + expandedRef.current) / 2;
       animateTo(currentHeight.current >= midpoint ? expandedRef.current : collapsedRef.current);
     },
     onPanResponderTerminate: () => animateTo(currentHeight.current >= (collapsedRef.current + expandedRef.current) / 2 ? expandedRef.current : collapsedRef.current),
+    onPanResponderTerminationRequest: () => false,
   })).current;
 
   const load = useCallback(async () => {
@@ -85,15 +89,16 @@ export function CollaboratorFinanceSheet({ visible, propertyId, onClose, onChang
 
   const summary = data ?? { paid: 0, due: 0, total: 0, collaborators: [] };
   return <Modal visible={visible} transparent animationType="fade" onRequestClose={closeByDrag} statusBarTranslucent>
-    <Pressable style={[styles.overlay, { backgroundColor: colors.overlay }]} onPress={closeByDrag}>
+    <View style={styles.overlay}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Închide panoul" style={[styles.backdrop, { backgroundColor: colors.overlay }]} onPress={closeByDrag} />
       <Animated.View style={[styles.sheet, { height: sheetHeight, backgroundColor: colors.background, borderColor: colors.border }]}>
-      <Pressable style={styles.sheetBody} onPress={(event) => event.stopPropagation()}>
-        <View {...panResponder.panHandlers} accessibilityRole="adjustable" accessibilityLabel="Trage în sus pentru extindere sau în jos pentru închidere" style={styles.draggableHeader}>
-          <View style={[styles.handle, { backgroundColor: colors.border }]} />
-        <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <View style={styles.headerCopy}><AppText variant="title">Colaboratori</AppText><AppText variant="caption" muted>Achitat și de achitat, pentru fiecare client</AppText></View>
+      <View style={styles.sheetBody}>
+        <View style={[styles.draggableHeader, { borderBottomColor: colors.border }]}>
+          <View {...panResponder.panHandlers} accessibilityRole="adjustable" accessibilityLabel="Trage în sus pentru extindere sau în jos pentru închidere" style={styles.dragSurface}>
+            <View style={[styles.handle, { backgroundColor: colors.border }]} />
+            <View style={styles.headerCopy}><AppText variant="title">Colaboratori</AppText><AppText variant="caption" muted>Achitat și de achitat, pentru fiecare client</AppText></View>
+          </View>
           <Pressable accessibilityRole="button" accessibilityLabel="Închide" onPress={closeByDrag} style={[styles.close, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={21} color={colors.text} /></Pressable>
-        </View>
         </View>
 
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} nestedScrollEnabled keyboardShouldPersistTaps="handled">
@@ -130,9 +135,9 @@ export function CollaboratorFinanceSheet({ visible, propertyId, onClose, onChang
             </Card>;
           })}
         </ScrollView>
-      </Pressable>
+      </View>
       </Animated.View>
-    </Pressable>
+    </View>
   </Modal>;
 }
 
@@ -147,13 +152,14 @@ function MiniMetric({ label, value, color }: { label: string; value: string; col
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },
+  backdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
   sheet: { width: '100%', maxWidth: 720, alignSelf: 'center', borderWidth: 1, borderBottomWidth: 0, borderTopLeftRadius: 32, borderTopRightRadius: 32, overflow: 'hidden' },
   sheetBody: { flex: 1, minHeight: 0 },
-  draggableHeader: { width: '100%', flexShrink: 0 },
-  handle: { width: 48, height: 5, borderRadius: radius.pill, alignSelf: 'center', marginTop: spacing.md, marginBottom: spacing.sm },
-  header: { minHeight: 76, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth },
+  draggableHeader: { width: '100%', minHeight: 108, flexShrink: 0, borderBottomWidth: StyleSheet.hairlineWidth },
+  dragSurface: { minHeight: 108, paddingHorizontal: spacing.xl, paddingRight: 80, paddingBottom: spacing.lg },
+  handle: { width: 48, height: 5, borderRadius: radius.pill, alignSelf: 'center', marginTop: spacing.md, marginBottom: spacing.md },
   headerCopy: { minWidth: 0, flex: 1, gap: 2 },
-  close: { width: 42, height: 42, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  close: { position: 'absolute', top: 42, right: spacing.xl, width: 42, height: 42, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
   scroll: { flex: 1 },
   content: { padding: spacing.lg, paddingBottom: 42, gap: spacing.lg },
   summary: { flexDirection: 'row', gap: spacing.sm },
