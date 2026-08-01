@@ -324,7 +324,6 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
           collaboratorCost={financeCollaboratorCost}
           commissionType={form.collaboratorId ? form.commissionType : undefined}
           commissionValue={form.collaboratorId ? safeCommission : 0}
-          isAdmin={false}
           disabled={!canEditFinancials}
           onChange={setFinance}
         />

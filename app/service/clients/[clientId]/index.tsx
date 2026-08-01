@@ -97,8 +97,6 @@ export default function ClientDetailsScreen() {
       collaboratorCost={financials.summary.collaboratorCost}
       commissionType={client.commissionType}
       commissionValue={client.commissionValue}
-      history={history}
-      isAdmin={isAdmin}
       disabled={!canEditFinancials}
       saving={financeSaving}
       onChange={(next) => replaceFinancials({ ...financials, financials: { ...financials.financials, ...next } })}

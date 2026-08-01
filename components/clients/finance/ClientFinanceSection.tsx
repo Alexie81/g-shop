@@ -1,14 +1,13 @@
 import { CurrencyPickerModal } from '@/components/clients/finance/CurrencyPickerModal';
 import { ExpenseEditorModal, ExpenseInput } from '@/components/clients/finance/ExpenseEditorModal';
 import { FinanceNumberField } from '@/components/clients/finance/FinanceNumberField';
-import { ClientAuditHistory } from '@/components/clients/ClientAuditHistory';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { DEFAULT_CURRENCY_CODE, findCurrency } from '@/constants/currencies';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { palette, radius, spacing } from '@/theme/tokens';
-import { AuditLog, CommissionType } from '@/types';
+import { CommissionType } from '@/types';
 import {
   calculateClientFinance,
   ClientFinanceExpense,
@@ -27,11 +26,8 @@ export type ClientFinanceSectionProps = {
   collaboratorCost?: number;
   commissionType?: CommissionType;
   commissionValue?: number;
-  history?: readonly AuditLog[];
-  isAdmin: boolean;
   disabled?: boolean;
   saving?: boolean;
-  historyLoading?: boolean;
   onChange: (value: ClientFinanceValue) => void;
   onSave?: (value: ClientFinanceValue) => Promise<void> | void;
   onAddExpense?: (input: ExpenseInput) => Promise<void> | void;
@@ -45,11 +41,8 @@ export function ClientFinanceSection({
   collaboratorCost = 0,
   commissionType,
   commissionValue = 0,
-  history,
-  isAdmin,
   disabled = false,
   saving = false,
-  historyLoading = false,
   onChange,
   onSave,
   onAddExpense,
@@ -235,13 +228,6 @@ export function ClientFinanceSection({
       style={[styles.saveButton, mobile && styles.saveButtonMobile]}
     /> : null}
 
-    {isAdmin ? <View style={styles.historyArea}>
-      <Card style={[styles.formCard, !mobile && styles.formCardDesktop, mobile && styles.formCardMobile, mobile && styles.cardMobile]}>
-        <SectionTitle icon="time-outline" color={palette.purple} title="Istoric client" subtitle="Cine a făcut modificarea, ce a schimbat și momentul exact" />
-        {historyLoading ? <LoadingRows /> : <ClientAuditHistory items={history ?? []} compact limit={30} />}
-      </Card>
-    </View> : null}
-
     <CurrencyPickerModal visible={currencyOpen} value={currency.code} onClose={() => setCurrencyOpen(false)} onSelect={(code) => onChange({ ...normalizedValue, currencyCode: code, exchangeRateToRon: code === DEFAULT_CURRENCY_CODE ? 1 : normalizedValue.currencyCode === DEFAULT_CURRENCY_CODE ? 0 : normalizedValue.exchangeRateToRon })} />
     <ExpenseEditorModal visible={expenseOpen} currencyCode={currency.code} expense={editingExpense} onClose={() => { setExpenseOpen(false); setEditingExpense(null); }} onSubmit={submitExpense} />
   </View>;
@@ -283,11 +269,6 @@ function CalculationLine({ label, value, muted, accent }: { label: string; value
 function EmptyBlock({ icon, title, description }: { icon: keyof typeof Ionicons.glyphMap; title: string; description: string }) {
   const { colors } = useAppTheme();
   return <View style={[styles.empty, { backgroundColor: colors.surfaceMuted }]}><Ionicons name={icon} size={30} color={colors.textMuted} /><View style={styles.emptyCopy}><AppText variant="label">{title}</AppText><AppText variant="caption" muted>{description}</AppText></View></View>;
-}
-
-function LoadingRows() {
-  const { colors } = useAppTheme();
-  return <View style={styles.loadingRows}>{[0, 1, 2].map((item) => <View key={item} style={[styles.loadingRow, { backgroundColor: colors.surfaceMuted }]} />)}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -337,7 +318,4 @@ const styles = StyleSheet.create({
   error: { borderWidth: 1, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   saveButton: { alignSelf: 'flex-end', minWidth: 250 },
   saveButtonMobile: { width: '100%', minWidth: 0, alignSelf: 'stretch' },
-  historyArea: { marginTop: spacing.lg },
-  loadingRows: { gap: spacing.sm },
-  loadingRow: { height: 64, borderRadius: radius.md, opacity: 0.65 },
 });
