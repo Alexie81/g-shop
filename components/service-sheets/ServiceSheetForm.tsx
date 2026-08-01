@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/Input';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { clientRepository, serviceSheetRepository } from '@/repositories/api-repositories';
-import { apiRequest } from '@/services/api';
+import { apiRequest, ApiError } from '@/services/api';
 import { spacing } from '@/theme/tokens';
 import { Client, ClientFinancialOverview, ServiceSheet, UUID } from '@/types';
 import { calculateNet } from '@/utils/commission';
@@ -227,6 +227,14 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
       showToast(sheet ? 'Fișa de service a fost actualizată.' : 'Fișa de service a fost creată.', 'success');
       router.replace(('/service/service-sheets/' + saved.id) as never);
     } catch (error) {
+      if (!sheet && error instanceof ApiError && error.status === 409) {
+        const details = error.details as { code?: unknown; serviceSheetId?: unknown } | undefined;
+        if (details?.code === 'SERVICE_SHEET_ALREADY_EXISTS' && typeof details.serviceSheetId === 'string') {
+          showToast('Clientul are deja o fișă de service. Am deschis fișa existentă.', 'success');
+          router.replace(('/service/service-sheets/' + details.serviceSheetId) as never);
+          return;
+        }
+      }
       showToast(error instanceof Error ? error.message : 'Fișa nu a putut fi salvată.', 'error');
     } finally {
       setLoading(false);
