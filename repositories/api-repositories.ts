@@ -26,7 +26,13 @@ export const serviceSheetRepository: ServiceSheetRepository = {
   update: (id, input) => apiRequest(`/service-sheets/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
   saveSignature: (id, signature) => apiRequest(`/service-sheets/${id}/signature`, { method: 'POST', body: JSON.stringify({ signature }) }),
 };
-export const collaboratorRepository: CollaboratorRepository = { list: (propertyId) => apiRequest(`/collaborators?propertyId=${propertyId}`) };
+export const collaboratorRepository: CollaboratorRepository = {
+  list: (propertyId) => apiRequest(`/collaborators?propertyId=${propertyId}`),
+  get: (id, propertyId) => apiRequest(`/collaborators/${id}?propertyId=${propertyId}`),
+  create: (input) => apiRequest('/collaborators', { method: 'POST', body: JSON.stringify(input) }),
+  update: (id, input) => apiRequest(`/collaborators/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
+  remove: (id, propertyId) => apiRequest(`/collaborators/${id}?propertyId=${propertyId}`, { method: 'DELETE' }),
+};
 export const userRepository: UserRepository = {
   list: (propertyId) => apiRequest(`/users?propertyId=${propertyId}`),
   create: (input) => apiRequest('/users', { method: 'POST', body: JSON.stringify(input) }),

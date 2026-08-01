@@ -25,7 +25,13 @@ export interface ServiceSheetRepository {
   update(id: UUID, input: Partial<ServiceSheet>): Promise<ServiceSheet>;
   saveSignature(id: UUID, signature: string): Promise<ServiceSheet>;
 }
-export interface CollaboratorRepository { list(propertyId: UUID): Promise<Collaborator[]>; }
+export interface CollaboratorRepository {
+  list(propertyId: UUID): Promise<Collaborator[]>;
+  get(id: UUID, propertyId: UUID): Promise<Collaborator>;
+  create(input: Partial<Collaborator> & { propertyIds: UUID[] }): Promise<Collaborator>;
+  update(id: UUID, input: Partial<Collaborator> & { propertyId: UUID }): Promise<Collaborator>;
+  remove(id: UUID, propertyId: UUID): Promise<void>;
+}
 export interface UserRepository {
   list(propertyId: UUID): Promise<User[]>;
   create(input: Partial<User> & { password: string }): Promise<User>;
