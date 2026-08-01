@@ -38,6 +38,7 @@ ORDER BY data_length + index_length DESC;
 - `POST /auth/refresh`
 - `POST /auth/logout`
 - `GET /auth/me`
+- `PUT /auth/profile` — actualizează exclusiv prenumele și numele utilizatorului autentificat; body: `{ "firstName": "Alex", "lastName": "Ionescu" }`
 - `POST /auth/forgot-password`
 - `POST /auth/change-password`
 

@@ -91,6 +91,17 @@ function auth_session(array $user, string $device): array {
     return ['accessToken' => $access, 'refreshToken' => $refresh, 'expiresAt' => $accessExpires, 'user' => $user];
 }
 function entity_base(array $row): array { return camel_row($row); }
+function validated_person_name(mixed $value, string $label): string {
+    if (!is_string($value)) fail($label . ' trebuie să fie text.', 422);
+    $name = preg_replace('/\s+/u', ' ', trim($value));
+    if ($name === null) fail($label . ' conține caractere invalide.', 422);
+    $length = function_exists('mb_strlen') ? mb_strlen($name, 'UTF-8') : preg_match_all('/./u', $name, $characters);
+    $validCharacters = preg_match('/^[\p{L}\p{M}](?:[\p{L}\p{M} .\'\x{2019}\-]*[\p{L}\p{M}.])?$/u', $name) === 1;
+    if ($length === false || $length < 1 || $length > 60 || !$validCharacters) {
+        fail($label . ' trebuie să aibă între 1 și 60 de caractere și poate conține doar litere, spații, cratimă, apostrof sau punct.', 422);
+    }
+    return $name;
+}
 function collaborator_preset_migration_state(PDO $pdo): array {
     $wanted = [
         'collaborator_properties.is_preset',
@@ -321,6 +332,21 @@ try {
         respond(auth_session(user_record($session['user_id']), (string)$session['device']));
     }
     if ($method === 'GET' && $path === '/auth/me') respond(current_user());
+    if ($method === 'PUT' && $path === '/auth/profile') {
+        $user = current_user();
+        $body = json_body();
+        $firstName = validated_person_name($body['firstName'] ?? null, 'Prenumele');
+        $lastName = validated_person_name($body['lastName'] ?? null, 'Numele');
+        $before = user_record($user['id']);
+        if ($firstName === $before['firstName'] && $lastName === $before['lastName']) respond($before);
+        $now = now_utc();
+        db()->prepare('UPDATE users SET first_name=?,last_name=?,updated_at=?,updated_by=? WHERE id=? AND is_active=1')->execute([$firstName,$lastName,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);
+        $after = user_record($user['id']);
+        $profileBefore = ['firstName'=>$before['firstName'],'lastName'=>$before['lastName']];
+        $profileAfter = ['firstName'=>$after['firstName'],'lastName'=>$after['lastName']];
+        audit_log('USER_PROFILE_UPDATED','users','Numele propriu a fost actualizat','User',$user['id'],$after['propertyIds'][0]??null,$profileBefore,$profileAfter,$user);
+        respond($after);
+    }
     if ($method === 'POST' && $path === '/auth/logout') { $user = current_user(); db()->prepare('UPDATE refresh_sessions SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL')->execute([now_utc(), uuid_bin($user['id'])]); audit_log('LOGOUT','auth','Deconectare din aplicație','User',$user['id'],null,null,null,$user); respond(['loggedOut'=>true]); }
     if ($method === 'POST' && $path === '/auth/forgot-password') { $body=json_body(); $email=trim((string)($body['email']??'')); if (!filter_var($email,FILTER_VALIDATE_EMAIL)) fail('Email invalid.',422); db()->prepare('INSERT INTO password_reset_requests (id,email,ip_address,created_at) VALUES (?,?,?,?)')->execute([uuid_bin(uuid_v4()),$email,request_ip(),now_utc()]); respond(['requested'=>true]); }
     if ($method === 'POST' && $path === '/auth/change-password') { $user=current_user(); $body=json_body(); $stmt=db()->prepare('SELECT password_hash FROM users WHERE id=?');$stmt->execute([uuid_bin($user['id'])]);$hash=$stmt->fetchColumn(); if (!$hash || !password_verify((string)($body['currentPassword']??''),$hash)) fail('Parola curentă este incorectă.',422);$next=(string)($body['newPassword']??'');if(strlen($next)<8)fail('Parola nouă trebuie să aibă minimum 8 caractere.',422);db()->prepare('UPDATE users SET password_hash=?,updated_at=?,updated_by=? WHERE id=?')->execute([password_hash($next,PASSWORD_DEFAULT),now_utc(),uuid_bin($user['id']),uuid_bin($user['id'])]);audit_log('PASSWORD_CHANGED','users','Parola proprie a fost schimbată','User',$user['id']);respond(['changed'=>true]); }
