@@ -5,13 +5,13 @@ import { QRStatus } from '@/types';
 import { StyleSheet, View } from 'react-native';
 
 const qrConfig: Record<QRStatus, { label: string; color: string; soft: string }> = {
-  NOT_GENERATED: { label: 'QR negenerat', color: '#64748B', soft: '#EDF1F5' },
+  NOT_GENERATED: { label: 'QR indisponibil', color: '#64748B', soft: '#EDF1F5' },
   GENERATED: { label: 'QR generat', color: palette.success, soft: palette.successSoft },
   SENT: { label: 'QR trimis', color: palette.purple, soft: '#F1EAFE' },
   USED: { label: 'QR folosit', color: palette.electric, soft: palette.electricLight },
   EXPIRED: { label: 'QR expirat', color: palette.warning, soft: palette.warningSoft },
   INVALIDATED: { label: 'QR invalidat', color: palette.danger, soft: palette.dangerSoft },
-  REGENERATED: { label: 'QR regenerat', color: palette.warning, soft: palette.warningSoft },
+  REGENERATED: { label: 'QR generat', color: palette.success, soft: palette.successSoft },
 };
 
 export function StatusBadge({ status, label }: { status?: QRStatus; label?: string }) {

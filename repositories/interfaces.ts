@@ -14,7 +14,7 @@ export interface ClientRepository {
   get(id: UUID): Promise<Client>;
   create(input: Partial<Client>): Promise<Client>;
   update(id: UUID, input: Partial<Client>): Promise<Client>;
-  generateQr(id: UUID): Promise<Client>;
+  ensureQr(id: UUID): Promise<Client>;
   markQrUsed(id: UUID): Promise<Client>;
   recordQrShare(id: UUID, method: string): Promise<void>;
 }

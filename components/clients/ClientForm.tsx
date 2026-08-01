@@ -41,7 +41,7 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
     const payload = { ...rest, commissionValue: form.collaboratorId ? Number(commissionValue) || 0 : undefined, commissionType: form.collaboratorId ? form.commissionType : undefined };
     try {
       const saved = client ? await clientRepository.update(client.id, payload) : await clientRepository.create({ ...payload, propertyId, status: 'NEW' });
-      showToast(client ? 'Clientul a fost actualizat.' : 'Clientul a fost creat.', 'success');
+      showToast(client ? 'Clientul a fost actualizat.' : 'Clientul și codul QR au fost create.', 'success');
       router.replace(`/service/clients/${saved.id}`);
     } catch (error) { showToast(error instanceof Error ? error.message : 'Salvarea a eșuat.', 'error'); } finally { setLoading(false); }
   };

@@ -295,7 +295,6 @@ export interface DashboardMetrics {
   collaboratorsActive: number;
   qrGenerated: number;
   qrUsed: number;
-  qrUnused: number;
   estimatedRevenue: number;
   collaboratorCommissions: number;
   collaboratorPayments: number;

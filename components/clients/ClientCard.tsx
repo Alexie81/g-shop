@@ -17,7 +17,7 @@ export function ClientCard({ client, index = 0 }: { client: Client; index?: numb
     <Card style={styles.card}>
       <View style={[styles.avatar, { backgroundColor: avatarColors[index % avatarColors.length] }]}><AppText variant="label" style={{ color: '#fff' }}>{initials(client.firstName, client.lastName)}</AppText></View>
       <View style={styles.main}>
-        <View style={styles.heading}><AppText variant="heading" numberOfLines={1} style={{ flex: 1 }}>{fullName(client)}</AppText><StatusBadge status={client.qr?.status ?? 'NOT_GENERATED'} /></View>
+        <View style={styles.heading}><AppText variant="heading" numberOfLines={1} style={{ flex: 1 }}>{fullName(client)}</AppText>{client.qr && client.qr.status !== 'NOT_GENERATED' ? <StatusBadge status={client.qr.status} /> : null}</View>
         <View style={styles.contact}><Ionicons name="call-outline" size={14} color={colors.textMuted} /><AppText variant="caption" muted>{client.phone}</AppText>{client.email ? <><Ionicons name="mail-outline" size={14} color={colors.textMuted} /><AppText variant="caption" muted numberOfLines={1} style={{ flexShrink: 1 }}>{client.email}</AppText></> : null}</View>
         <View style={styles.meta}><AppText variant="caption" muted>Fișe: <AppText variant="caption" style={{ fontWeight: '800' }}>{client.serviceSheetsCount}</AppText></AppText><AppText variant="caption" muted>Ultima activitate: {formatDate(client.lastActivityAt ?? client.updatedAt)}</AppText></View>
       </View>

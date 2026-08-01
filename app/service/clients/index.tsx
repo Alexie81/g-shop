@@ -15,7 +15,7 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
-const filters = [{ value: '', label: 'Toți' }, { value: 'NOT_GENERATED', label: 'QR negenerat' }, { value: 'GENERATED', label: 'QR generat' }, { value: 'SENT', label: 'QR trimis' }, { value: 'USED', label: 'QR folosit' }];
+const filters = [{ value: '', label: 'Toți' }, { value: 'GENERATED', label: 'QR generat' }, { value: 'SENT', label: 'QR trimis' }, { value: 'USED', label: 'QR folosit' }];
 export default function ClientsScreen() {
   const { activeProperty } = useProperty(); const { colors } = useAppTheme(); const [query, setQuery] = useState(''); const [debounced, setDebounced] = useState(''); const [filter, setFilter] = useState('');
   useEffect(() => { const timer = setTimeout(() => setDebounced(query), 320); return () => clearTimeout(timer); }, [query]);

@@ -26,7 +26,10 @@ export default function ClientDetailsScreen() {
   const { clientId } = useLocalSearchParams<{ clientId: string }>();
   const { colors } = useAppTheme(); const { showToast } = useToast(); const [tab, setTab] = useState<Tab>('Detalii');
   const state = useAsyncData(async () => {
-    const client = await clientRepository.get(clientId);
+    let client = await clientRepository.get(clientId);
+    if (!client.qr || client.qr.status === 'NOT_GENERATED') {
+      try { client = await clientRepository.ensureQr(client.id); } catch { /* Keep legacy client profiles accessible if QR provisioning is unavailable. */ }
+    }
     const [sheets, history] = await Promise.all([
       serviceSheetRepository.list(client.propertyId),
       apiRequest<Paginated<AuditLog>>(`/audit-logs?propertyId=${client.propertyId}&entityId=${client.id}`),
@@ -42,12 +45,12 @@ export default function ClientDetailsScreen() {
   return <Screen header={<AppHeader title="Detalii client" back />} refreshing={state.refreshing} onRefresh={() => void state.reload(true)}>
     <Card style={styles.profile}>
       <View style={[styles.avatar, { backgroundColor: colors.primary }]}><AppText variant="title" style={{ color: '#fff' }}>{initials(client.firstName, client.lastName)}</AppText></View>
-      <View style={styles.profileInfo}><View style={styles.nameRow}><AppText variant="title">{fullName(client)}</AppText><StatusBadge status={client.qr?.status ?? 'NOT_GENERATED'} /></View><AppText muted>{client.phone}{client.email ? ` · ${client.email}` : ''}</AppText><AppText variant="caption" muted>{client.city || 'Localitate nespecificată'} · Client din {formatDate(client.createdAt)}</AppText></View>
+      <View style={styles.profileInfo}><View style={styles.nameRow}><AppText variant="title">{fullName(client)}</AppText>{client.qr && client.qr.status !== 'NOT_GENERATED' ? <StatusBadge status={client.qr.status} /> : null}</View><AppText muted>{client.phone}{client.email ? ` · ${client.email}` : ''}</AppText><AppText variant="caption" muted>{client.city || 'Localitate nespecificată'} · Client din {formatDate(client.createdAt)}</AppText></View>
       <Button compact variant="outline" icon="create-outline" label="Editează" onPress={() => router.push(`/service/clients/${client.id}/edit`)} />
     </Card>
     <View style={styles.actions}><Button compact variant="secondary" icon="call-outline" label="Sună" onPress={() => void contact(`tel:${client.phone}`)} /><Button compact variant="secondary" icon="logo-whatsapp" label="WhatsApp" onPress={() => void contact(`https://wa.me/${client.phone.replace(/\D/g, '')}`)} /><Button compact variant="secondary" icon="mail-outline" label="Email" disabled={!client.email} onPress={() => void contact(`mailto:${client.email}`)} /><Button compact icon="document-text-outline" label="Creează fișă" onPress={() => router.push({ pathname: '/service/service-sheets/create', params: { clientId: client.id } })} /></View>
     <View style={[styles.tabs, { borderBottomColor: colors.border }]}>{tabs.map((item) => <Pressable key={item} onPress={() => setTab(item)} style={[styles.tab, tab === item && { borderBottomColor: colors.primary }]}><AppText variant="caption" style={{ color: tab === item ? colors.primary : colors.textMuted, fontWeight: '800' }}>{item}</AppText></Pressable>)}</View>
-    {tab === 'Detalii' ? <Details client={client} /> : tab === 'QR' ? <ClientQRPanel client={client} onChanged={(next) => state.setData({ ...state.data!, client: next })} /> : tab === 'Fișe service' ? <Sheets items={sheets} clientId={client.id} /> : tab === 'Colaboratori' ? <Card style={styles.empty}><Ionicons name="people-circle-outline" size={44} color={colors.primary} /><AppText variant="heading">Colaborator atribuit</AppText><AppText muted>{client.collaboratorId ? 'Clientul are un colaborator atribuit. Comisioanele apar automat la crearea fișelor și pot fi urmărite din dashboard.' : 'Nu există un colaborator atribuit acestui client.'}</AppText><Button compact label={client.collaboratorId ? 'Modifică atribuirea' : 'Atribuie colaborator'} icon="person-add-outline" onPress={() => router.push(`/service/clients/${client.id}/edit`)} /></Card> : <History items={history} />}
+    {tab === 'Detalii' ? <Details client={client} /> : tab === 'QR' ? <ClientQRPanel client={client} /> : tab === 'Fișe service' ? <Sheets items={sheets} clientId={client.id} /> : tab === 'Colaboratori' ? <Card style={styles.empty}><Ionicons name="people-circle-outline" size={44} color={colors.primary} /><AppText variant="heading">Colaborator atribuit</AppText><AppText muted>{client.collaboratorId ? 'Clientul are un colaborator atribuit. Comisioanele apar automat la crearea fișelor și pot fi urmărite din dashboard.' : 'Nu există un colaborator atribuit acestui client.'}</AppText><Button compact label={client.collaboratorId ? 'Modifică atribuirea' : 'Atribuie colaborator'} icon="person-add-outline" onPress={() => router.push(`/service/clients/${client.id}/edit`)} /></Card> : <History items={history} />}
   </Screen>;
 }
 
