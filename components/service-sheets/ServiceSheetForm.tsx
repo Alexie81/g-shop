@@ -1,3 +1,4 @@
+import { ClientFinanceOverviewCard } from '@/components/clients/finance';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -7,11 +8,11 @@ import { useToast } from '@/contexts/ToastContext';
 import { clientRepository, serviceSheetRepository } from '@/repositories/api-repositories';
 import { apiRequest } from '@/services/api';
 import { spacing } from '@/theme/tokens';
-import { Client, ServiceSheet, UUID } from '@/types';
+import { Client, ClientFinancialOverview, ServiceSheet, UUID } from '@/types';
 import { calculateNet } from '@/utils/commission';
 import { formatFinanceMoney } from '@/utils/client-finance';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 type Intake = { equipmentType?: string; brand?: string; model?: string; problem?: string; notes?: string; requestType?: string };
@@ -80,12 +81,24 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
   const [loading, setLoading] = useState(false);
   const [prefilling, setPrefilling] = useState(Boolean(associatedClientId));
   const [financePrefilling, setFinancePrefilling] = useState(false);
+  const [financeOverview, setFinanceOverview] = useState<ClientFinancialOverview | null>(null);
   const [financeSourceClientId, setFinanceSourceClientId] = useState<UUID | null>(null);
   const [currencyCode, setCurrencyCode] = useState(sheet?.currencyCode ?? 'RON');
   const [choosingClient, setChoosingClient] = useState(false);
   const { hasPermission } = useAuth();
   const canLoadFinancials = hasPermission('financials.view');
   const { showToast } = useToast();
+
+  const applyClientFinance = useCallback((overview: ClientFinancialOverview, selectedClientId: UUID) => {
+    setCurrencyCode(overview.financials.currencyCode || 'RON');
+    setForm((current) => current.clientId !== selectedClientId ? current : {
+      ...current,
+      partsCost: String(overview.financials.displayedPartsCost ?? 0),
+      laborCost: String(overview.financials.displayedLaborCost ?? 0),
+      directCosts: String(overview.summary.internalCosts ?? 0),
+    });
+    setFinanceSourceClientId(selectedClientId);
+  }, []);
 
   useEffect(() => {
     clientRepository.list(propertyId).then((result) => setClients(result.data)).catch(() => undefined);
@@ -122,22 +135,21 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
   }, [associatedClientId, sheet, showToast]);
 
   useEffect(() => {
-    if (sheet || !form.clientId || !canLoadFinancials) return;
+    if (!form.clientId || !canLoadFinancials) {
+      setFinanceOverview(null);
+      setFinancePrefilling(false);
+      return;
+    }
     const selectedClientId = form.clientId;
     let cancelled = false;
     setFinancePrefilling(true);
-    setFinanceSourceClientId(null);
+    setFinanceOverview(null);
+    if (!sheet) setFinanceSourceClientId(null);
 
     clientRepository.getFinancials(selectedClientId).then((overview) => {
       if (cancelled) return;
-      setCurrencyCode(overview.financials.currencyCode || 'RON');
-      setForm((current) => current.clientId !== selectedClientId ? current : {
-        ...current,
-        partsCost: String(overview.financials.displayedPartsCost ?? 0),
-        laborCost: String(overview.financials.displayedLaborCost ?? 0),
-        directCosts: String(overview.summary.internalCosts ?? 0),
-      });
-      setFinanceSourceClientId(selectedClientId);
+      setFinanceOverview(overview);
+      if (!sheet) applyClientFinance(overview, selectedClientId);
     }).catch((error) => {
       if (!cancelled) showToast(error instanceof Error ? error.message : 'Finanțele clientului nu au putut fi încărcate.', 'error');
     }).finally(() => {
@@ -145,7 +157,7 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
     });
 
     return () => { cancelled = true; };
-  }, [canLoadFinancials, form.clientId, sheet, showToast]);
+  }, [applyClientFinance, canLoadFinancials, form.clientId, sheet, showToast]);
 
   const update = (key: keyof Form, value: string) => {
     if (key === 'clientId') {
@@ -162,6 +174,7 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
       }));
       setClient(clients.find((item) => item.id === value) ?? null);
       setCurrencyCode('RON');
+      setFinanceOverview(null);
       setFinanceSourceClientId(null);
       setChoosingClient(false);
       return;
@@ -233,6 +246,20 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
       {sheet ? null : financePrefilling ? <AppText variant="caption" muted>Se încarcă valorile financiare ale clientului…</AppText> : financeSourceClientId === form.clientId ? <AppText variant="caption" style={styles.financeHint}>Costurile și moneda au fost preluate din finanțele clientului.</AppText> : null}
     </Card>
 
+    {canLoadFinancials && form.clientId ? <ClientFinanceOverviewCard
+      overview={financeOverview}
+      loading={financePrefilling}
+      showInternal
+      title="Finanțele clientului în această fișă"
+      subtitle="Preț, plăți și valorile propuse pentru fișa de service"
+      actionLabel={sheet ? 'Preia valorile actuale în fișă' : 'Reaplică valorile în fișă'}
+      actionIcon="download-outline"
+      onAction={financeOverview ? () => {
+        applyClientFinance(financeOverview, form.clientId);
+        showToast('Valorile financiare ale clientului au fost preluate în fișă.', 'success');
+      } : undefined}
+    /> : null}
+
     <Card style={styles.section}>
       <AppText variant="heading">Echipament</AppText>
       <View style={styles.row}>
@@ -255,15 +282,16 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
     </Card>
 
     <Card style={styles.section}>
-      <AppText variant="heading">Costuri</AppText>
+      <AppText variant="heading">Valori afișate în fișa de service</AppText>
+      <AppText variant="caption" muted>Piesele și manopera sunt vizibile în fișă. Valorile interne rămân disponibile numai utilizatorilor cu acces financiar.</AppText>
       <View style={styles.row}>
-        <View style={styles.field}><Input label={`Cost piese (${currencyCode})`} keyboardType="decimal-pad" value={form.partsCost} onChangeText={(value) => update('partsCost', value)} /></View>
-        <View style={styles.field}><Input label={`Cost manoperă (${currencyCode})`} keyboardType="decimal-pad" value={form.laborCost} onChangeText={(value) => update('laborCost', value)} /></View>
-        <View style={styles.field}><Input label={`Costuri directe (${currencyCode})`} keyboardType="decimal-pad" value={form.directCosts} onChangeText={(value) => update('directCosts', value)} /></View>
+        <View style={styles.field}><Input label={`Piese afișate (${currencyCode})`} keyboardType="decimal-pad" value={form.partsCost} onChangeText={(value) => update('partsCost', value)} /></View>
+        <View style={styles.field}><Input label={`Manoperă afișată (${currencyCode})`} keyboardType="decimal-pad" value={form.laborCost} onChangeText={(value) => update('laborCost', value)} /></View>
+        {canLoadFinancials ? <View style={styles.field}><Input label={`Cheltuieli efective totale · intern (${currencyCode})`} keyboardType="decimal-pad" value={form.directCosts} onChangeText={(value) => update('directCosts', value)} /></View> : null}
       </View>
       <View style={styles.summary}>
-        <View><AppText variant="caption" muted>Total ({currencyCode})</AppText><AppText variant="title">{formatFinanceMoney(total, currencyCode)}</AppText></View>
-        <View><AppText variant="caption" muted>Valoare netă ({currencyCode})</AppText><AppText variant="title" style={{ color: '#14A83B' }}>{formatFinanceMoney(net, currencyCode)}</AppText></View>
+        <View><AppText variant="caption" muted>Total afișat ({currencyCode})</AppText><AppText variant="title">{formatFinanceMoney(total, currencyCode)}</AppText></View>
+        {canLoadFinancials ? <View><AppText variant="caption" muted>Valoare netă internă ({currencyCode})</AppText><AppText variant="title" style={{ color: '#14A83B' }}>{formatFinanceMoney(net, currencyCode)}</AppText></View> : null}
       </View>
     </Card>
 
