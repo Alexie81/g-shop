@@ -18,7 +18,7 @@ import { formatCurrency, formatDate } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 export default function DashboardScreen() {
@@ -26,13 +26,19 @@ export default function DashboardScreen() {
   const { colors } = useAppTheme();
   const [financeOpen, setFinanceOpen] = useState(false);
   const [heroHeight, setHeroHeight] = useState(164);
+  const [localHour, setLocalHour] = useState(() => new Date().getHours());
   const { width } = useWindowDimensions();
   const statColumns = width < 600 ? 2 : width < 950 ? 3 : 6;
   const actionColumns = width < 750 ? 2 : 4;
   const statCardBasis = statColumns === 3 ? 170 : 150;
   const actionCardBasis = actionColumns === 4 ? 145 : 150;
   const state = useAsyncData(async () => { const [metrics, sheets] = await Promise.all([dashboardRepository.get(propertyId), serviceSheetRepository.list(propertyId)]); return { metrics, sheets: sheets.data.slice(0, 3) }; }, [propertyId]);
-  const hour = new Date().getHours(); const greeting = hour < 12 ? 'Bună dimineața' : hour < 18 ? 'Bună ziua' : 'Bună seara';
+  useEffect(() => {
+    const updateLocalHour = () => setLocalHour(new Date().getHours());
+    const timer = setInterval(updateLocalHour, 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  const greeting = localHour < 12 ? 'Bună dimineața' : localHour < 18 ? 'Bună ziua' : 'Bună seara';
   if (state.loading) return <Screen header={<AppHeader />}><LoadingState rows={6} /></Screen>;
   if (state.error || !state.data) return <Screen header={<AppHeader />}><ErrorState message={state.error?.message ?? 'Date indisponibile.'} onRetry={() => void state.reload()} /></Screen>;
   const { metrics, sheets } = state.data;
