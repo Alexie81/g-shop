@@ -64,7 +64,6 @@ export default function DashboardScreen() {
           color={palette.cyan}
           helper="Ține apăsat"
           helperIcon="finger-print-outline"
-          detail={`${formatCurrency(metrics.collaboratorPaid)} încasat / ${formatCurrency(metrics.collaboratorOnHold)} on hold`}
           onLongPress={() => setFinanceOpen(true)}
         />
       </View>
