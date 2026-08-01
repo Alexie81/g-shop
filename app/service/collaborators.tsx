@@ -29,6 +29,7 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
+  Switch,
   TextInput,
   useWindowDimensions,
   View,
@@ -44,6 +45,7 @@ type CollaboratorForm = {
   email: string;
   bankAccount: string;
   notes: string;
+  isPreset: boolean;
   commissionType: CommissionType;
   commissionValue: string;
 };
@@ -62,6 +64,7 @@ const emptyForm: CollaboratorForm = {
   email: '',
   bankAccount: '',
   notes: '',
+  isPreset: false,
   commissionType: 'PERCENT_NET',
   commissionValue: '15',
 };
@@ -74,6 +77,7 @@ function formFromCollaborator(collaborator: Collaborator): CollaboratorForm {
     email: collaborator.email ?? '',
     bankAccount: collaborator.bankAccount ?? '',
     notes: collaborator.notes ?? '',
+    isPreset: collaborator.isPreset ?? false,
     commissionType: collaborator.defaultCommissionType,
     commissionValue: String(collaborator.defaultCommissionValue),
   };
@@ -129,7 +133,7 @@ export default function CollaboratorsScreen() {
     setEditor(target);
   };
 
-  const updateForm = (key: keyof CollaboratorForm, value: string) => {
+  const updateForm = (key: keyof CollaboratorForm, value: string | boolean) => {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
@@ -143,8 +147,9 @@ export default function CollaboratorsScreen() {
       showToast('Adresa de email nu este validă.', 'error');
       return;
     }
-    if (!Number.isFinite(value) || value < 0 || (form.commissionType === 'PERCENT_NET' && value > 100)) {
-      showToast(form.commissionType === 'PERCENT_NET' ? 'Procentul trebuie să fie între 0 și 100.' : 'Suma comisionului nu este validă.', 'error');
+    const isPercentage = form.commissionType !== 'FIXED';
+    if (!Number.isFinite(value) || value < 0 || (isPercentage && value > 100)) {
+      showToast(isPercentage ? 'Procentul trebuie să fie între 0 și 100.' : 'Suma comisionului nu este validă.', 'error');
       return;
     }
 
@@ -155,6 +160,7 @@ export default function CollaboratorsScreen() {
       email: form.email.trim(),
       bankAccount: form.bankAccount.trim(),
       notes: form.notes.trim(),
+      isPreset: form.isPreset,
       defaultCommissionType: form.commissionType,
       defaultCommissionValue: value,
     };
@@ -268,6 +274,7 @@ export default function CollaboratorsScreen() {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
         <FilterPill label="Toți" active={filter === 'ALL'} onPress={() => setFilter('ALL')} />
         <FilterPill label="Procent din net" active={filter === 'PERCENT_NET'} onPress={() => setFilter('PERCENT_NET')} />
+        <FilterPill label="Procent din total" active={filter === 'PERCENT_TOTAL'} onPress={() => setFilter('PERCENT_TOTAL')} />
         <FilterPill label="Sumă fixă" active={filter === 'FIXED'} onPress={() => setFilter('FIXED')} />
       </ScrollView>
     </View>
@@ -386,9 +393,9 @@ function CollaboratorCard({ collaborator, finance, accent, basis, selected, onFi
 }) {
   const { colors, isDark } = useAppTheme();
   const initials = collaborator.name.split(/\s+/).filter(Boolean).map((part) => part[0]).join('').slice(0, 2).toLocaleUpperCase('ro-RO');
-  const commission = collaborator.defaultCommissionType === 'PERCENT_NET'
-    ? `${collaborator.defaultCommissionValue}% din net`
-    : `${formatCurrency(collaborator.defaultCommissionValue)} / client`;
+  const commission = collaborator.defaultCommissionType === 'FIXED'
+    ? `${formatCurrency(collaborator.defaultCommissionValue)} / client`
+    : `${collaborator.defaultCommissionValue}% din ${collaborator.defaultCommissionType === 'PERCENT_TOTAL' ? 'total' : 'net'}`;
 
   return <Card style={[styles.collaboratorCard, { flexBasis: basis, borderColor: selected ? colors.primary : colors.border }]} elevated>
     <View style={styles.cardHeader}>
@@ -398,7 +405,13 @@ function CollaboratorCard({ collaborator, finance, accent, basis, selected, onFi
       </View>
       <View style={styles.cardIdentity}>
         <AppText variant="heading" numberOfLines={1}>{collaborator.name}</AppText>
-        <AppText variant="caption" muted numberOfLines={1}>{collaborator.role || 'Colaborator'}</AppText>
+        <View style={styles.cardMeta}>
+          <AppText variant="caption" muted numberOfLines={1} style={styles.cardRole}>{collaborator.role || 'Colaborator'}</AppText>
+          {collaborator.isPreset ? <View style={[styles.presetBadge, { backgroundColor: colors.primarySoft }]}>
+            <Ionicons name="sparkles" size={12} color={colors.primary} />
+            <AppText variant="caption" style={[styles.presetBadgeText, { color: colors.primary }]}>Presetat</AppText>
+          </View> : null}
+        </View>
       </View>
       <Pressable
         accessibilityRole="button"
@@ -417,7 +430,7 @@ function CollaboratorCard({ collaborator, finance, accent, basis, selected, onFi
     </View>
 
     <View style={[styles.commissionPill, { backgroundColor: isDark ? `${accent}20` : `${accent}0F` }]}>
-      <Ionicons name={collaborator.defaultCommissionType === 'PERCENT_NET' ? 'pie-chart-outline' : 'cash-outline'} size={16} color={accent} />
+      <Ionicons name={collaborator.defaultCommissionType === 'FIXED' ? 'cash-outline' : 'pie-chart-outline'} size={16} color={accent} />
       <AppText variant="label" style={{ color: accent }}>{commission}</AppText>
     </View>
 
@@ -479,7 +492,10 @@ function ActionSheet({ collaborator, canManage, onClose, onFinance, onEdit, onDe
           </View>
           <View style={styles.actionIdentity}>
             <AppText variant="heading" numberOfLines={1}>{collaborator.name}</AppText>
-            <AppText variant="caption" muted>Ce dorești să faci?</AppText>
+            {collaborator.isPreset ? <View style={[styles.actionPresetBadge, { backgroundColor: colors.primarySoft }]}>
+              <Ionicons name="sparkles" size={12} color={colors.primary} />
+              <AppText variant="caption" style={{ color: colors.primary }}>Presetat pentru clienții noi</AppText>
+            </View> : <AppText variant="caption" muted>Ce dorești să faci?</AppText>}
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel="Închide" onPress={onClose} style={[styles.actionClose, { backgroundColor: colors.surfaceMuted }]}>
             <Ionicons name="close" size={20} color={colors.text} />
@@ -519,7 +535,7 @@ function EditorModal({ visible, isEditing, compact, form, saving, onChange, onSa
   compact: boolean;
   form: CollaboratorForm;
   saving: boolean;
-  onChange: (key: keyof CollaboratorForm, value: string) => void;
+  onChange: (key: keyof CollaboratorForm, value: string | boolean) => void;
   onSave: () => void;
   onClose: () => void;
 }) {
@@ -566,6 +582,42 @@ function EditorModal({ visible, isEditing, compact, form, saving, onChange, onSa
 
           <View style={styles.formSection}>
             <View style={styles.formSectionTitle}>
+              <Ionicons name="people-circle-outline" size={18} color={colors.primary} />
+              <AppText variant="heading">Atribuire automată</AppText>
+            </View>
+            <View style={[
+              styles.presetSwitchCard,
+              {
+                backgroundColor: form.isPreset ? colors.primarySoft : colors.surface,
+                borderColor: form.isPreset ? colors.primary : colors.border,
+              },
+            ]}>
+              <View style={[
+                styles.presetSwitchIcon,
+                { backgroundColor: form.isPreset ? colors.primary : colors.surfaceMuted },
+              ]}>
+                <Ionicons name="sparkles" size={21} color={form.isPreset ? '#fff' : colors.textMuted} />
+              </View>
+              <View style={styles.presetSwitchCopy}>
+                <AppText variant="heading">Colaborator presetat</AppText>
+                <AppText variant="caption" muted>
+                  Se atribuie automat fiecărui client nou. Îl poți elimina sau îi poți modifica regula direct din client.
+                </AppText>
+              </View>
+              <Switch
+                accessibilityLabel="Colaborator presetat"
+                accessibilityHint="Activează atribuirea automată la clienții noi"
+                value={form.isPreset}
+                onValueChange={(value) => onChange('isPreset', value)}
+                disabled={saving}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+          </View>
+
+          <View style={styles.formSection}>
+            <View style={styles.formSectionTitle}>
               <Ionicons name="calculator-outline" size={18} color={colors.primary} />
               <AppText variant="heading">Regulă de comision</AppText>
             </View>
@@ -578,6 +630,13 @@ function EditorModal({ visible, isEditing, compact, form, saving, onChange, onSa
                 onPress={() => onChange('commissionType', 'PERCENT_NET')}
               />
               <CommissionChoice
+                label="Procent din total"
+                description="Se aplică la valoarea totală a fișei"
+                icon="analytics-outline"
+                active={form.commissionType === 'PERCENT_TOTAL'}
+                onPress={() => onChange('commissionType', 'PERCENT_TOTAL')}
+              />
+              <CommissionChoice
                 label="Sumă fixă"
                 description="Aceeași sumă pentru fiecare client"
                 icon="cash-outline"
@@ -586,8 +645,8 @@ function EditorModal({ visible, isEditing, compact, form, saving, onChange, onSa
               />
             </View>
             <Input
-              label={form.commissionType === 'PERCENT_NET' ? 'Procent (%)' : 'Sumă fixă (lei)'}
-              icon={form.commissionType === 'PERCENT_NET' ? 'analytics-outline' : 'wallet-outline'}
+              label={form.commissionType === 'FIXED' ? 'Sumă fixă (lei)' : 'Procent (%)'}
+              icon={form.commissionType === 'FIXED' ? 'wallet-outline' : 'analytics-outline'}
               keyboardType="decimal-pad"
               value={form.commissionValue}
               onChangeText={(value) => onChange('commissionValue', value)}
@@ -595,7 +654,7 @@ function EditorModal({ visible, isEditing, compact, form, saving, onChange, onSa
             <View style={[styles.example, { backgroundColor: colors.primarySoft }]}>
               <Ionicons name="sparkles-outline" size={18} color={colors.primary} />
               <View style={styles.exampleCopy}>
-                <AppText variant="caption" muted>Exemplu pentru 700 lei net</AppText>
+                <AppText variant="caption" muted>Exemplu: 1.000 lei total · 700 lei net</AppText>
                 <AppText variant="label" style={{ color: colors.primary }}>{formatCurrency(calculateCommission(1000, 300, form.commissionType, commissionValue))} comision</AppText>
               </View>
               <AppText variant="caption" muted>Net: {formatCurrency(calculateNet(1000, 300))}</AppText>
@@ -711,6 +770,10 @@ const styles = StyleSheet.create({
   avatar: { width: 52, height: 52, borderRadius: 18, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   activeDot: { position: 'absolute', right: -2, bottom: -2, width: 13, height: 13, borderRadius: 7, borderWidth: 2 },
   cardIdentity: { minWidth: 0, flex: 1, gap: 2 },
+  cardMeta: { minWidth: 0, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.xs },
+  cardRole: { minWidth: 70, flexShrink: 1 },
+  presetBadge: { minHeight: 23, borderRadius: radius.pill, paddingHorizontal: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  presetBadgeText: { fontWeight: '700' },
   menuButton: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   contactList: { gap: spacing.sm },
   contactRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
@@ -724,7 +787,8 @@ const styles = StyleSheet.create({
   actionHandle: { width: 44, height: 5, borderRadius: radius.pill, backgroundColor: '#8796AA55', alignSelf: 'center' },
   actionHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   actionAvatar: { width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  actionIdentity: { minWidth: 0, flex: 1 },
+  actionIdentity: { minWidth: 0, flex: 1, gap: 4 },
+  actionPresetBadge: { minHeight: 24, alignSelf: 'flex-start', borderRadius: radius.pill, paddingHorizontal: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: 5 },
   actionClose: { width: 42, height: 42, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   actionList: { gap: spacing.xs },
   actionRow: { minHeight: 54, borderRadius: radius.md, paddingHorizontal: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
@@ -743,6 +807,9 @@ const styles = StyleSheet.create({
   formSectionTitle: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   formRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   formField: { minWidth: 230, flex: 1 },
+  presetSwitchCard: { minHeight: 92, borderWidth: 1.5, borderRadius: radius.lg, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  presetSwitchIcon: { width: 46, height: 46, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  presetSwitchCopy: { minWidth: 0, flex: 1, gap: 3 },
   commissionChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   commissionChoice: { minWidth: 250, flex: 1, minHeight: 82, borderWidth: 1.5, borderRadius: radius.lg, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   choiceIcon: { width: 42, height: 42, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
