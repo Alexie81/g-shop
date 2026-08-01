@@ -2,7 +2,8 @@ param(
   [Parameter(Mandatory = $true)][string]$FtpHost,
   [Parameter(Mandatory = $true)][string]$FtpUser,
   [Parameter(Mandatory = $true)][string]$FtpPassword,
-  [string]$RemotePath = 'public_html/app-api'
+  [string]$RemotePath = 'public_html/app-api',
+  [switch]$SkipCertificateCheck
 )
 
 $ErrorActionPreference = 'Stop'
@@ -10,11 +11,44 @@ $workspace = Split-Path -Parent $PSScriptRoot
 $apiRoot = Join-Path $workspace 'api'
 if (-not (Test-Path -LiteralPath $apiRoot)) { throw 'Dosarul api nu există.' }
 
+function Send-FtpFile {
+  param([System.IO.FileInfo]$File, [string]$Target)
+
+  $common = @('--silent', '--show-error', '--fail', '--ssl-reqd', '--ftp-create-dirs', '--user', "${FtpUser}:${FtpPassword}")
+  if ($SkipCertificateCheck) { $common = @('--insecure') + $common }
+  if ($File.Length -le 12000) {
+    & curl.exe @common --upload-file $File.FullName $Target
+    if ($LASTEXITCODE -ne 0) { throw "Transferul a eșuat pentru $($File.Name)" }
+    return
+  }
+
+  # Unele configurații LiteSpeed refuză transferurile PHP/SQL mari cu FTP 451.
+  # Segmentele sunt reasamblate cu APPE, apoi dimensiunea este verificată de server.
+  $bytes = [System.IO.File]::ReadAllBytes($File.FullName)
+  $temporary = [System.IO.Path]::GetTempFileName()
+  try {
+    for ($offset = 0; $offset -lt $bytes.Length; $offset += 4096) {
+      $length = [Math]::Min(4096, $bytes.Length - $offset)
+      $chunk = New-Object byte[] $length
+      [Array]::Copy($bytes, $offset, $chunk, 0, $length)
+      [System.IO.File]::WriteAllBytes($temporary, $chunk)
+      $arguments = $common
+      if ($offset -gt 0) { $arguments += '--append' }
+      & curl.exe @arguments --upload-file $temporary $Target
+      if ($LASTEXITCODE -ne 0) { throw "Transferul segmentului de la offset $offset a eșuat pentru $($File.Name)" }
+    }
+  } finally {
+    $resolvedTemp = [System.IO.Path]::GetFullPath($temporary)
+    if ([System.IO.Path]::GetDirectoryName($resolvedTemp) -eq [System.IO.Path]::GetTempPath().TrimEnd('\') -and (Test-Path -LiteralPath $resolvedTemp)) {
+      Remove-Item -LiteralPath $resolvedTemp -Force
+    }
+  }
+}
+
 $files = Get-ChildItem -LiteralPath $apiRoot -File -Recurse | Where-Object { $_.Name -ne '.env' -and $_.Name -ne '.installed' }
 foreach ($file in $files) {
   $relative = $file.FullName.Substring($apiRoot.Length).TrimStart('\').Replace('\', '/')
   $target = "ftp://$FtpHost/$RemotePath/$relative"
-  & curl.exe --silent --show-error --fail --ssl-reqd --ftp-create-dirs --user "${FtpUser}:${FtpPassword}" --upload-file $file.FullName $target
-  if ($LASTEXITCODE -ne 0) { throw "Publicarea a eșuat pentru $relative" }
+  Send-FtpFile -File $file -Target $target
   Write-Host "Publicat: $relative"
 }
