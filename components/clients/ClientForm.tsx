@@ -1,12 +1,15 @@
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { ClientFinanceSection } from '@/components/clients/finance';
 import { Input } from '@/components/ui/Input';
+import { useAuth } from '@/contexts/AuthContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { clientRepository, collaboratorRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
-import { Client, Collaborator, CommissionType, UUID } from '@/types';
+import { Client, ClientExpense, Collaborator, CommissionType, UUID } from '@/types';
+import { ClientFinanceValue } from '@/utils/client-finance';
 import { formatCurrency } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -32,6 +35,19 @@ const emptyForm: FormState = {
   collaboratorId: '',
   commissionType: 'PERCENT_NET',
   commissionValue: '15',
+};
+
+const emptyFinance: ClientFinanceValue = {
+  currencyCode: 'RON',
+  exchangeRateToRon: 1,
+  workPrice: 0,
+  diagnosticFee: 0,
+  advancePaid: 0,
+  discountPercent: 0,
+  actualPartsCost: 0,
+  displayedPartsCost: 0,
+  displayedLaborCost: 0,
+  paymentStatus: 'UNPAID',
 };
 
 const isPreset = (collaborator: Collaborator) => Boolean(collaborator.isPreset);
@@ -61,6 +77,9 @@ function SegmentOption({ label, active, onPress }: { label: string; active: bool
 
 export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: Client }) {
   const { colors } = useAppTheme();
+  const { hasPermission } = useAuth();
+  const canViewFinancials = hasPermission('financials.view');
+  const canEditFinancials = canViewFinancials && hasPermission('clients.update');
   const [form, setForm] = useState<FormState>(() => client ? {
     firstName: client.firstName,
     lastName: client.lastName,
@@ -84,9 +103,39 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof ContactFields, string>>>({});
   const [commissionError, setCommissionError] = useState<string>();
+  const [finance, setFinance] = useState<ClientFinanceValue>({ ...emptyFinance });
+  const [financeExpenses, setFinanceExpenses] = useState<ClientExpense[]>([]);
+  const [financeCollaboratorCost, setFinanceCollaboratorCost] = useState(0);
+  const [financeLoading, setFinanceLoading] = useState(Boolean(client && canViewFinancials));
+  const [financeError, setFinanceError] = useState<string>();
+  const [financeReloadKey, setFinanceReloadKey] = useState(0);
   const presetPropertyRef = useRef<UUID | undefined>(undefined);
   const collaboratorChoiceTouchedRef = useRef(Boolean(client));
   const { showToast } = useToast();
+
+  useEffect(() => {
+    if (!client || !canViewFinancials) {
+      setFinanceLoading(false);
+      return;
+    }
+
+    let active = true;
+    setFinanceLoading(true);
+    setFinanceError(undefined);
+    clientRepository.getFinancials(client.id).then((overview) => {
+      if (!active) return;
+      setFinance(overview.financials);
+      setFinanceExpenses(overview.expenses);
+      setFinanceCollaboratorCost(overview.summary.collaboratorCost);
+    }).catch((error) => {
+      if (!active) return;
+      setFinanceError(error instanceof Error ? error.message : 'Datele financiare nu au putut fi încărcate.');
+    }).finally(() => {
+      if (active) setFinanceLoading(false);
+    });
+
+    return () => { active = false; };
+  }, [canViewFinancials, client, financeReloadKey]);
 
   useEffect(() => {
     if (!propertyId) {
@@ -193,6 +242,19 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
       return;
     }
 
+    if (canEditFinancials && client && (financeLoading || financeError)) {
+      showToast(financeLoading ? 'Așteaptă încărcarea datelor financiare.' : 'Reîncarcă datele financiare înainte să salvezi.', 'error');
+      return;
+    }
+    if (canEditFinancials && finance.currencyCode !== 'RON' && finance.exchangeRateToRon <= 0) {
+      showToast('Introdu un curs către RON mai mare decât zero.', 'error');
+      return;
+    }
+    if (canEditFinancials && (finance.discountPercent < 0 || finance.discountPercent > 100)) {
+      showToast('Reducerea trebuie să fie între 0 și 100%.', 'error');
+      return;
+    }
+
     setLoading(true);
     const { commissionValue, collaboratorId, ...rest } = form;
     const includeCollaboratorChoice = Boolean(client) || collaboratorChoiceTouchedRef.current;
@@ -208,6 +270,15 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
       const saved = client
         ? await clientRepository.update(client.id, payload)
         : await clientRepository.create({ ...payload, propertyId, status: 'NEW' });
+      if (canEditFinancials) {
+        try {
+          await clientRepository.updateFinancials(saved.id, finance);
+        } catch (error) {
+          showToast(`Clientul a fost salvat, dar finanțele nu au putut fi salvate: ${error instanceof Error ? error.message : 'eroare necunoscută'}`, 'error');
+          router.replace(`/service/clients/${saved.id}`);
+          return;
+        }
+      }
       showToast(client ? 'Clientul a fost actualizat.' : 'Clientul și codul QR au fost create.', 'success');
       router.replace(`/service/clients/${saved.id}`);
     } catch (error) {
@@ -241,6 +312,24 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
         </View>
         <Input label="Cod poștal" keyboardType="number-pad" value={form.postalCode} onChangeText={(value) => update('postalCode', value)} />
       </Card>
+
+      {canViewFinancials ? financeLoading ? <Card style={styles.section}><AppText variant="heading">Finanțele clientului</AppText><AppText muted>Se încarcă valorile financiare…</AppText></Card> : financeError ? <Card style={styles.section}>
+        <AppText variant="heading">Finanțele clientului</AppText>
+        <AppText style={{ color: palette.danger }}>{financeError}</AppText>
+        <Button compact variant="outline" label="Reîncearcă" icon="refresh-outline" onPress={() => setFinanceReloadKey((current) => current + 1)} />
+      </Card> : <>
+        <ClientFinanceSection
+          value={finance}
+          expenses={financeExpenses}
+          collaboratorCost={financeCollaboratorCost}
+          commissionType={form.collaboratorId ? form.commissionType : undefined}
+          commissionValue={form.collaboratorId ? safeCommission : 0}
+          isAdmin={false}
+          disabled={!canEditFinancials}
+          onChange={setFinance}
+        />
+        <AppText variant="caption" muted>{client ? 'Valorile de mai sus se salvează împreună cu modificările clientului. Cheltuielile, participanții și istoricul se gestionează din profilul clientului.' : 'Finanțele vor fi salvate imediat după crearea clientului și a codului QR.'}</AppText>
+      </> : null}
 
       <Card style={styles.section}>
         <View style={styles.sectionTitleRow}>

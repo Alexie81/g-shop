@@ -12,15 +12,14 @@ import { AuditLog, CommissionType } from '@/types';
 import {
   calculateClientFinance,
   ClientFinanceExpense,
-  ClientFinanceParticipant,
   ClientFinanceValue,
   formatFinanceMoney,
   toRon,
 } from '@/utils/client-finance';
 import { formatDate } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Alert, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 export type ClientFinanceSectionProps = {
   value: ClientFinanceValue;
@@ -28,19 +27,16 @@ export type ClientFinanceSectionProps = {
   collaboratorCost?: number;
   commissionType?: CommissionType;
   commissionValue?: number;
-  participants?: readonly ClientFinanceParticipant[];
   history?: readonly AuditLog[];
   isAdmin: boolean;
   disabled?: boolean;
   saving?: boolean;
-  participantsLoading?: boolean;
   historyLoading?: boolean;
   onChange: (value: ClientFinanceValue) => void;
   onSave?: (value: ClientFinanceValue) => Promise<void> | void;
   onAddExpense?: (input: ExpenseInput) => Promise<void> | void;
   onUpdateExpense?: (id: string, input: ExpenseInput) => Promise<void> | void;
   onDeleteExpense?: (id: string) => Promise<void> | void;
-  onSaveParticipants?: (userIds: string[]) => Promise<void> | void;
 };
 
 export function ClientFinanceSection({
@@ -49,21 +45,20 @@ export function ClientFinanceSection({
   collaboratorCost = 0,
   commissionType,
   commissionValue = 0,
-  participants,
   history,
   isAdmin,
   disabled = false,
   saving = false,
-  participantsLoading = false,
   historyLoading = false,
   onChange,
   onSave,
   onAddExpense,
   onUpdateExpense,
   onDeleteExpense,
-  onSaveParticipants,
 }: ClientFinanceSectionProps) {
   const { colors, isDark } = useAppTheme();
+  const { width } = useWindowDimensions();
+  const mobile = width < 600;
   const normalizedValue = useMemo<ClientFinanceValue>(() => ({
     ...value,
     currencyCode: value.currencyCode || DEFAULT_CURRENCY_CODE,
@@ -73,8 +68,6 @@ export function ClientFinanceSection({
   const [expenseOpen, setExpenseOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<ClientFinanceExpense | null>(null);
   const [actionError, setActionError] = useState('');
-  const [participantIds, setParticipantIds] = useState<string[]>([]);
-  const [participantsSaving, setParticipantsSaving] = useState(false);
   const calculations = useMemo(() => {
     const beforeCommission = calculateClientFinance(normalizedValue, expenses, 0);
     const rateOrAmount = Math.max(0, commissionValue);
@@ -93,15 +86,6 @@ export function ClientFinanceSection({
   const discountInvalid = normalizedValue.discountPercent < 0 || normalizedValue.discountPercent > 100;
   const breakdownDiffers = Math.abs(calculations.displayedBreakdownDifference) >= 0.01;
 
-  useEffect(() => {
-    setParticipantIds((participants ?? []).filter((participant) => participant.isAssigned).map((participant) => participant.id));
-  }, [participants]);
-
-  const assignedFromServer = useMemo(
-    () => (participants ?? []).filter((participant) => participant.isAssigned).map((participant) => participant.id).sort().join('|'),
-    [participants],
-  );
-  const participantSelectionChanged = [...participantIds].sort().join('|') !== assignedFromServer;
   const update = <K extends keyof ClientFinanceValue>(key: K, next: ClientFinanceValue[K]) => onChange({ ...normalizedValue, [key]: next });
   const money = (amount: number) => formatFinanceMoney(amount, currency.code);
   const ronEquivalent = (amount: number) => usesConversion
@@ -144,21 +128,8 @@ export function ClientFinanceSection({
     );
   };
 
-  const saveParticipants = async () => {
-    if (!onSaveParticipants || !participantSelectionChanged) return;
-    setParticipantsSaving(true);
-    setActionError('');
-    try {
-      await onSaveParticipants(participantIds);
-    } catch (caught) {
-      setActionError(caught instanceof Error ? caught.message : 'Participanții nu au putut fi salvați.');
-    } finally {
-      setParticipantsSaving(false);
-    }
-  };
-
-  return <View style={styles.root}>
-    <Card style={[styles.hero, { backgroundColor: isDark ? colors.surfaceElevated : '#F8FBFF' }]} elevated>
+  return <View style={[styles.root, mobile && styles.rootMobile]}>
+    <Card style={[styles.hero, mobile && styles.cardMobile, { backgroundColor: isDark ? colors.surfaceElevated : '#F8FBFF' }]} elevated>
       <View style={styles.heroHeader}>
         <View style={styles.heroIdentity}>
           <View style={[styles.heroIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="wallet-outline" size={25} color={colors.primary} /></View>
@@ -169,7 +140,7 @@ export function ClientFinanceSection({
         </View>
         <PaymentStatus value={normalizedValue.paymentStatus} disabled={disabled} onChange={(next) => update('paymentStatus', next)} />
       </View>
-      <View style={styles.metrics}>
+      <View style={[styles.metrics, mobile && styles.compactGap]}>
         <FinanceMetric icon="receipt-outline" label="Total" value={money(calculations.totalDue)} helper={ronEquivalent(calculations.totalDue)} color={colors.primary} />
         <FinanceMetric icon="checkmark-circle-outline" label="Încasat" value={money(calculations.receivedAmount)} helper={ronEquivalent(calculations.receivedAmount)} color={palette.success} />
         <FinanceMetric icon="time-outline" label="Rest de plată" value={money(calculations.remainingDue)} helper={ronEquivalent(calculations.remainingDue)} color={calculations.remainingDue > 0 ? palette.warning : palette.success} />
@@ -178,7 +149,7 @@ export function ClientFinanceSection({
     </Card>
 
     <View style={styles.columns}>
-      <Card style={styles.formCard}>
+      <Card style={[styles.formCard, mobile && styles.cardMobile]}>
         <SectionTitle icon="cash-outline" color={colors.primary} title="Valori comerciale" subtitle="Sumele comunicate și încasate de la client" />
         <Pressable
           accessibilityRole="button"
@@ -199,10 +170,10 @@ export function ClientFinanceSection({
           error={exchangeInvalid ? 'Introdu un curs mai mare decât zero.' : undefined}
           disabled={disabled}
         /> : null}
-        <View style={styles.fieldGrid}>
-          <FinanceNumberField style={styles.gridField} label={`Preț lucrare (${currency.code})`} value={normalizedValue.workPrice} onChange={(next) => update('workPrice', next)} disabled={disabled} helper="Valoarea principală a lucrării" />
+        <View style={[styles.fieldGrid, mobile && styles.compactGap]}>
+          <FinanceNumberField style={styles.gridField} label={`Preț lucrare (${currency.code})`} value={normalizedValue.workPrice} onChange={(next) => update('workPrice', next)} disabled={disabled} helper={mobile ? undefined : 'Valoarea principală a lucrării'} />
           <FinanceNumberField style={styles.gridField} label={`Diagnosticare (${currency.code})`} value={normalizedValue.diagnosticFee} onChange={(next) => update('diagnosticFee', next)} disabled={disabled} />
-          <FinanceNumberField style={styles.gridField} label={`Avans încasat (${currency.code})`} value={normalizedValue.advancePaid} onChange={(next) => update('advancePaid', next)} disabled={disabled} helper={normalizedValue.paymentStatus === 'PAID' ? 'Statusul Achitat marchează întregul total ca încasat' : undefined} />
+          <FinanceNumberField style={styles.gridField} label={`Avans încasat (${currency.code})`} value={normalizedValue.advancePaid} onChange={(next) => update('advancePaid', next)} disabled={disabled} helper={!mobile && normalizedValue.paymentStatus === 'PAID' ? 'Statusul Achitat marchează întregul total ca încasat' : undefined} />
           <FinanceNumberField style={styles.gridField} label="Reducere" value={normalizedValue.discountPercent} onChange={(next) => update('discountPercent', next)} disabled={disabled} percentage error={discountInvalid ? 'Reducerea trebuie să fie între 0 și 100%.' : undefined} />
         </View>
         <View style={[styles.calculationStrip, { backgroundColor: colors.surfaceMuted }]}>
@@ -213,14 +184,14 @@ export function ClientFinanceSection({
         </View>
       </Card>
 
-      <Card style={styles.formCard}>
+      <Card style={[styles.formCard, mobile && styles.cardMobile]}>
         <SectionTitle icon="construct-outline" color={palette.purple} title="Costuri și defalcare" subtitle="Vizibil pentru echipă; costul efectiv rămâne intern" />
         <FinanceNumberField label={`Cost efectiv piese (${currency.code})`} value={normalizedValue.actualPartsCost} onChange={(next) => update('actualPartsCost', next)} disabled={disabled} helper="Cost intern, scăzut din G-Shop Net" />
         <View style={[styles.internalDivider, { borderTopColor: colors.border }]}>
           <AppText variant="label">Defalcare afișată în fișa de service</AppText>
           <AppText variant="caption" muted>Informativă: nu se adună din nou la total.</AppText>
         </View>
-        <View style={styles.fieldGrid}>
+        <View style={[styles.fieldGrid, mobile && styles.compactGap]}>
           <FinanceNumberField style={styles.gridField} label={`Piese afișate (${currency.code})`} value={normalizedValue.displayedPartsCost} onChange={(next) => update('displayedPartsCost', next)} disabled={disabled} />
           <FinanceNumberField style={styles.gridField} label={`Manoperă afișată (${currency.code})`} value={normalizedValue.displayedLaborCost} onChange={(next) => update('displayedLaborCost', next)} disabled={disabled} />
         </View>
@@ -239,7 +210,7 @@ export function ClientFinanceSection({
       </Card>
     </View>
 
-    <Card style={styles.formCard}>
+    <Card style={[styles.formCard, mobile && styles.cardMobile]}>
       <View style={styles.sectionHeaderRow}>
         <SectionTitle icon="receipt-outline" color={palette.warning} title="Cheltuieli suplimentare" subtitle="Costuri interne scăzute din profitul G-Shop" />
         {onAddExpense && !disabled ? <Button compact variant="outline" label="Adaugă" icon="add" onPress={() => { setEditingExpense(null); setExpenseOpen(true); }} /> : null}
@@ -264,26 +235,9 @@ export function ClientFinanceSection({
       style={styles.saveButton}
     /> : null}
 
-    {isAdmin ? <View style={styles.adminArea}>
-      <View style={styles.adminTitle}><View style={[styles.adminIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="shield-checkmark-outline" size={20} color={colors.primary} /></View><View style={styles.headerCopy}><AppText variant="heading">Administrare internă</AppText><AppText variant="caption" muted>Vizibilă exclusiv administratorilor</AppText></View></View>
-      <Card style={styles.formCard}>
-        <View style={styles.sectionHeaderRow}><SectionTitle icon="people-outline" color={palette.cyan} title="Participanți" subtitle="Utilizatorii implicați în acest client" />{onSaveParticipants ? <Button compact label="Salvează" icon="checkmark" loading={participantsSaving} disabled={!participantSelectionChanged || participantsLoading} onPress={() => void saveParticipants()} /> : null}</View>
-        {participantsLoading ? <LoadingRows /> : participants?.length ? <View style={styles.participantGrid}>{participants.map((participant) => {
-          const selected = participantIds.includes(participant.id);
-          return <Pressable
-            key={participant.id}
-            disabled={!onSaveParticipants || disabled}
-            onPress={() => setParticipantIds((current) => selected ? current.filter((id) => id !== participant.id) : [...current, participant.id])}
-            style={({ pressed }) => [styles.participant, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.primarySoft : pressed ? colors.surfaceMuted : colors.surface }]}
-          >
-            <View style={[styles.participantAvatar, { backgroundColor: selected ? colors.primary : colors.surfaceMuted }]}><AppText variant="label" style={{ color: selected ? '#fff' : colors.text }}>{participant.firstName.charAt(0)}{participant.lastName.charAt(0)}</AppText></View>
-            <View style={styles.headerCopy}><AppText variant="label">{participant.firstName} {participant.lastName}</AppText><AppText variant="caption" muted>@{participant.username} · {participant.role}</AppText></View>
-            <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={22} color={selected ? colors.primary : colors.textMuted} />
-          </Pressable>;
-        })}</View> : <EmptyBlock icon="people-outline" title="Niciun utilizator disponibil" description="Participanții vor apărea după încărcarea utilizatorilor proprietății." />}
-      </Card>
-      <Card style={styles.formCard}>
-        <SectionTitle icon="time-outline" color={palette.purple} title="Istoric financiar" subtitle="Modificări asociate utilizatorilor și momentului exact" />
+    {isAdmin ? <View style={styles.historyArea}>
+      <Card style={[styles.formCard, mobile && styles.cardMobile]}>
+        <SectionTitle icon="time-outline" color={palette.purple} title="Istoric client" subtitle="Cine a făcut modificarea, ce a schimbat și momentul exact" />
         {historyLoading ? <LoadingRows /> : <ClientAuditHistory items={history ?? []} compact limit={30} />}
       </Card>
     </View> : null}
@@ -338,7 +292,9 @@ function LoadingRows() {
 
 const styles = StyleSheet.create({
   root: { gap: spacing.lg },
+  rootMobile: { gap: spacing.md },
   hero: { gap: spacing.xl, overflow: 'hidden' },
+  cardMobile: { padding: spacing.md, gap: spacing.md },
   heroHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.md },
   heroIdentity: { flex: 1, flexBasis: 220, minWidth: 220, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   heroIcon: { width: 50, height: 50, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
@@ -356,7 +312,8 @@ const styles = StyleSheet.create({
   currencyButton: { minHeight: 62, borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   currencyCode: { width: 58, height: 42, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   fieldGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  gridField: { flexGrow: 1, flexBasis: 210, minWidth: 210 },
+  gridField: { flexGrow: 1, flexBasis: 135, minWidth: 128 },
+  compactGap: { gap: spacing.sm },
   calculationStrip: { borderRadius: radius.md, padding: spacing.md, gap: spacing.sm },
   calculationLine: { minHeight: 24, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md },
   divider: { height: StyleSheet.hairlineWidth },
@@ -372,12 +329,7 @@ const styles = StyleSheet.create({
   emptyCopy: { flex: 1, gap: spacing.xs },
   error: { borderWidth: 1, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   saveButton: { alignSelf: 'flex-end', minWidth: 250 },
-  adminArea: { gap: spacing.lg, marginTop: spacing.lg },
-  adminTitle: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  adminIcon: { width: 42, height: 42, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  participantGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  participant: { flex: 1, flexBasis: 260, minWidth: 240, borderWidth: 1, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  participantAvatar: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  historyArea: { marginTop: spacing.lg },
   loadingRows: { gap: spacing.sm },
   loadingRow: { height: 64, borderRadius: radius.md, opacity: 0.65 },
 });
