@@ -67,7 +67,7 @@ export default function ProfileScreen() {
     }
   };
 
-  return <Screen header={<AppHeader title="Profil" back />}>
+  return <Screen header={<AppHeader title="Profil" back onBack={() => router.replace('/service/more')} />}>
     <Card style={styles.profile}>
       <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
         <AppText variant="display" style={{ color: '#fff' }}>{initials(user.firstName, user.lastName)}</AppText>

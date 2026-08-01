@@ -19,6 +19,7 @@ import { calculateCommission, calculateNet } from '@/utils/commission';
 import { formatCurrency } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -204,7 +205,7 @@ export default function CollaboratorsScreen() {
   };
 
   return <Screen
-    header={<AppHeader title="Colaboratori" back />}
+    header={<AppHeader title="Colaboratori" back onBack={() => router.replace('/service/more')} />}
     scroll={false}
     bottomInset={false}
     style={styles.screen}
