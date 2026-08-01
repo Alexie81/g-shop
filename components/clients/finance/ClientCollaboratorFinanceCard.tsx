@@ -124,7 +124,7 @@ function commissionRule(collaborator: ClientFinancialCollaborator, currencyCode:
 
 function Metric({ label, value, color }: { label: string; value: string; color: string }) {
   const { colors } = useAppTheme();
-  return <View style={[styles.metric, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}><AppText variant="caption" muted>{label}</AppText><AppText variant="heading" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65} style={{ color }}>{value}</AppText></View>;
+  return <View style={[styles.metric, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}><AppText variant="caption" muted>{label}</AppText><AppText variant="label" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65} style={{ color, fontWeight: '900' }}>{value}</AppText></View>;
 }
 
 const styles = StyleSheet.create({
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   identity: { borderWidth: 1, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   avatar: { width: 46, height: 46, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  metric: { minWidth: 0, flexGrow: 1, flexBasis: '30%', borderWidth: 1, borderRadius: radius.md, padding: spacing.md, gap: spacing.xs },
+  metric: { minWidth: 0, flexGrow: 1, flexBasis: '30%', borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, gap: spacing.xs },
   notice: { borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   noticeCopy: { flex: 1 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
