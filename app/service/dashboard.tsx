@@ -25,6 +25,7 @@ export default function DashboardScreen() {
   const { user } = useAuth(); const { activeProperty } = useProperty(); const propertyId = activeProperty?.id ?? '';
   const { colors } = useAppTheme();
   const [financeOpen, setFinanceOpen] = useState(false);
+  const [heroHeight, setHeroHeight] = useState(164);
   const { width } = useWindowDimensions();
   const statColumns = width < 600 ? 2 : width < 950 ? 3 : 6;
   const actionColumns = width < 750 ? 2 : 4;
@@ -37,8 +38,8 @@ export default function DashboardScreen() {
   const { metrics, sheets } = state.data;
   return <Screen header={<AppHeader />} scroll={false} bottomInset={false} style={styles.screen}>
     <View style={styles.dashboardRoot}>
-      <LinearGradient colors={['#082376', '#075CFF', '#0D78FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, styles.fixedHero]}><View style={styles.heroCopy}><AppText variant="title" style={{ color: '#fff' }}>{greeting}, {user?.firstName}! <AppText style={{ color: '#FFD75C' }}>👋</AppText></AppText><AppText style={{ color: '#DDE8FF' }}>Ai control complet asupra activității din {activeProperty?.name}.</AppText></View><View style={styles.heroGraphic}><Ionicons name="analytics" size={74} color="#8CB7FF" /></View></LinearGradient>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={state.refreshing} onRefresh={() => void state.reload(true)} tintColor={colors.primary} />}>
+      <LinearGradient onLayout={(event) => { const nextHeight = event.nativeEvent.layout.height; if (Math.abs(nextHeight - heroHeight) > 1) setHeroHeight(nextHeight); }} colors={['#082376', '#075CFF', '#0D78FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, styles.fixedHero]}><View style={styles.heroCopy}><AppText variant="title" style={{ color: '#fff' }}>{greeting}, {user?.firstName}! <AppText variant="title" style={styles.wave}>👋</AppText></AppText><AppText style={{ color: '#DDE8FF' }}>Ai control complet asupra activității din {activeProperty?.name}.</AppText></View><View style={styles.heroGraphic}><Ionicons name="analytics" size={74} color="#8CB7FF" /></View></LinearGradient>
+      <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, { paddingTop: heroHeight + spacing.xs }]} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={state.refreshing} onRefresh={() => void state.reload(true)} tintColor={colors.primary} />}>
         <View style={[styles.dashboardSheet, { backgroundColor: colors.background, shadowColor: colors.shadow }]}>
           <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
     <View style={[styles.section, styles.firstSection]}>
@@ -84,12 +85,13 @@ const styles = StyleSheet.create({
   screen: { flex: 1, padding: 0, paddingBottom: 0 },
   dashboardRoot: { flex: 1, overflow: 'hidden' },
   scroll: { flex: 1 },
-  scrollContent: { paddingTop: 148 },
+  scrollContent: {},
   dashboardSheet: { minHeight: 720, borderTopLeftRadius: 32, borderTopRightRadius: 32, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: 112, shadowOpacity: 0.18, shadowRadius: 24, shadowOffset: { width: 0, height: -8 }, elevation: 12 },
   sheetHandle: { width: 44, height: 5, borderRadius: radius.pill, alignSelf: 'center', marginBottom: spacing.sm },
   hero: { minHeight: 164, borderRadius: radius.xl, padding: spacing.xxl, flexDirection: 'row', alignItems: 'center', overflow: 'hidden' },
   fixedHero: { position: 'absolute', top: spacing.lg, left: spacing.lg, right: spacing.lg },
   heroCopy: { flex: 1, gap: spacing.sm, maxWidth: 620 },
+  wave: { color: '#FFD75C', fontSize: 30, lineHeight: 34 },
   heroGraphic: { width: 110, height: 110, borderRadius: 55, backgroundColor: '#FFFFFF16', alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-8deg' }] },
   section: { gap: spacing.lg, marginTop: spacing.xxxl },
   firstSection: { marginTop: spacing.sm },
