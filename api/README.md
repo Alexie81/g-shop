@@ -126,7 +126,7 @@ După publicarea peste o instalare existentă, autentifică un administrator și
 ### Administrare
 
 - `GET|POST /users`
-- `PUT /users/{id}/permissions`
+- `PUT /users/{id}/permissions` — actualizează atomic permisiunile și, opțional, `propertyIds`; lista goală elimină accesul la toate proprietățile, iar omiterea câmpului păstrează accesul existent
 - `PUT /users/{id}/password`
 - `DELETE /users/{id}`
 - `GET /audit-logs`

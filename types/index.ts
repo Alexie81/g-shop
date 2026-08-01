@@ -304,6 +304,7 @@ export interface Commission extends BaseEntity {
   collaboratorId: UUID;
   clientId: UUID;
   serviceSheetId?: UUID;
+  serviceSheetNumber?: string;
   propertyId: UUID;
   totalValue: number;
   directCosts: number;

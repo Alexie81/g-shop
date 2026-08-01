@@ -49,6 +49,6 @@ export const userRepository: UserRepository = {
   update: (id, input) => apiRequest(`/users/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
   remove: (id) => apiRequest(`/users/${id}`, { method: 'DELETE' }),
   resetPassword: (id, password) => apiRequest(`/users/${id}/password`, { method: 'PUT', body: JSON.stringify({ password }) }),
-  updatePermissions: (id, permissions) => apiRequest(`/users/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ permissions }) }),
+  updatePermissions: (id, permissions, propertyIds) => apiRequest(`/users/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ permissions, ...(propertyIds ? { propertyIds } : {}) }) }),
 };
 export const auditRepository: AuditRepository = { list: (propertyId) => apiRequest(`/audit-logs${propertyId ? `?propertyId=${propertyId}` : ''}`) };

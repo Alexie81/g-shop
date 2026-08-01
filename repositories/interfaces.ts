@@ -48,6 +48,6 @@ export interface UserRepository {
   update(id: UUID, input: Partial<User>): Promise<User>;
   remove(id: UUID): Promise<void>;
   resetPassword(id: UUID, password: string): Promise<void>;
-  updatePermissions(id: UUID, permissions: Permission[]): Promise<User>;
+  updatePermissions(id: UUID, permissions: Permission[], propertyIds?: UUID[]): Promise<User>;
 }
 export interface AuditRepository { list(propertyId?: UUID): Promise<Paginated<AuditLog>>; }
