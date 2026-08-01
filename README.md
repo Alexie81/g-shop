@@ -84,7 +84,7 @@ services/       client API și stocare securizată
 theme/          paletă Light/Dark, spațiere și radius
 types/          modelele TypeScript
 utils/          formatare și calcule comisioane
-api/            API PHP, schema compactă și formularul public
+api/            API PHP, schema compactă și pagina publică de status
 ```
 
 ## Backend

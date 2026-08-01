@@ -1,29 +1,210 @@
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { Input } from '@/components/ui/Input';
 import { Screen } from '@/components/ui/Screen';
 import { ErrorState, LoadingState } from '@/components/ui/States';
 import { useAppTheme } from '@/contexts/ThemeContext';
-import { useToast } from '@/contexts/ToastContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { apiRequest } from '@/services/api';
-import { radius, spacing } from '@/theme/tokens';
+import { palette, radius, spacing } from '@/theme/tokens';
+import { ServiceSheetStatus } from '@/types';
+import { formatDate } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import { Image, Pressable, StyleSheet, View } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
+import { ComponentProps } from 'react';
+import { Image, StyleSheet, View } from 'react-native';
 
-type PublicInfo = { clientFirstName: string; propertyName: string; expiresAt?: string; used: boolean };
-type Form = { fullName: string; phone: string; email: string; address: string; city: string; county: string; requestType: string; equipmentType: string; brand: string; model: string; operatingSystem: string; problem: string; frequency: string; starts: string; importantData: string; preferredDate: string; preferredInterval: string; notes: string; gdpr: boolean; accuracy: boolean; terms: boolean };
-const initial: Form = { fullName: '', phone: '', email: '', address: '', city: 'București', county: 'București', requestType: 'Predare echipament în service', equipmentType: '', brand: '', model: '', operatingSystem: '', problem: '', frequency: '', starts: 'Da', importantData: 'Da', preferredDate: '', preferredInterval: '', notes: '', gdpr: false, accuracy: false, terms: false };
-export default function PublicClientForm() {
-  const { token } = useLocalSearchParams<{ token: string }>(); const { colors } = useAppTheme(); const { showToast } = useToast(); const info = useAsyncData(() => apiRequest<PublicInfo>(`/public/client-form/${encodeURIComponent(token)}`, { authenticated: false }), [token]); const [form, setForm] = useState(initial); const [loading, setLoading] = useState(false); const update = <K extends keyof Form>(key: K, value: Form[K]) => setForm((current) => ({ ...current, [key]: value }));
-  const submit = async () => { if (form.fullName.trim().length < 3 || form.phone.replace(/\D/g, '').length < 9 || form.problem.trim().length < 10) return showToast('Completează numele, telefonul și descrierea problemei.', 'error'); if (!form.gdpr || !form.accuracy || !form.terms) return showToast('Toate acordurile sunt obligatorii.', 'error'); setLoading(true); try { await apiRequest(`/public/client-form/${encodeURIComponent(token)}`, { method: 'POST', authenticated: false, body: JSON.stringify(form) }); showToast('Solicitarea a fost trimisă. Mulțumim!', 'success'); router.replace('/public/success'); } catch (error) { showToast(error instanceof Error ? error.message : 'Trimiterea a eșuat.', 'error'); } finally { setLoading(false); } };
-  if (info.loading) return <Screen><LoadingState rows={5} /></Screen>; if (info.error || !info.data) return <Screen><ErrorState message={info.error?.message ?? 'Link invalid.'} /></Screen>;
-  if (info.data.used) return <Screen><View style={styles.brand}><Image source={require('@/logo/logo.png')} style={styles.logo} /><View><AppText variant="title">G-Shop</AppText><AppText variant="caption" muted>{info.data.propertyName}</AppText></View></View><Card style={styles.completed}><View style={[styles.completedIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="checkmark-circle-outline" size={34} color={colors.primary} /></View><AppText variant="title" style={styles.completedText}>Formular deja trimis</AppText><AppText muted style={styles.completedText}>Solicitarea asociată acestui formular a fost înregistrată. Codul QR rămâne permanent și poate fi scanat în service pentru identificarea clientului.</AppText></Card></Screen>;
-  return <Screen><View style={styles.brand}><Image source={require('@/logo/logo.png')} style={styles.logo} /><View><AppText variant="title">G-Shop</AppText><AppText variant="caption" muted>{info.data.propertyName}</AppText></View></View><Card style={[styles.intro, { backgroundColor: colors.primarySoft }]}><Ionicons name="shield-checkmark-outline" size={28} color={colors.primary} /><View style={{ flex: 1 }}><AppText variant="heading">Salut, {info.data.clientFirstName}!</AppText><AppText muted>Completează datele necesare solicitării de service. Linkul este securizat și asociat numai solicitării tale.</AppText></View></Card><Card style={styles.section}><AppText variant="heading">1. Date de contact</AppText><Input label="Nume și prenume *" value={form.fullName} onChangeText={(value) => update('fullName', value)} /><View style={styles.row}><View style={styles.field}><Input label="Telefon *" keyboardType="phone-pad" value={form.phone} onChangeText={(value) => update('phone', value)} /></View><View style={styles.field}><Input label="Email" keyboardType="email-address" autoCapitalize="none" value={form.email} onChangeText={(value) => update('email', value)} /></View></View><Input label="Adresă completă" value={form.address} onChangeText={(value) => update('address', value)} /><View style={styles.row}><View style={styles.field}><Input label="Localitate" value={form.city} onChangeText={(value) => update('city', value)} /></View><View style={styles.field}><Input label="Sector / județ" value={form.county} onChangeText={(value) => update('county', value)} /></View></View></Card><Card style={styles.section}><AppText variant="heading">2. Solicitare și echipament</AppText><Choice label="Tip solicitare" value={form.requestType} options={['Service la domiciliu', 'Predare echipament în service', 'Diagnosticare', 'Instalare software', 'Configurare', 'Mentenanță', 'Altă solicitare']} onChange={(value) => update('requestType', value)} /><View style={styles.row}><View style={styles.field}><Input label="Tip echipament *" placeholder="Laptop, PC, imprimantă…" value={form.equipmentType} onChangeText={(value) => update('equipmentType', value)} /></View><View style={styles.field}><Input label="Marcă" value={form.brand} onChangeText={(value) => update('brand', value)} /></View></View><View style={styles.row}><View style={styles.field}><Input label="Model" value={form.model} onChangeText={(value) => update('model', value)} /></View><View style={styles.field}><Input label="Sistem de operare" value={form.operatingSystem} onChangeText={(value) => update('operatingSystem', value)} /></View></View></Card><Card style={styles.section}><AppText variant="heading">3. Problema întâmpinată</AppText><Input label="Descriere detaliată *" multiline numberOfLines={5} textAlignVertical="top" value={form.problem} onChangeText={(value) => update('problem', value)} style={{ minHeight: 110 }} /><Input label="Cât de des apare?" value={form.frequency} onChangeText={(value) => update('frequency', value)} /><Choice label="Echipamentul pornește?" value={form.starts} options={['Da', 'Nu', 'Uneori']} onChange={(value) => update('starts', value)} /><Choice label="Există date importante?" value={form.importantData} options={['Da', 'Nu', 'Nu știu']} onChange={(value) => update('importantData', value)} /><Input label="Observații suplimentare" multiline value={form.notes} onChangeText={(value) => update('notes', value)} /></Card><Card style={styles.section}><AppText variant="heading">4. Programare preferată</AppText><View style={styles.row}><View style={styles.field}><Input label="Data" placeholder="ex. 05.08.2026" value={form.preferredDate} onChangeText={(value) => update('preferredDate', value)} /></View><View style={styles.field}><Input label="Interval orar" placeholder="ex. 10:00–13:00" value={form.preferredInterval} onChangeText={(value) => update('preferredInterval', value)} /></View></View></Card><Card style={styles.section}><AppText variant="heading">5. Consimțământ</AppText><Consent checked={form.gdpr} label="Sunt de acord cu prelucrarea datelor în scopul furnizării serviciului." onPress={() => update('gdpr', !form.gdpr)} /><Consent checked={form.accuracy} label="Confirm că informațiile completate sunt corecte." onPress={() => update('accuracy', !form.accuracy)} /><Consent checked={form.terms} label="Accept condițiile de service." onPress={() => update('terms', !form.terms)} /></Card><Button label="Trimite solicitarea" icon="send-outline" loading={loading} onPress={() => void submit()} /></Screen>;
+type IconName = ComponentProps<typeof Ionicons>['name'];
+type PublicRepairStatus = {
+  propertyName: string;
+  client: { name: string; firstName: string; status: string; updatedAt?: string };
+  repair: null | {
+    number: string;
+    equipment: string;
+    brand?: string;
+    model?: string;
+    reportedIssue?: string;
+    status: ServiceSheetStatus;
+    receivedAt?: string;
+    estimatedAt?: string;
+    completedAt?: string;
+    updatedAt?: string;
+  };
+};
+
+const STATUS: Record<ServiceSheetStatus, { label: string; description: string; icon: IconName; color: string; soft: string }> = {
+  NEW: { label: 'Fișă creată', description: 'Fișa a fost creată și urmează verificarea.', icon: 'document-text-outline', color: palette.electric, soft: palette.electricLight },
+  WAITING: { label: 'În așteptare', description: 'Echipamentul așteaptă preluarea de către echipa service.', icon: 'time-outline', color: palette.warning, soft: palette.warningSoft },
+  VERIFYING: { label: 'În verificare', description: 'Echipamentul este verificat pentru stabilirea diagnosticului.', icon: 'search-outline', color: palette.purple, soft: '#F2EAFF' },
+  IN_PROGRESS: { label: 'În lucru', description: 'Echipa lucrează în acest moment la reparație.', icon: 'construct-outline', color: palette.electric, soft: palette.electricLight },
+  WAITING_PARTS: { label: 'Așteptăm piesele', description: 'Reparația este în curs și așteaptă piesele necesare.', icon: 'cube-outline', color: palette.warning, soft: palette.warningSoft },
+  COMPLETED: { label: 'Reparație finalizată', description: 'Lucrarea este finalizată. Service-ul te va contacta pentru predare.', icon: 'checkmark-circle-outline', color: palette.success, soft: palette.successSoft },
+  DELIVERED: { label: 'Echipament predat', description: 'Echipamentul reparat a fost predat clientului.', icon: 'shield-checkmark-outline', color: palette.success, soft: palette.successSoft },
+  CANCELLED: { label: 'Reparație anulată', description: 'Lucrarea a fost anulată. Contactează service-ul pentru detalii.', icon: 'close-circle-outline', color: palette.danger, soft: palette.dangerSoft },
+};
+
+const STEPS = ['Înregistrat', 'Verificare', 'În lucru', 'Finalizat', 'Predat'];
+const STEP_BY_STATUS: Record<ServiceSheetStatus, number> = {
+  NEW: 0,
+  WAITING: 0,
+  VERIFYING: 1,
+  IN_PROGRESS: 2,
+  WAITING_PARTS: 2,
+  COMPLETED: 3,
+  DELIVERED: 4,
+  CANCELLED: -1,
+};
+
+export default function PublicRepairTracking() {
+  const { token } = useLocalSearchParams<{ token: string }>();
+  const { colors, isDark } = useAppTheme();
+  const info = useAsyncData(
+    () => apiRequest<PublicRepairStatus>(`/public/client-form/${encodeURIComponent(token ?? '')}`, { authenticated: false }),
+    [token],
+  );
+
+  if (info.loading) return <Screen style={styles.page}><Brand /><LoadingState rows={4} /></Screen>;
+  if (info.error || !info.data) return <Screen style={styles.page}><Brand /><ErrorState message={info.error?.message ?? 'Linkul nu este disponibil.'} /><Button label="Încearcă din nou" icon="refresh-outline" onPress={() => void info.reload()} /></Screen>;
+
+  const { client, propertyName, repair } = info.data;
+  const status = repair ? STATUS[repair.status] : null;
+  const equipment = repair ? [repair.brand, repair.model, repair.equipment].filter(Boolean).join(' · ') : '';
+
+  return (
+    <Screen refreshing={info.refreshing} onRefresh={() => void info.reload(true)} style={styles.page}>
+      <Brand propertyName={propertyName} />
+
+      <View style={[styles.privateNotice, { backgroundColor: isDark ? '#12243E' : '#EEF4FF', borderColor: colors.border }]}>
+        <Ionicons name="lock-closed-outline" size={17} color={colors.primary} />
+        <AppText variant="caption" style={styles.noticeText}>Link privat. Nu îl distribui altor persoane.</AppText>
+      </View>
+
+      <View style={[styles.hero, { backgroundColor: status?.color ?? colors.primary }]}>
+        <View style={styles.heroTop}>
+          <View style={styles.heroCopy}>
+            <AppText variant="caption" style={styles.heroEyebrow}>STATUSUL REPARAȚIEI</AppText>
+            <AppText variant="display" style={styles.heroTitle}>{status?.label ?? 'Client înregistrat'}</AppText>
+            <AppText style={styles.heroDescription}>{status?.description ?? 'Fișa de service se pregătește. Revino în curând pentru actualizări.'}</AppText>
+          </View>
+          <View style={styles.heroIcon}>
+            <Ionicons name={status?.icon ?? 'person-add-outline'} size={34} color="#FFFFFF" />
+          </View>
+        </View>
+        <View style={styles.updatedRow}>
+          <Ionicons name="sync-outline" size={15} color="#DCE8FF" />
+          <AppText variant="caption" style={styles.updatedText}>Actualizat {formatDate(repair?.updatedAt ?? client.updatedAt, true)}</AppText>
+        </View>
+      </View>
+
+      <Card style={styles.clientCard}>
+        <View style={[styles.avatar, { backgroundColor: colors.primarySoft }]}>
+          <Ionicons name="person-outline" size={23} color={colors.primary} />
+        </View>
+        <View style={styles.clientCopy}>
+          <AppText variant="caption" muted>CLIENT</AppText>
+          <AppText variant="heading">{client.name}</AppText>
+          {repair ? <AppText variant="caption" muted>Fișa {repair.number}</AppText> : null}
+        </View>
+      </Card>
+
+      {repair ? (
+        <>
+          <Card style={styles.section}>
+            <View style={styles.sectionTitle}>
+              <View style={[styles.sectionIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="hardware-chip-outline" size={21} color={colors.primary} /></View>
+              <View style={styles.sectionCopy}><AppText variant="heading">Echipamentul tău</AppText><AppText variant="caption" muted>Informațiile lucrării curente</AppText></View>
+            </View>
+            <View style={[styles.infoBox, { backgroundColor: colors.surfaceMuted }]}>
+              <AppText variant="label">{equipment || 'Echipament înregistrat'}</AppText>
+              {repair.reportedIssue ? <AppText muted>{repair.reportedIssue}</AppText> : null}
+            </View>
+          </Card>
+
+          <Card style={styles.section}>
+            <View style={styles.sectionTitle}>
+              <View style={[styles.sectionIcon, { backgroundColor: status?.soft }]}><Ionicons name="git-branch-outline" size={21} color={status?.color} /></View>
+              <View style={styles.sectionCopy}><AppText variant="heading">Progresul reparației</AppText><AppText variant="caption" muted>Etapele sunt actualizate de service</AppText></View>
+            </View>
+            {repair.status === 'CANCELLED' ? (
+              <View style={[styles.cancelled, { backgroundColor: isDark ? '#351722' : palette.dangerSoft }]}>
+                <Ionicons name="alert-circle-outline" size={21} color={palette.danger} />
+                <AppText style={styles.cancelledText}>Lucrarea este anulată. Pentru detalii, contactează unitatea service.</AppText>
+              </View>
+            ) : <Timeline current={STEP_BY_STATUS[repair.status]} />}
+          </Card>
+
+          <Card style={styles.datesCard}>
+            <DateItem icon="calendar-outline" label="Primit în service" value={repair.receivedAt} />
+            {repair.estimatedAt ? <DateItem icon="flag-outline" label="Termen estimat" value={repair.estimatedAt} /> : null}
+            {repair.completedAt ? <DateItem icon="checkmark-done-outline" label="Finalizat" value={repair.completedAt} /> : null}
+          </Card>
+        </>
+      ) : null}
+
+      <Button label="Actualizează statusul" icon="refresh-outline" variant="secondary" loading={info.refreshing} onPress={() => void info.reload(true)} />
+      <AppText variant="caption" muted style={styles.footer}>Datele sunt afișate direct din sistemul G-Shop al unității service.</AppText>
+    </Screen>
+  );
 }
-function Choice({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) { const { colors } = useAppTheme(); return <View style={{ gap: spacing.sm }}><AppText variant="label">{label}</AppText><View style={styles.choices}>{options.map((option) => <Pressable key={option} onPress={() => onChange(option)} style={[styles.choice, { backgroundColor: option === value ? colors.primary : colors.surfaceMuted }]}><AppText variant="caption" style={{ color: option === value ? '#fff' : colors.textMuted, fontWeight: '700' }}>{option}</AppText></Pressable>)}</View></View>; }
-function Consent({ checked, label, onPress }: { checked: boolean; label: string; onPress: () => void }) { const { colors } = useAppTheme(); return <Pressable onPress={onPress} style={styles.consent}><View style={[styles.checkbox, { backgroundColor: checked ? colors.primary : 'transparent', borderColor: checked ? colors.primary : colors.border }]}>{checked ? <Ionicons name="checkmark" color="#fff" size={16} /> : null}</View><AppText style={{ flex: 1 }}>{label}</AppText></Pressable>; }
-const styles = StyleSheet.create({ brand: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, alignSelf: 'center', marginBottom: spacing.md }, logo: { width: 54, height: 54, borderRadius: 15 }, intro: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }, completed: { minHeight: 280, alignItems: 'center', justifyContent: 'center', gap: spacing.lg, padding: spacing.xxxl }, completedIcon: { width: 72, height: 72, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }, completedText: { maxWidth: 440, textAlign: 'center' }, section: { gap: spacing.lg }, row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }, field: { minWidth: 220, flex: 1 }, choices: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, choice: { borderRadius: radius.pill, paddingVertical: 8, paddingHorizontal: spacing.md }, consent: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }, checkbox: { width: 23, height: 23, borderRadius: 7, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', marginTop: 1 } });
+
+function Brand({ propertyName }: { propertyName?: string }) {
+  return <View style={styles.brand}><Image source={require('@/logo/logo.png')} style={styles.logo} /><View style={styles.brandCopy}><AppText variant="title">G-Shop</AppText><AppText variant="caption" muted numberOfLines={1}>{propertyName ?? 'Urmărire reparație'}</AppText></View></View>;
+}
+
+function Timeline({ current }: { current: number }) {
+  const { colors } = useAppTheme();
+  return <View style={styles.timeline}>{STEPS.map((step, index) => {
+    const reached = index <= current;
+    return <View key={step} style={styles.step}>
+      <View style={styles.stepRail}>
+        <View style={[styles.stepDot, { backgroundColor: reached ? colors.primary : colors.surfaceMuted, borderColor: reached ? colors.primary : colors.border }]}>{reached ? <Ionicons name="checkmark" size={13} color="#fff" /> : null}</View>
+        {index < STEPS.length - 1 ? <View style={[styles.stepLine, { backgroundColor: index < current ? colors.primary : colors.border }]} /> : null}
+      </View>
+      <AppText variant="caption" style={[styles.stepLabel, { color: reached ? colors.text : colors.textMuted }]}>{step}</AppText>
+    </View>;
+  })}</View>;
+}
+
+function DateItem({ icon, label, value }: { icon: IconName; label: string; value?: string }) {
+  const { colors } = useAppTheme();
+  return <View style={styles.dateItem}><View style={[styles.dateIcon, { backgroundColor: colors.surfaceMuted }]}><Ionicons name={icon} size={19} color={colors.primary} /></View><View style={styles.dateCopy}><AppText variant="caption" muted>{label}</AppText><AppText variant="label">{formatDate(value)}</AppText></View></View>;
+}
+
+const styles = StyleSheet.create({
+  page: { width: '100%', maxWidth: 720, gap: spacing.md, paddingHorizontal: spacing.md },
+  brand: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: spacing.md, marginVertical: spacing.sm, maxWidth: '100%' },
+  brandCopy: { flexShrink: 1 },
+  logo: { width: 48, height: 48, borderRadius: 14 },
+  privateNotice: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing.md },
+  noticeText: { flexShrink: 1 },
+  hero: { borderRadius: radius.xl, padding: spacing.xl, gap: spacing.xl, overflow: 'hidden' },
+  heroTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  heroCopy: { flex: 1, gap: spacing.sm },
+  heroEyebrow: { color: '#DCE8FF', fontWeight: '800', letterSpacing: 1.1 },
+  heroTitle: { color: '#FFFFFF', fontSize: 28, lineHeight: 34 },
+  heroDescription: { color: '#F2F6FF' },
+  heroIcon: { width: 64, height: 64, borderRadius: 20, backgroundColor: '#FFFFFF20', alignItems: 'center', justifyContent: 'center' },
+  updatedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  updatedText: { color: '#DCE8FF' },
+  clientCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  avatar: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  clientCopy: { flex: 1, gap: 1 },
+  section: { gap: spacing.lg },
+  sectionTitle: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  sectionIcon: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  sectionCopy: { flex: 1 },
+  infoBox: { borderRadius: radius.md, padding: spacing.lg, gap: spacing.sm },
+  timeline: { flexDirection: 'row', alignItems: 'flex-start', paddingTop: spacing.sm },
+  step: { flex: 1, alignItems: 'center' },
+  stepRail: { width: '100%', alignItems: 'center', position: 'relative' },
+  stepDot: { width: 25, height: 25, borderRadius: 13, borderWidth: 2, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
+  stepLine: { position: 'absolute', left: '50%', top: 11, width: '100%', height: 3 },
+  stepLabel: { marginTop: spacing.sm, textAlign: 'center', fontSize: 10, lineHeight: 14 },
+  cancelled: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, borderRadius: radius.md, padding: spacing.lg },
+  cancelledText: { flex: 1 },
+  datesCard: { gap: spacing.md },
+  dateItem: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  dateIcon: { width: 42, height: 42, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  dateCopy: { flex: 1 },
+  footer: { textAlign: 'center', paddingHorizontal: spacing.xl, marginTop: spacing.xs },
+});
