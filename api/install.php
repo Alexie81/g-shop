@@ -22,13 +22,13 @@ try {
     $shopId = '22222222-2222-4222-8222-222222222222';
     $permissions = [
         'dashboard.view','clients.view','clients.create','clients.update','clients.delete','qr.generate','qr.scan','qr.share',
-        'service_sheets.view','service_sheets.create','service_sheets.update','service_sheets.sign','interventions.view','interventions.manage',
+        'service_sheets.view','service_sheets.create','service_sheets.update','service_sheets.sign',
         'collaborators.view','collaborators.manage','users.view','users.manage','roles.manage','reports.view','financials.view','audit.view','settings.manage'
     ];
 
     $pdo->beginTransaction();
     $property = $pdo->prepare('INSERT INTO properties (id,name,domain,type,enabled_modules,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,1,?,?,?,?) ON DUPLICATE KEY UPDATE name=VALUES(name), enabled_modules=VALUES(enabled_modules), updated_at=VALUES(updated_at)');
-    $property->execute([uuid_bin($serviceId), 'Reparații Calculatoare București', 'reparatiicalculatoare-bucuresti.ro', 'SERVICE', json_encode(['dashboard','clients','qr','serviceSheets','interventions','collaborators','users','reports'], JSON_UNESCAPED_UNICODE), $now, $now, uuid_bin($adminId), uuid_bin($adminId)]);
+    $property->execute([uuid_bin($serviceId), 'Reparații Calculatoare București', 'reparatiicalculatoare-bucuresti.ro', 'SERVICE', json_encode(['dashboard','clients','qr','serviceSheets','collaborators','users','reports'], JSON_UNESCAPED_UNICODE), $now, $now, uuid_bin($adminId), uuid_bin($adminId)]);
     $property->execute([uuid_bin($shopId), 'Calculatoare Profesionale', 'calculatoareprofesionale.ro', 'SHOP', json_encode(['shopComingSoon']), $now, $now, uuid_bin($adminId), uuid_bin($adminId)]);
 
     $admin = $pdo->prepare('INSERT INTO users (id,username,password_hash,first_name,last_name,email,role,permissions,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?, ?,1,?,?,?,?) ON DUPLICATE KEY UPDATE permissions=VALUES(permissions), is_active=1, updated_at=VALUES(updated_at)');

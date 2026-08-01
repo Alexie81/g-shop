@@ -64,8 +64,9 @@ ORDER BY data_length + index_length DESC;
 - `GET|POST /service-sheets`
 - `GET|PUT /service-sheets/{id}`
 - `POST /service-sheets/{id}/signature`
-- `GET|POST /interventions`
 - `GET|POST /collaborators`
+- `GET /collaborator-finances?propertyId={uuid}` — totaluri achitate/de achitat, grupate pe colaborator și client
+- `PUT /commissions/client-status` — marchează comisioanele unui client ca achitate sau de achitat; body: `{ "propertyId": "uuid", "collaboratorId": "uuid", "clientId": "uuid", "paid": true|false }`
 
 ### Administrare
 
