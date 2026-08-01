@@ -110,6 +110,96 @@ export interface Client extends BaseEntity {
   lastActivityAt?: ISODate;
 }
 
+export type ClientPaymentStatus = 'UNPAID' | 'PAID';
+
+export interface ClientFinancialRecord {
+  clientId: UUID;
+  propertyId: UUID;
+  currencyCode: string;
+  exchangeRateToRon: number;
+  workPrice: number;
+  diagnosticFee: number;
+  advancePaid: number;
+  discountPercent: number;
+  actualPartsCost: number;
+  displayedPartsCost: number;
+  displayedLaborCost: number;
+  paymentStatus: ClientPaymentStatus;
+  persisted: boolean;
+  updatedAt?: ISODate;
+  updatedBy?: UUID;
+}
+
+export type ClientFinancials = ClientFinancialRecord;
+
+export interface ClientFinancialSummary {
+  subtotal: number;
+  discountAmount: number;
+  totalDue: number;
+  receivedAmount: number;
+  remainingDue: number;
+  additionalExpenses: number;
+  internalCosts: number;
+  collaboratorCost: number;
+  gshopNet: number;
+}
+
+export interface ClientExpense {
+  id: UUID;
+  clientId: UUID;
+  propertyId?: UUID;
+  description: string;
+  amount: number;
+  createdAt: ISODate;
+  updatedAt?: ISODate;
+  createdBy?: UUID;
+  updatedBy?: UUID;
+}
+
+export interface ClientParticipant {
+  id: UUID;
+  username: string;
+  firstName: string;
+  lastName: string;
+  role: UserRole;
+  isAssigned: boolean;
+}
+
+export interface ClientFinancialOverview {
+  financials: ClientFinancialRecord;
+  summary: ClientFinancialSummary;
+  expenses: ClientExpense[];
+}
+
+export type UpdateClientFinancialsPayload = Partial<Pick<ClientFinancialRecord,
+  | 'currencyCode'
+  | 'exchangeRateToRon'
+  | 'workPrice'
+  | 'diagnosticFee'
+  | 'advancePaid'
+  | 'discountPercent'
+  | 'actualPartsCost'
+  | 'displayedPartsCost'
+  | 'displayedLaborCost'
+  | 'paymentStatus'
+>>;
+
+export interface CreateClientExpensePayload {
+  description: string;
+  amount: number;
+}
+
+export type UpdateClientExpensePayload = Partial<CreateClientExpensePayload>;
+
+export interface ClientExpenseDeleteResult {
+  deleted: boolean;
+  id?: UUID;
+}
+
+export interface UpdateClientParticipantsPayload {
+  userIds: UUID[];
+}
+
 export interface QRScanLog extends BaseEntity {
   qrId: UUID;
   clientId: UUID;

@@ -19,6 +19,13 @@ export const clientRepository: ClientRepository = {
   ensureQr: (id) => apiRequest(`/clients/${id}/qr`, { method: 'POST' }),
   markQrUsed: (id) => apiRequest(`/clients/${id}/qr/use`, { method: 'POST' }),
   recordQrShare: (id, method) => apiRequest(`/clients/${id}/qr/share`, { method: 'POST', body: JSON.stringify({ method }) }),
+  getFinancials: (id) => apiRequest(`/clients/${id}/financials`),
+  updateFinancials: (id, input) => apiRequest(`/clients/${id}/financials`, { method: 'PUT', body: JSON.stringify(input) }),
+  addExpense: (id, input) => apiRequest(`/clients/${id}/expenses`, { method: 'POST', body: JSON.stringify(input) }),
+  updateExpense: (id, expenseId, input) => apiRequest(`/clients/${id}/expenses/${expenseId}`, { method: 'PUT', body: JSON.stringify(input) }),
+  removeExpense: (id, expenseId) => apiRequest(`/clients/${id}/expenses/${expenseId}`, { method: 'DELETE' }),
+  getParticipants: (id) => apiRequest(`/clients/${id}/participants`),
+  updateParticipants: (id, userIds) => apiRequest(`/clients/${id}/participants`, { method: 'PUT', body: JSON.stringify({ userIds }) }),
 };
 export const serviceSheetRepository: ServiceSheetRepository = {
   list: (propertyId) => apiRequest(`/service-sheets?propertyId=${propertyId}`),

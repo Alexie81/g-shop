@@ -1,4 +1,4 @@
-import { AuditLog, AuthSession, Client, Collaborator, DashboardMetrics, Paginated, Permission, Property, ServiceSheet, User, UUID } from '@/types';
+import { AuditLog, AuthSession, Client, ClientExpense, ClientExpenseDeleteResult, ClientFinancialOverview, ClientParticipant, Collaborator, CreateClientExpensePayload, DashboardMetrics, Paginated, Permission, Property, ServiceSheet, UpdateClientExpensePayload, UpdateClientFinancialsPayload, User, UUID } from '@/types';
 
 export interface AuthRepository {
   login(username: string, password: string, device: string): Promise<AuthSession>;
@@ -18,6 +18,13 @@ export interface ClientRepository {
   ensureQr(id: UUID): Promise<Client>;
   markQrUsed(id: UUID): Promise<Client>;
   recordQrShare(id: UUID, method: string): Promise<void>;
+  getFinancials(id: UUID): Promise<ClientFinancialOverview>;
+  updateFinancials(id: UUID, input: UpdateClientFinancialsPayload): Promise<ClientFinancialOverview>;
+  addExpense(id: UUID, input: CreateClientExpensePayload): Promise<ClientExpense>;
+  updateExpense(id: UUID, expenseId: UUID, input: UpdateClientExpensePayload): Promise<ClientExpense>;
+  removeExpense(id: UUID, expenseId: UUID): Promise<ClientExpenseDeleteResult>;
+  getParticipants(id: UUID): Promise<ClientParticipant[]>;
+  updateParticipants(id: UUID, userIds: UUID[]): Promise<ClientParticipant[]>;
 }
 export interface ServiceSheetRepository {
   list(propertyId: UUID): Promise<Paginated<ServiceSheet>>;
