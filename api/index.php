@@ -1140,20 +1140,66 @@ try {
     if ($method==='GET'&&$path==='/audit-logs') { $user=require_permission('audit.view');$propertyId=(string)($_GET['propertyId']??'');if($propertyId)ensure_property($propertyId,$user);$where=[];$args=[];if($propertyId){$where[]='a.property_id=?';$args[]=uuid_bin($propertyId);}if(!empty($_GET['entityId'])){$where[]='a.entity_id=?';$args[]=uuid_bin((string)$_GET['entityId']);}$sql='SELECT '.uuid_sql('a.id').' id,'.uuid_sql('a.user_id').' user_id,CONCAT(u.first_name,\' \',u.last_name) user_name,'.uuid_sql('a.property_id').' property_id,a.action,a.module,a.entity_type,'.uuid_sql('a.entity_id').' entity_id,a.summary,a.before_data,a.after_data,a.ip_address,a.device,a.created_at FROM audit_logs a LEFT JOIN users u ON u.id=a.user_id'.($where?' WHERE '.implode(' AND ',$where):'').' ORDER BY a.created_at DESC LIMIT 200';$stmt=db()->prepare($sql);$stmt->execute($args);$data=[];foreach($stmt->fetchAll()as$row){$ip=$row['ip_address'];unset($row['ip_address']);$item=entity_base($row);$item['before']=$row['before_data']?json_decode($row['before_data'],true):null;$item['after']=$row['after_data']?json_decode($row['after_data'],true):null;unset($item['beforeData'],$item['afterData']);$item['ipAddress']=$ip?inet_ntop($ip):null;$item['updatedAt']=$item['createdAt'];$item['createdBy']=$item['userId']??'00000000-0000-4000-8000-000000000001';$item['updatedBy']=$item['createdBy'];$item['isActive']=true;$data[]=$item;}respond(['data'=>$data,'page'=>1,'pageSize'=>200,'total'=>count($data),'totalPages'=>1]); }
 
     if ($method==='GET'&&$path==='/reports') {
-        $user=require_permission('reports.view');$propertyId=(string)($_GET['propertyId']??'');ensure_property($propertyId,$user);$p=uuid_bin($propertyId);$pdo=db();
+        $user=require_permission('reports.view');
+        $propertyId=(string)($_GET['propertyId']??'');
+        ensure_property($propertyId,$user);
+        $p=uuid_bin($propertyId);$pdo=db();
         $scalar=function(string$sql,array$args=[])use($pdo){$s=$pdo->prepare($sql);$s->execute($args);return$s->fetchColumn();};
+
+        $period=strtoupper(trim((string)($_GET['period']??'1M')));
+        if(!in_array($period,['TODAY','7D','1M','1Y','TOTAL','CUSTOM'],true))fail('Perioada raportului este invalidă.',422);
+        $utc=new DateTimeZone('UTC');$now=new DateTimeImmutable('now',$utc);$today=$now->setTime(0,0);$bucket='DAY';
+        if($period==='TODAY'){$periodStart=$today;$periodEnd=$today->modify('+1 day');$bucket='HOUR';}
+        elseif($period==='7D'){$periodStart=$today->modify('-6 days');$periodEnd=$today->modify('+1 day');}
+        elseif($period==='1M'){$periodStart=$today->modify('-29 days');$periodEnd=$today->modify('+1 day');}
+        elseif($period==='1Y'){$periodStart=$today->modify('first day of this month')->modify('-11 months');$periodEnd=$today->modify('first day of next month');$bucket='MONTH';}
+        elseif($period==='TOTAL'){
+            $oldest=(string)($scalar('SELECT MIN(created_at) FROM clients WHERE property_id=? AND is_active=1',[$p])?:'');
+            $periodStart=$oldest!==''?new DateTimeImmutable($oldest,$utc):$today->modify('first day of this month');
+            $periodStart=$periodStart->modify('first day of january')->setTime(0,0);$periodEnd=$today->modify('first day of next year');$bucket='YEAR';
+        }else{
+            $from=trim((string)($_GET['from']??''));$to=trim((string)($_GET['to']??''));
+            $periodStart=DateTimeImmutable::createFromFormat('!Y-m-d',$from,$utc);$customEnd=DateTimeImmutable::createFromFormat('!Y-m-d',$to,$utc);
+            if(!$periodStart||!$customEnd||$customEnd<$periodStart)fail('Intervalul personalizat este invalid.',422);
+            $periodEnd=$customEnd->modify('+1 day');$days=(int)$periodStart->diff($periodEnd)->format('%a');
+            if($days>3660)fail('Intervalul personalizat poate avea maximum 10 ani.',422);
+            $bucket=$days<=31?'DAY':($days<=180?'WEEK':($days<=730?'MONTH':'YEAR'));
+        }
+
+        $generated=(int)$scalar("SELECT COUNT(*) FROM client_qr WHERE property_id=? AND is_active=1 AND status IN ('GENERATED','SENT')",[$p]);
+        $used=(int)$scalar("SELECT COUNT(*) FROM client_qr WHERE property_id=? AND is_active=1 AND status='USED'",[$p]);
+        $revenue=(float)$scalar("SELECT COALESCE(SUM(total_cost),0) FROM service_sheets WHERE property_id=? AND is_active=1 AND status<>'CANCELLED'",[$p]);
+        $costs=(float)$scalar("SELECT COALESCE(SUM(direct_costs),0) FROM service_sheets WHERE property_id=? AND is_active=1 AND status<>'CANCELLED'",[$p]);
+        $commissionTotal=(float)$scalar("SELECT COALESCE(SUM(commission_value),0) FROM commissions WHERE property_id=? AND is_active=1 AND status<>'CANCELLED'",[$p]);
+        $payments=(float)$scalar("SELECT COALESCE(SUM(commission_value),0) FROM commissions WHERE property_id=? AND is_active=1 AND status='PAID' AND paid_at IS NOT NULL",[$p]);
         $clients=(int)$scalar('SELECT COUNT(*) FROM clients WHERE property_id=? AND is_active=1',[$p]);
-        $generated=(int)$scalar("SELECT COUNT(*) FROM client_qr WHERE property_id=? AND is_active=1 AND status IN ('GENERATED','SENT')",[$p]);$used=(int)$scalar("SELECT COUNT(*) FROM client_qr WHERE property_id=? AND is_active=1 AND status='USED'",[$p]);
-        $revenue=(float)$scalar("SELECT COALESCE(SUM(total_cost),0) FROM service_sheets WHERE property_id=? AND is_active=1 AND status<>'CANCELLED'",[$p]);$costs=(float)$scalar("SELECT COALESCE(SUM(direct_costs),0) FROM service_sheets WHERE property_id=? AND is_active=1 AND status<>'CANCELLED'",[$p]);
-        $commissionTotal=(float)$scalar("SELECT COALESCE(SUM(commission_value),0) FROM commissions WHERE property_id=? AND is_active=1 AND status<>'CANCELLED'",[$p]);$payments=(float)$scalar("SELECT COALESCE(SUM(commission_value),0) FROM commissions WHERE property_id=? AND is_active=1 AND status='PAID' AND paid_at IS NOT NULL",[$p]);
         $clientsWaiting=(int)$scalar("SELECT COUNT(DISTINCT client_id) FROM service_sheets WHERE property_id=? AND is_active=1 AND status IN ('NEW','WAITING','VERIFYING','IN_PROGRESS','WAITING_PARTS')",[$p]);
         $revenueOnHold=(float)$scalar("SELECT COALESCE(SUM(total_cost),0) FROM service_sheets WHERE property_id=? AND is_active=1 AND status IN ('NEW','WAITING','VERIFYING','IN_PROGRESS','WAITING_PARTS')",[$p]);
-        $collaboratorOnHold=(float)$scalar("SELECT COALESCE(SUM(commission_value),0) FROM commissions WHERE property_id=? AND is_active=1 AND (status IN ('ESTIMATED','CALCULATED','APPROVED') OR (status='PAID' AND paid_at IS NULL))",[$p]);$collaboratorTotal=$payments+$collaboratorOnHold;$gshopNet=$revenue-$costs-$collaboratorTotal;
+        $collaboratorOnHold=(float)$scalar("SELECT COALESCE(SUM(commission_value),0) FROM commissions WHERE property_id=? AND is_active=1 AND (status IN ('ESTIMATED','CALCULATED','APPROVED') OR (status='PAID' AND paid_at IS NULL))",[$p]);
+        $collaboratorTotal=$payments+$collaboratorOnHold;$gshopNet=$revenue-$costs-$collaboratorTotal;
         $metrics=['clientsTotal'=>$clients,'totalRevenue'=>round($revenue,2),'clientsWaiting'=>$clientsWaiting,'revenueOnHold'=>round($revenueOnHold,2),'gshopNet'=>round($gshopNet,2),'collaboratorTotal'=>round($collaboratorTotal,2),'collaboratorPaid'=>round($payments,2),'collaboratorOnHold'=>round($collaboratorOnHold,2),'clientsNew'=>(int)$scalar('SELECT COUNT(*) FROM clients WHERE property_id=? AND is_active=1 AND created_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 30 DAY)',[$p]),'serviceSheetsOpen'=>(int)$scalar("SELECT COUNT(*) FROM service_sheets WHERE property_id=? AND is_active=1 AND status IN ('NEW','WAITING','VERIFYING','IN_PROGRESS','WAITING_PARTS')",[$p]),'serviceSheetsInProgress'=>(int)$scalar("SELECT COUNT(*) FROM service_sheets WHERE property_id=? AND is_active=1 AND status='IN_PROGRESS'",[$p]),'serviceSheetsCompleted'=>(int)$scalar("SELECT COUNT(*) FROM service_sheets WHERE property_id=? AND is_active=1 AND status IN ('COMPLETED','DELIVERED')",[$p]),'usersActive'=>(int)$scalar('SELECT COUNT(*) FROM user_properties up JOIN users u ON u.id=up.user_id WHERE up.property_id=? AND u.is_active=1',[$p]),'collaboratorsActive'=>(int)$scalar('SELECT COUNT(*) FROM collaborator_properties cp JOIN collaborators c ON c.id=cp.collaborator_id WHERE cp.property_id=? AND c.is_active=1',[$p]),'qrGenerated'=>$generated,'qrUsed'=>$used,'estimatedRevenue'=>$revenue,'collaboratorCommissions'=>$commissionTotal,'collaboratorPayments'=>$payments];
-        $months=[];for($i=5;$i>=0;$i--){$start=gmdate('Y-m-01 00:00:00',strtotime("-{$i} months"));$end=gmdate('Y-m-01 00:00:00',strtotime($start.' +1 month'));$months[]=['label'=>strftime('%b',strtotime($start)),'value'=>(float)$scalar("SELECT COALESCE(SUM(total_cost),0) FROM service_sheets WHERE property_id=? AND is_active=1 AND status<>'CANCELLED' AND created_at>=? AND created_at<?",[$p,$start,$end])];}
-        $stmt=$pdo->prepare('SELECT '.uuid_sql('co.id').' id,'.uuid_sql('co.collaborator_id').' collaborator_id,'.uuid_sql('co.client_id').' client_id,'.uuid_sql('co.service_sheet_id').' service_sheet_id,s.number service_sheet_number,'.uuid_sql('co.intervention_id').' intervention_id,'.uuid_sql('co.property_id').' property_id,co.total_value,co.direct_costs,co.net_value,co.type,co.rate_or_amount,co.commission_value,co.status,co.paid_at,co.is_active,co.created_at,co.updated_at,'.uuid_sql('co.created_by').' created_by,'.uuid_sql('co.updated_by').' updated_by FROM commissions co LEFT JOIN service_sheets s ON s.id=co.service_sheet_id WHERE co.property_id=? AND co.is_active=1 ORDER BY co.created_at DESC LIMIT 100');$stmt->execute([$p]);
+
+        $monthNames=[1=>'Ian',2=>'Feb',3=>'Mar',4=>'Apr',5=>'Mai',6=>'Iun',7=>'Iul',8=>'Aug',9=>'Sep',10=>'Oct',11=>'Noi',12=>'Dec'];
+        $series=[];$cursor=$periodStart;$seriesRevenue=0.0;$seriesCosts=0.0;$seriesCommission=0.0;
+        while($cursor<$periodEnd&&count($series)<80){
+            if($bucket==='HOUR')$next=$cursor->modify('+4 hours');elseif($bucket==='WEEK')$next=$cursor->modify('+7 days');elseif($bucket==='MONTH')$next=$cursor->modify('first day of next month');elseif($bucket==='YEAR')$next=$cursor->modify('first day of january next year');else$next=$cursor->modify('+1 day');
+            if($next>$periodEnd)$next=$periodEnd;
+            $startSql=$cursor->format('Y-m-d H:i:s');$endSql=$next->format('Y-m-d H:i:s');$args=[$p,$startSql,$endSql];
+            $bucketRevenue=(float)$scalar("SELECT COALESCE(SUM(total_cost),0) FROM service_sheets WHERE property_id=? AND is_active=1 AND status<>'CANCELLED' AND created_at>=? AND created_at<?",$args);
+            $bucketCosts=(float)$scalar("SELECT COALESCE(SUM(direct_costs),0) FROM service_sheets WHERE property_id=? AND is_active=1 AND status<>'CANCELLED' AND created_at>=? AND created_at<?",$args);
+            $bucketCommission=(float)$scalar("SELECT COALESCE(SUM(commission_value),0) FROM commissions WHERE property_id=? AND is_active=1 AND status<>'CANCELLED' AND created_at>=? AND created_at<?",$args);
+            $bucketClients=(int)$scalar('SELECT COUNT(*) FROM clients WHERE property_id=? AND is_active=1 AND created_at>=? AND created_at<?',$args);
+            $label=$bucket==='HOUR'?$cursor->format('H:i'):($bucket==='MONTH'?$monthNames[(int)$cursor->format('n')].' '.$cursor->format('y'):($bucket==='YEAR'?$cursor->format('Y'):$cursor->format('d').' '.$monthNames[(int)$cursor->format('n')]));
+            $series[]=['label'=>$label,'revenue'=>round($bucketRevenue,2),'costs'=>round($bucketCosts,2),'net'=>round($bucketRevenue-$bucketCosts-$bucketCommission,2),'clients'=>$bucketClients];
+            $seriesRevenue+=$bucketRevenue;$seriesCosts+=$bucketCosts;$seriesCommission+=$bucketCommission;$cursor=$next;
+        }
+
+        $startSql=$periodStart->format('Y-m-d H:i:s');$endSql=$periodEnd->format('Y-m-d H:i:s');
+        $stmt=$pdo->prepare('SELECT '.uuid_sql('co.id').' id,'.uuid_sql('co.collaborator_id').' collaborator_id,'.uuid_sql('co.client_id').' client_id,'.uuid_sql('co.service_sheet_id').' service_sheet_id,s.number service_sheet_number,'.uuid_sql('co.intervention_id').' intervention_id,'.uuid_sql('co.property_id').' property_id,co.total_value,co.direct_costs,co.net_value,co.type,co.rate_or_amount,co.commission_value,co.status,co.paid_at,co.is_active,co.created_at,co.updated_at,'.uuid_sql('co.created_by').' created_by,'.uuid_sql('co.updated_by').' updated_by FROM commissions co LEFT JOIN service_sheets s ON s.id=co.service_sheet_id WHERE co.property_id=? AND co.is_active=1 AND co.created_at>=? AND co.created_at<? ORDER BY co.created_at DESC LIMIT 100');
+        $stmt->execute([$p,$startSql,$endSql]);
         $commissions=array_map(function($row){$item=entity_base($row);foreach(['totalValue','directCosts','netValue','rateOrAmount','commissionValue']as$key)$item[$key]=(float)$item[$key];return$item;},$stmt->fetchAll());
-        respond(['metrics'=>$metrics,'commissions'=>$commissions,'revenueByMonth'=>$months,'totalCosts'=>$costs,'netProfit'=>max(0,$revenue-$costs-$commissionTotal)]);
+        $revenueByMonth=array_map(fn($item)=>['label'=>$item['label'],'value'=>$item['revenue']],$series);
+        respond(['metrics'=>$metrics,'commissions'=>$commissions,'revenueByMonth'=>$revenueByMonth,'series'=>$series,'period'=>['key'=>$period,'from'=>$periodStart->format('Y-m-d'),'to'=>$periodEnd->modify('-1 second')->format('Y-m-d')],'totalCosts'=>round($seriesCosts,2),'netProfit'=>round($seriesRevenue-$seriesCosts-$seriesCommission,2)]);
     }
 
     fail('Endpoint inexistent.', 404);

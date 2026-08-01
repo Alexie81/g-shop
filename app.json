@@ -63,7 +63,8 @@
           "configureAndroidBackup": true,
           "faceIDPermission": "Permite G-Shop să securizeze sesiunea cu Face ID."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true
