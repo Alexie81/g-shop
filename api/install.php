@@ -50,10 +50,8 @@ try {
         foreach ($clients as $index => $row) {
             $clientId = uuid_v4();
             $insertClient->execute([uuid_bin($clientId), uuid_bin($serviceId), $row[0], $row[1], $row[2], $row[3], $row[4], $row[5], $row[6], $now, $now, uuid_bin($adminId), uuid_bin($adminId)]);
-            if ($index !== 1) {
-                $used = $index === 3;
-                $insertQr->execute([uuid_bin(uuid_v4()), uuid_bin($clientId), uuid_bin($serviceId), uuid_bin(uuid_v4()), $used ? 'USED' : 'GENERATED', $now, $used ? $now : null, uuid_bin($adminId), $now, $now, uuid_bin($adminId), uuid_bin($adminId)]);
-            }
+            $used = $index === 3;
+            $insertQr->execute([uuid_bin(uuid_v4()), uuid_bin($clientId), uuid_bin($serviceId), uuid_bin(uuid_v4()), $used ? 'USED' : 'GENERATED', $now, $used ? $now : null, uuid_bin($adminId), $now, $now, uuid_bin($adminId), uuid_bin($adminId)]);
         }
     }
     $pdo->commit();

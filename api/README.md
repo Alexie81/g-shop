@@ -49,15 +49,17 @@ ORDER BY data_length + index_length DESC;
 ### Clienți și QR
 
 - `GET /clients?propertyId={uuid}&query=&qrStatus=`
-- `POST /clients`
+- `POST /clients` — creează atomic clientul și codul său QR permanent; răspunsul include direct obiectul `qr` cu status `GENERATED`
 - `GET /clients/{id}`
 - `PUT /clients/{id}`
 - `GET /clients/{id}/intake`
-- `POST /clients/{id}/qr`
+- `POST /clients/{id}/qr` — endpoint compatibil și idempotent: returnează QR-ul existent fără să-i schimbe tokenul; creează unul doar pentru un client legacy care nu are QR
 - `POST /clients/{id}/qr/share`
 - `POST /clients/{id}/qr/use`
 - `POST /qr/resolve`
 - `GET|POST /public/client-form/{token}`
+
+Codurile QR sunt generate exclusiv de API și salvate în MySQL, în aceeași tranzacție cu clientul. Un cod nou nu expiră (`expiresAt: null`) și nu poate fi regenerat sau înlocuit. Valorile istorice din `expires_at` și statusurile vechi rămân în schemă pentru compatibilitatea datelor existente, însă orice QR activ este tratat ca permanent. Cererile repetate către endpointul de generare nu adaugă rânduri și nu produc evenimente de audit false. Formularul public poate fi trimis o singură dată (`409` la repetare), dar același QR rămâne permanent valid pentru scanare. Operațiile autentificate verifică întotdeauna că QR-ul aparține unei proprietăți accesibile utilizatorului.
 
 ### Service
 
