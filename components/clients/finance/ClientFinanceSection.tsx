@@ -123,7 +123,7 @@ export function ClientFinanceSection({
 
   return <View style={[styles.root, mobile && styles.rootMobile]}>
     <Card style={[styles.hero, mobile && styles.cardMobile, { backgroundColor: isDark ? colors.surfaceElevated : '#F8FBFF' }]} elevated>
-      <View style={styles.heroHeader}>
+      <View style={[styles.heroHeader, mobile && styles.heroHeaderMobile]}>
         <View style={[styles.heroIdentity, mobile && styles.heroIdentityMobile]}>
           <View style={[styles.heroIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="wallet-outline" size={25} color={colors.primary} /></View>
           <View style={styles.headerCopy}>
@@ -131,7 +131,7 @@ export function ClientFinanceSection({
             <AppText variant="caption" muted>Valori, încasări și profitabilitate, într-un singur loc</AppText>
           </View>
         </View>
-        <PaymentStatus value={normalizedValue.paymentStatus} disabled={disabled} onChange={(next) => update('paymentStatus', next)} />
+        <PaymentStatus mobile={mobile} value={normalizedValue.paymentStatus} disabled={disabled} onChange={(next) => update('paymentStatus', next)} />
       </View>
       <View style={[styles.metrics, mobile && styles.compactGap]}>
         <FinanceMetric mobile={mobile} icon="receipt-outline" label="Total" value={money(calculations.totalDue)} helper={ronEquivalent(calculations.totalDue)} color={colors.primary} />
@@ -233,13 +233,13 @@ export function ClientFinanceSection({
   </View>;
 }
 
-function PaymentStatus({ value, disabled, onChange }: { value: 'UNPAID' | 'PAID'; disabled: boolean; onChange: (value: 'UNPAID' | 'PAID') => void }) {
+function PaymentStatus({ value, disabled, onChange, mobile }: { value: 'UNPAID' | 'PAID'; disabled: boolean; onChange: (value: 'UNPAID' | 'PAID') => void; mobile: boolean }) {
   const { colors } = useAppTheme();
-  return <View style={[styles.statusControl, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
+  return <View style={[styles.statusControl, mobile && styles.statusControlMobile, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
     {(['UNPAID', 'PAID'] as const).map((status) => {
       const active = value === status;
       const tone = status === 'PAID' ? palette.success : palette.warning;
-      return <Pressable key={status} disabled={disabled} onPress={() => onChange(status)} style={[styles.statusOption, active && { backgroundColor: tone }]}>
+      return <Pressable key={status} disabled={disabled} onPress={() => onChange(status)} style={[styles.statusOption, mobile && styles.statusOptionMobile, active && { backgroundColor: tone }]}>
         <Ionicons name={status === 'PAID' ? 'checkmark-circle-outline' : 'time-outline'} size={16} color={active ? '#fff' : colors.textMuted} />
         <AppText variant="caption" style={{ color: active ? '#fff' : colors.textMuted, fontWeight: '800' }}>{status === 'PAID' ? 'Achitat' : 'Neachitat'}</AppText>
       </Pressable>;
@@ -277,8 +277,9 @@ const styles = StyleSheet.create({
   hero: { gap: spacing.xl, overflow: 'hidden' },
   cardMobile: { padding: spacing.md, gap: spacing.md },
   heroHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.md },
+  heroHeaderMobile: { width: '100%', flexDirection: 'column', alignItems: 'stretch', flexWrap: 'nowrap' },
   heroIdentity: { flex: 1, flexBasis: 220, minWidth: 220, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  heroIdentityMobile: { minWidth: 0, flexBasis: 'auto' },
+  heroIdentityMobile: { width: '100%', minWidth: 0, flexBasis: 'auto', flexGrow: 0, flexShrink: 1 },
   heroIcon: { width: 50, height: 50, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   headerCopy: { flex: 1, minWidth: 0 },
   metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
@@ -286,7 +287,9 @@ const styles = StyleSheet.create({
   metricMobile: { flexBasis: '46%', minWidth: 0, flexShrink: 1 },
   metricIcon: { width: 34, height: 34, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.xs },
   statusControl: { flexDirection: 'row', padding: 4, borderRadius: radius.pill, borderWidth: 1 },
+  statusControlMobile: { width: '100%', alignSelf: 'stretch' },
   statusOption: { minHeight: 34, borderRadius: radius.pill, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  statusOptionMobile: { flex: 1, justifyContent: 'center', minWidth: 0 },
   columns: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg },
   columnsMobile: { width: '100%', flexDirection: 'column', flexWrap: 'nowrap', gap: spacing.md },
   formCard: { minWidth: 0, gap: spacing.lg },
