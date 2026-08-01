@@ -11,11 +11,19 @@ const options: { value: ThemePreference; label: string; icon: keyof typeof Ionic
   { value: 'system', label: 'Sistem', icon: 'phone-portrait-outline' },
 ];
 
-export function ThemeToggle({ compact = false }: { compact?: boolean }) {
+export function ThemeToggle({ compact = false, dense = false }: { compact?: boolean; dense?: boolean }) {
   const { preference, setPreference, colors } = useAppTheme();
-  return <View style={[styles.container, compact && styles.compactContainer, { backgroundColor: colors.surfaceMuted }]}>{options.map((option) => {
+  return <View style={[styles.container, compact && styles.compactContainer, dense && styles.denseContainer, { backgroundColor: colors.surfaceMuted }]}>{options.map((option) => {
     const active = option.value === preference;
-    return <Pressable key={option.value} accessibilityRole="button" onPress={() => void setPreference(option.value)} style={[styles.option, compact && styles.compactOption, active && { backgroundColor: colors.surface, shadowColor: colors.shadow }]}><Ionicons name={option.icon} size={compact ? 16 : 18} color={active ? colors.primary : colors.textMuted} />{compact ? null : <AppText variant="caption" style={{ color: active ? colors.primary : colors.textMuted, fontWeight: '800' }}>{option.label}</AppText>}</Pressable>;
+    return <Pressable
+      key={option.value}
+      accessibilityRole="button"
+      accessibilityLabel={`Temă ${option.label}`}
+      accessibilityState={{ selected: active }}
+      hitSlop={dense ? 5 : undefined}
+      onPress={() => void setPreference(option.value)}
+      style={[styles.option, compact && styles.compactOption, dense && styles.denseOption, active && { backgroundColor: colors.surface, shadowColor: colors.shadow }]}
+    ><Ionicons name={option.icon} size={dense ? 15 : compact ? 16 : 18} color={active ? colors.primary : colors.textMuted} />{compact ? null : <AppText variant="caption" style={{ color: active ? colors.primary : colors.textMuted, fontWeight: '800' }}>{option.label}</AppText>}</Pressable>;
   })}</View>;
 }
 
@@ -23,4 +31,6 @@ const styles = StyleSheet.create({
   container: { padding: 4, borderRadius: radius.pill, flexDirection: 'row', alignSelf: 'center' },
   option: { minHeight: 38, minWidth: 82, borderRadius: radius.pill, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
   compactContainer: { padding: 3 }, compactOption: { minWidth: 38, minHeight: 34, paddingHorizontal: 8 },
+  denseContainer: { padding: 2 },
+  denseOption: { minWidth: 31, minHeight: 32, paddingHorizontal: 5 },
 });
