@@ -6,9 +6,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { ComponentProps } from 'react';
 import { Platform, Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 
-export function StatCard({ label, value, icon, color, helper, helperIcon = 'trending-up', onLongPress, style }: { label: string; value: string | number; icon: ComponentProps<typeof Ionicons>['name']; color: string; helper?: string; helperIcon?: ComponentProps<typeof Ionicons>['name']; onLongPress?: () => void; style?: StyleProp<ViewStyle> }) {
+export function StatCard({ label, value, icon, color, helper, helperIcon = 'trending-up', detail, onLongPress, style }: { label: string; value: string | number; icon: ComponentProps<typeof Ionicons>['name']; color: string; helper?: string; helperIcon?: ComponentProps<typeof Ionicons>['name']; detail?: string; onLongPress?: () => void; style?: StyleProp<ViewStyle> }) {
   const { colors, isDark } = useAppTheme();
-  const card = <Card elevated style={[styles.card, { borderColor: isDark ? `${color}38` : colors.border }, onLongPress ? styles.pressableCard : style]}>
+  const card = <Card elevated style={[styles.card, { borderColor: isDark ? `${color}38` : colors.border }, onLongPress ? styles.pressableCard : null, style]}>
     <View pointerEvents="none" style={[styles.glow, { backgroundColor: isDark ? `${color}12` : `${color}0D` }]} />
     <View style={styles.topRow}>
       <View style={[styles.icon, { backgroundColor: isDark ? `${color}26` : `${color}14` }]}><Ionicons name={icon} size={21} color={color} /></View>
@@ -17,6 +17,7 @@ export function StatCard({ label, value, icon, color, helper, helperIcon = 'tren
     <View style={styles.valueWrap}>
       <AppText variant="title" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={styles.value}>{value}</AppText>
       <AppText variant="caption" muted numberOfLines={2}>{label}</AppText>
+      {detail ? <AppText variant="caption" numberOfLines={2} style={[styles.detail, { color }]}>{detail}</AppText> : null}
     </View>
     <View style={[styles.accent, { backgroundColor: color }]} />
   </Card>;
@@ -34,5 +35,6 @@ const styles = StyleSheet.create({
   statusDot: { width: 7, height: 7, borderRadius: 4, marginTop: 5, opacity: 0.72 },
   valueWrap: { gap: 2, paddingTop: spacing.md },
   value: { fontSize: 25, lineHeight: 30, fontWeight: '900', letterSpacing: -0.6 },
+  detail: { paddingTop: 3, fontSize: 11, lineHeight: 15, fontWeight: '800' },
   accent: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: 0, height: 2, borderRadius: radius.pill, opacity: 0.72 },
 });

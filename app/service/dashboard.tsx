@@ -51,12 +51,22 @@ export default function DashboardScreen() {
     <View style={[styles.section, styles.firstSection]}>
       <DashboardSectionTitle title="Privire de ansamblu" subtitle="Indicatorii esențiali ai proprietății" icon="grid-outline" />
       <View style={styles.stats}>
-        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Clienți" value={metrics.clientsTotal} icon="people-outline" color={palette.electric} helper={`+${metrics.clientsNew} noi`} />
-        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Fișe deschise" value={metrics.serviceSheetsOpen} icon="document-text-outline" color={palette.purple} />
-        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Fișe în lucru" value={metrics.serviceSheetsInProgress} icon="build-outline" color={palette.warning} />
-        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Fișe finalizate" value={metrics.serviceSheetsCompleted} icon="checkmark-done-outline" color={palette.success} />
-        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Plătit colaboratorilor" value={formatCurrency(metrics.collaboratorPayments ?? 0)} icon="cash-outline" color={palette.cyan} helper="Ține apăsat" helperIcon="finger-print-outline" onLongPress={() => setFinanceOpen(true)} />
-        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Venit estimat" value={formatCurrency(metrics.estimatedRevenue)} icon="wallet-outline" color={palette.success} />
+        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Total clienți" value={metrics.clientsTotal} icon="people-outline" color={palette.electric} helper={`+${metrics.clientsNew} noi`} />
+        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Venituri totale" value={formatCurrency(metrics.totalRevenue)} icon="cash-outline" color={palette.success} />
+        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Clienți în așteptare" value={metrics.clientsWaiting} icon="time-outline" color={palette.warning} />
+        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Venituri on hold" value={formatCurrency(metrics.revenueOnHold)} icon="hourglass-outline" color={palette.warning} />
+        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="G-Shop Net" value={formatCurrency(metrics.gshopNet)} icon="wallet-outline" color={palette.purple} />
+        <StatCard
+          style={{ flexGrow: 1, flexBasis: statCardBasis }}
+          label="Total colaboratori"
+          value={formatCurrency(metrics.collaboratorTotal)}
+          icon="people-circle-outline"
+          color={palette.cyan}
+          helper="Ține apăsat"
+          helperIcon="finger-print-outline"
+          detail={`${formatCurrency(metrics.collaboratorPaid)} încasat / ${formatCurrency(metrics.collaboratorOnHold)} on hold`}
+          onLongPress={() => setFinanceOpen(true)}
+        />
       </View>
     </View>
     <View style={styles.section}>
