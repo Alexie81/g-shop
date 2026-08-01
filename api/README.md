@@ -64,9 +64,17 @@ ORDER BY data_length + index_length DESC;
 - `GET|POST /service-sheets`
 - `GET|PUT /service-sheets/{id}`
 - `POST /service-sheets/{id}/signature`
-- `GET|POST /collaborators`
+- `GET /collaborators?propertyId={uuid}`
+- `GET /collaborators/{id}?propertyId={uuid}`
+- `POST /collaborators`
+- `PUT /collaborators/{id}`
+- `DELETE /collaborators/{id}?propertyId={uuid}`
 - `GET /collaborator-finances?propertyId={uuid}` — totaluri achitate/de achitat, grupate pe colaborator și client
 - `PUT /commissions/client-status` — marchează comisioanele unui client ca achitate sau de achitat; body: `{ "propertyId": "uuid", "collaboratorId": "uuid", "clientId": "uuid", "paid": true|false }`
+
+`POST /collaborators` primește datele colaboratorului și `propertyIds`, validează regula implicită de comision și returnează obiectul complet creat. `PUT /collaborators/{id}` primește obligatoriu `propertyId` în body, plus câmpurile care trebuie modificate. Modificarea regulii implicite se aplică atribuirilor viitoare și nu rescrie comisioanele istorice.
+
+`DELETE /collaborators/{id}` este o ștergere logică sigură: colaboratorul dispare din lista activă, iar datele, legăturile și istoricul financiar rămân în baza de date. Cererea este refuzată cu `409` dacă există clienți activi atribuiți sau comisioane neachitate. Pentru un colaborator legat de mai multe proprietăți, utilizatorul trebuie să aibă acces la toate proprietățile înainte de ștergerea globală.
 
 ### Administrare
 
