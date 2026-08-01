@@ -1,17 +1,17 @@
 import { CurrencyPickerModal } from '@/components/clients/finance/CurrencyPickerModal';
 import { ExpenseEditorModal, ExpenseInput } from '@/components/clients/finance/ExpenseEditorModal';
 import { FinanceNumberField } from '@/components/clients/finance/FinanceNumberField';
+import { ClientAuditHistory } from '@/components/clients/ClientAuditHistory';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { DEFAULT_CURRENCY_CODE, findCurrency } from '@/constants/currencies';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { palette, radius, spacing } from '@/theme/tokens';
-import { CommissionType } from '@/types';
+import { AuditLog, CommissionType } from '@/types';
 import {
   calculateClientFinance,
   ClientFinanceExpense,
-  ClientFinanceHistoryItem,
   ClientFinanceParticipant,
   ClientFinanceValue,
   formatFinanceMoney,
@@ -29,7 +29,7 @@ export type ClientFinanceSectionProps = {
   commissionType?: CommissionType;
   commissionValue?: number;
   participants?: readonly ClientFinanceParticipant[];
-  history?: readonly ClientFinanceHistoryItem[];
+  history?: readonly AuditLog[];
   isAdmin: boolean;
   disabled?: boolean;
   saving?: boolean;
@@ -282,10 +282,7 @@ export function ClientFinanceSection({
       </Card>
       <Card style={styles.formCard}>
         <SectionTitle icon="time-outline" color={palette.purple} title="Istoric financiar" subtitle="Modificări asociate utilizatorilor și momentului exact" />
-        {historyLoading ? <LoadingRows /> : history?.length ? <View style={styles.history}>{history.map((item, index) => <View key={item.id} style={styles.historyRow}>
-          <View style={styles.timelineRail}><View style={[styles.timelineDot, { backgroundColor: colors.primary }]} />{index < history.length - 1 ? <View style={[styles.timelineLine, { backgroundColor: colors.border }]} /> : null}</View>
-          <View style={styles.historyCopy}><AppText variant="label">{item.summary}</AppText><AppText variant="caption" muted>{item.userName || 'Sistem'} · {formatDate(item.createdAt, true)}</AppText></View>
-        </View>)}</View> : <EmptyBlock icon="time-outline" title="Nicio modificare financiară" description="Salvările și acțiunile vor fi înregistrate automat în istoricul clientului." />}
+        {historyLoading ? <LoadingRows /> : <ClientAuditHistory items={history ?? []} compact limit={30} />}
       </Card>
     </View> : null}
 
@@ -377,12 +374,6 @@ const styles = StyleSheet.create({
   participantGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   participant: { flex: 1, flexBasis: 260, minWidth: 240, borderWidth: 1, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   participantAvatar: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
-  history: { gap: 0 },
-  historyRow: { flexDirection: 'row', gap: spacing.md },
-  timelineRail: { width: 18, alignItems: 'center' },
-  timelineDot: { width: 10, height: 10, borderRadius: 5, marginTop: 5 },
-  timelineLine: { flex: 1, width: 2, marginVertical: 4 },
-  historyCopy: { flex: 1, gap: spacing.xs, paddingBottom: spacing.lg },
   loadingRows: { gap: spacing.sm },
   loadingRow: { height: 64, borderRadius: radius.md, opacity: 0.65 },
 });
