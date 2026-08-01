@@ -3,7 +3,7 @@ import { Input } from '@/components/ui/Input';
 import { spacing } from '@/theme/tokens';
 import { parseFinanceNumber } from '@/utils/client-finance';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 
 type FinanceNumberFieldProps = {
   label: string;
@@ -14,6 +14,7 @@ type FinanceNumberFieldProps = {
   disabled?: boolean;
   percentage?: boolean;
   testID?: string;
+  style?: StyleProp<ViewStyle>;
 };
 
 function displayValue(value: number) {
@@ -21,7 +22,7 @@ function displayValue(value: number) {
   return String(value).replace('.', ',');
 }
 
-export function FinanceNumberField({ label, value, onChange, helper, error, disabled, percentage, testID }: FinanceNumberFieldProps) {
+export function FinanceNumberField({ label, value, onChange, helper, error, disabled, percentage, testID, style }: FinanceNumberFieldProps) {
   const [draft, setDraft] = useState(() => displayValue(value));
   const [focused, setFocused] = useState(false);
 
@@ -29,7 +30,7 @@ export function FinanceNumberField({ label, value, onChange, helper, error, disa
     if (!focused) setDraft(displayValue(value));
   }, [focused, value]);
 
-  return <View style={styles.wrapper}>
+  return <View style={[styles.wrapper, style]}>
     <Input
       testID={testID}
       label={label}
@@ -57,6 +58,6 @@ export function FinanceNumberField({ label, value, onChange, helper, error, disa
 }
 
 const styles = StyleSheet.create({
-  wrapper: { flex: 1, minWidth: 210, gap: spacing.xs },
+  wrapper: { minWidth: 0, gap: spacing.xs },
   helper: { paddingHorizontal: spacing.xs },
 });

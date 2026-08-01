@@ -160,10 +160,12 @@ export function ClientFinanceSection({
   return <View style={styles.root}>
     <Card style={[styles.hero, { backgroundColor: isDark ? colors.surfaceElevated : '#F8FBFF' }]} elevated>
       <View style={styles.heroHeader}>
-        <View style={[styles.heroIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="wallet-outline" size={25} color={colors.primary} /></View>
-        <View style={styles.headerCopy}>
-          <AppText variant="title">Finanțele clientului</AppText>
-          <AppText variant="caption" muted>Valori, încasări și profitabilitate, într-un singur loc</AppText>
+        <View style={styles.heroIdentity}>
+          <View style={[styles.heroIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="wallet-outline" size={25} color={colors.primary} /></View>
+          <View style={styles.headerCopy}>
+            <AppText variant="title">Finanțele clientului</AppText>
+            <AppText variant="caption" muted>Valori, încasări și profitabilitate, într-un singur loc</AppText>
+          </View>
         </View>
         <PaymentStatus value={normalizedValue.paymentStatus} disabled={disabled} onChange={(next) => update('paymentStatus', next)} />
       </View>
@@ -198,10 +200,10 @@ export function ClientFinanceSection({
           disabled={disabled}
         /> : null}
         <View style={styles.fieldGrid}>
-          <FinanceNumberField label={`Preț lucrare (${currency.code})`} value={normalizedValue.workPrice} onChange={(next) => update('workPrice', next)} disabled={disabled} helper="Valoarea principală a lucrării" />
-          <FinanceNumberField label={`Diagnosticare (${currency.code})`} value={normalizedValue.diagnosticFee} onChange={(next) => update('diagnosticFee', next)} disabled={disabled} />
-          <FinanceNumberField label={`Avans încasat (${currency.code})`} value={normalizedValue.advancePaid} onChange={(next) => update('advancePaid', next)} disabled={disabled} helper={normalizedValue.paymentStatus === 'PAID' ? 'Statusul Achitat marchează întregul total ca încasat' : undefined} />
-          <FinanceNumberField label="Reducere" value={normalizedValue.discountPercent} onChange={(next) => update('discountPercent', next)} disabled={disabled} percentage error={discountInvalid ? 'Reducerea trebuie să fie între 0 și 100%.' : undefined} />
+          <FinanceNumberField style={styles.gridField} label={`Preț lucrare (${currency.code})`} value={normalizedValue.workPrice} onChange={(next) => update('workPrice', next)} disabled={disabled} helper="Valoarea principală a lucrării" />
+          <FinanceNumberField style={styles.gridField} label={`Diagnosticare (${currency.code})`} value={normalizedValue.diagnosticFee} onChange={(next) => update('diagnosticFee', next)} disabled={disabled} />
+          <FinanceNumberField style={styles.gridField} label={`Avans încasat (${currency.code})`} value={normalizedValue.advancePaid} onChange={(next) => update('advancePaid', next)} disabled={disabled} helper={normalizedValue.paymentStatus === 'PAID' ? 'Statusul Achitat marchează întregul total ca încasat' : undefined} />
+          <FinanceNumberField style={styles.gridField} label="Reducere" value={normalizedValue.discountPercent} onChange={(next) => update('discountPercent', next)} disabled={disabled} percentage error={discountInvalid ? 'Reducerea trebuie să fie între 0 și 100%.' : undefined} />
         </View>
         <View style={[styles.calculationStrip, { backgroundColor: colors.surfaceMuted }]}>
           <CalculationLine label="Subtotal" value={money(calculations.subtotal)} />
@@ -219,8 +221,8 @@ export function ClientFinanceSection({
           <AppText variant="caption" muted>Informativă: nu se adună din nou la total.</AppText>
         </View>
         <View style={styles.fieldGrid}>
-          <FinanceNumberField label={`Piese afișate (${currency.code})`} value={normalizedValue.displayedPartsCost} onChange={(next) => update('displayedPartsCost', next)} disabled={disabled} />
-          <FinanceNumberField label={`Manoperă afișată (${currency.code})`} value={normalizedValue.displayedLaborCost} onChange={(next) => update('displayedLaborCost', next)} disabled={disabled} />
+          <FinanceNumberField style={styles.gridField} label={`Piese afișate (${currency.code})`} value={normalizedValue.displayedPartsCost} onChange={(next) => update('displayedPartsCost', next)} disabled={disabled} />
+          <FinanceNumberField style={styles.gridField} label={`Manoperă afișată (${currency.code})`} value={normalizedValue.displayedLaborCost} onChange={(next) => update('displayedLaborCost', next)} disabled={disabled} />
         </View>
         {breakdownDiffers ? <View style={[styles.notice, { backgroundColor: `${palette.warning}13`, borderColor: `${palette.warning}50` }]}>
           <Ionicons name="information-circle-outline" size={20} color={palette.warning} />
@@ -337,11 +339,12 @@ function LoadingRows() {
 const styles = StyleSheet.create({
   root: { gap: spacing.lg },
   hero: { gap: spacing.xl, overflow: 'hidden' },
-  heroHeader: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.md },
+  heroHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.md },
+  heroIdentity: { flex: 1, flexBasis: 220, minWidth: 220, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   heroIcon: { width: 50, height: 50, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   headerCopy: { flex: 1, minWidth: 0 },
   metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  metric: { flexGrow: 1, flexBasis: 150, minWidth: 145, borderWidth: 1, borderRadius: radius.md, padding: spacing.md, gap: spacing.xs },
+  metric: { flexGrow: 1, flexBasis: 130, minWidth: 128, borderWidth: 1, borderRadius: radius.md, padding: spacing.md, gap: spacing.xs },
   metricIcon: { width: 34, height: 34, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.xs },
   statusControl: { flexDirection: 'row', padding: 4, borderRadius: radius.pill, borderWidth: 1 },
   statusOption: { minHeight: 34, borderRadius: radius.pill, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: 5 },
@@ -353,6 +356,7 @@ const styles = StyleSheet.create({
   currencyButton: { minHeight: 62, borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   currencyCode: { width: 58, height: 42, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   fieldGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  gridField: { flexGrow: 1, flexBasis: 210, minWidth: 210 },
   calculationStrip: { borderRadius: radius.md, padding: spacing.md, gap: spacing.sm },
   calculationLine: { minHeight: 24, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md },
   divider: { height: StyleSheet.hairlineWidth },
