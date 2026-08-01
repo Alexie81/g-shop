@@ -1,0 +1,8 @@
+import { RouteLoader } from '@/components/layout/RouteLoader';
+import { useAuth } from '@/contexts/AuthContext';
+import { useProperty } from '@/contexts/PropertyContext';
+import { useAppTheme } from '@/contexts/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
+import { Redirect, Tabs } from 'expo-router';
+const icons: Record<string, keyof typeof Ionicons.glyphMap> = { home: 'home-outline', products: 'cube-outline', orders: 'cart-outline', stocks: 'layers-outline', more: 'grid-outline' };
+export default function ShopLayout() { const { user, ready } = useAuth(); const { activeProperty, loading } = useProperty(); const { colors } = useAppTheme(); if (!ready || loading) return <RouteLoader />; if (!user) return <Redirect href="/(auth)/login" />; if (!activeProperty) return <Redirect href="/select-property" />; if (activeProperty.type !== 'SHOP') return <Redirect href="/service/dashboard" />; return <Tabs screenOptions={({ route }) => ({ headerShown: false, tabBarActiveTintColor: colors.primary, tabBarInactiveTintColor: colors.textMuted, tabBarStyle: { backgroundColor: colors.tabBar, borderTopColor: colors.border, height: 70, paddingTop: 6, paddingBottom: 8 }, tabBarLabelStyle: { fontSize: 10.5, fontWeight: '700' }, tabBarIcon: ({ color, size }) => <Ionicons name={icons[route.name]} size={size} color={color} /> })}><Tabs.Screen name="home" options={{ title: 'Acasă' }} /><Tabs.Screen name="products" options={{ title: 'Produse' }} /><Tabs.Screen name="orders" options={{ title: 'Comenzi' }} /><Tabs.Screen name="stocks" options={{ title: 'Stocuri' }} /><Tabs.Screen name="more" options={{ title: 'Mai mult' }} /></Tabs>; }
