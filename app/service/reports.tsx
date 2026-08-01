@@ -99,9 +99,11 @@ export default function ReportsScreen() {
   if (state.error || !state.data) return <Screen header={<AppHeader title="Rapoarte" back onBack={returnToMore} />}><ErrorState message={state.error?.message ?? 'Rapoarte indisponibile.'} onRetry={() => void state.reload()} /></Screen>;
 
   const report = state.data;
+  const series = report.series ?? (report.revenueByMonth ?? []).map((item) => ({ label: item.label, revenue: item.value, costs: 0, net: item.value, clients: 0 }));
+  const periodRange = report.period ?? { from: '—', to: '—' };
   const cardBasis = mobile ? '47%' : '30%';
-  const seriesRevenue = report.series.reduce((sum, item) => sum + item.revenue, 0);
-  const seriesClients = report.series.reduce((sum, item) => sum + item.clients, 0);
+  const seriesRevenue = series.reduce((sum, item) => sum + item.revenue, 0);
+  const seriesClients = series.reduce((sum, item) => sum + item.clients, 0);
 
   return <Screen header={<AppHeader title="Rapoarte" back onBack={returnToMore} />} scroll={false} bottomInset={false} style={styles.screen}>
     <View style={styles.reportRoot}>
@@ -170,14 +172,14 @@ export default function ReportsScreen() {
           </View>
 
           <Card style={styles.panel}>
-            <SectionTitle compact icon="pulse-outline" title="Evoluție financiară" description={`${report.period.from} – ${report.period.to}`} />
-            <TrendChart data={report.series} />
+            <SectionTitle compact icon="pulse-outline" title="Evoluție financiară" description={`${periodRange.from} – ${periodRange.to}`} />
+            <TrendChart data={series} />
           </Card>
 
           <View style={[styles.columns, mobile && styles.columnsMobile]}>
             <Card style={[styles.panel, !mobile && styles.halfPanel]}>
               <SectionTitle compact icon="people-outline" title="Clienți noi" description="Distribuția în intervalul ales" />
-              <ActivityBars data={report.series} />
+              <ActivityBars data={series} />
             </Card>
             <Card style={[styles.panel, !mobile && styles.halfPanel]}>
               <SectionTitle compact icon="qr-code-outline" title="Activitate QR" description="Situația actuală a codurilor" />
