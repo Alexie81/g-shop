@@ -12,6 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useProperty } from '@/contexts/PropertyContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { dashboardRepository, serviceSheetRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { formatCurrency, formatDate } from '@/utils/format';
@@ -33,6 +34,10 @@ export default function DashboardScreen() {
   const statCardBasis = statColumns === 3 ? 170 : 150;
   const actionCardBasis = actionColumns === 4 ? 145 : 150;
   const state = useAsyncData(async () => { const [metrics, sheets] = await Promise.all([dashboardRepository.get(propertyId), serviceSheetRepository.list(propertyId)]); return { metrics, sheets: sheets.data.slice(0, 3) }; }, [propertyId]);
+  useRefreshOnFocus(() => {
+    setLocalHour(new Date().getHours());
+    return state.reload(true);
+  }, state.loading || state.refreshing);
   useEffect(() => {
     const updateLocalHour = () => setLocalHour(new Date().getHours());
     const timer = setInterval(updateLocalHour, 60_000);

@@ -9,14 +9,19 @@ import { useToast } from '@/contexts/ToastContext';
 import { apiRequest } from '@/services/api';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 const actions = [{ value: 'OPEN_PROFILE', label: 'Deschide profil' }, { value: 'CHECK_IN', label: 'Check-in' }, { value: 'DROP_OFF', label: 'Predare' }, { value: 'PICK_UP', label: 'Ridicare' }] as const;
 export default function QRScannerScreen() {
   const [permission, requestPermission] = useCameraPermissions(); const [scanned, setScanned] = useState(false); const [busy, setBusy] = useState(false); const [action, setAction] = useState<(typeof actions)[number]['value']>('OPEN_PROFILE'); const { colors } = useAppTheme(); const { activeProperty } = useProperty(); const { showToast } = useToast();
+  useFocusEffect(useCallback(() => {
+    setScanned(false);
+    setBusy(false);
+  }, []));
   const handleScan = async ({ data }: BarcodeScanningResult) => {
     if (scanned || busy) return; setScanned(true); setBusy(true);
     try { const result = await apiRequest<{ clientId: string; clientName: string }>('/qr/resolve', { method: 'POST', body: JSON.stringify({ data, action, propertyId: activeProperty?.id, device: `${Platform.OS} ${Platform.Version}` }) }); showToast(`${result.clientName}: cod QR valid.`, 'success'); router.push(`/service/clients/${result.clientId}`); }

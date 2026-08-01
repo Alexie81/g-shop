@@ -9,6 +9,7 @@ import { useProperty } from '@/contexts/PropertyContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { serviceSheetRepository } from '@/repositories/api-repositories';
 import { spacing } from '@/theme/tokens';
 import { ServiceSheet } from '@/types';
@@ -26,6 +27,7 @@ export default function ServiceSheetsScreen() {
   const [selectedSheet, setSelectedSheet] = useState<ServiceSheet | null>(null);
   const lastLongPressAt = useRef(0);
   const state = useAsyncData(() => serviceSheetRepository.list(activeProperty?.id ?? ''), [activeProperty?.id]);
+  useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);
   const sheets = (state.data?.data ?? []).filter((sheet, index, items) => items.findIndex((item) => item.clientId === sheet.clientId) === index);
 
   const openSheet = (sheet: ServiceSheet) => router.push(`/service/service-sheets/${sheet.id}`);

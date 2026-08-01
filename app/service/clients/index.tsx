@@ -9,6 +9,7 @@ import { useProperty } from '@/contexts/PropertyContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { clientRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { Client } from '@/types';
@@ -57,6 +58,7 @@ export default function ClientsScreen() {
     () => clientRepository.list(activeProperty?.id ?? '', debounced),
     [activeProperty?.id, debounced],
   );
+  useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);
   const visibleClients = useMemo(() => {
     const clients = [...(state.data?.data ?? [])];
     const filtered = filter === 'FINALIZED'
