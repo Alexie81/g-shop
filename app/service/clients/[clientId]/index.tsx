@@ -1,6 +1,7 @@
 import { ClientQRPanel } from '@/components/clients/ClientQRPanel';
 import { ClientAuditHistory } from '@/components/clients/ClientAuditHistory';
 import { ClientStatusBadge } from '@/components/clients/ClientStatusBadge';
+import { ClientCollaboratorFinanceCard } from '@/components/clients/finance/ClientCollaboratorFinanceCard';
 import { ClientFinanceOverviewCard, ClientFinanceSection } from '@/components/clients/finance';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { AppText } from '@/components/ui/AppText';
@@ -23,7 +24,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Linking, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-type Tab = 'Detalii' | 'Finanțe' | 'QR' | 'Colaboratori' | 'Istoric';
+type Tab = 'Detalii' | 'Finanțe' | 'QR' | 'Istoric';
 
 export default function ClientDetailsScreen() {
   const { clientId } = useLocalSearchParams<{ clientId: string }>();
@@ -34,12 +35,12 @@ export default function ClientDetailsScreen() {
   const isAdmin = user?.role === 'ADMIN';
   const canViewFinancials = hasPermission('financials.view');
   const canEditClients = hasPermission('clients.update');
+  const canManageCollaborators = hasPermission('collaborators.manage');
   const canEditFinancials = canViewFinancials && hasPermission('clients.update');
   const tabs: Tab[] = [
     'Detalii',
     ...(canViewFinancials ? ['Finanțe' as const] : []),
     'QR',
-    'Colaboratori',
     ...(isAdmin ? ['Istoric' as const] : []),
   ];
   const state = useAsyncData(async () => {
@@ -104,6 +105,31 @@ export default function ClientDetailsScreen() {
       setStatusSaving(false);
     }
   };
+  const setCollaboratorPaid = async (paid: boolean) => {
+    if (!financials?.collaborator || !canManageCollaborators) return;
+    try {
+      await apiRequest('/commissions/client-status', {
+        method: 'PUT',
+        body: JSON.stringify({ propertyId: client.propertyId, collaboratorId: financials.collaborator.id, clientId: client.id, paid }),
+      });
+      await state.reload(true);
+      showToast(paid ? 'Comisionul a fost marcat achitat.' : 'Comisionul a fost marcat neachitat.', 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Starea comisionului nu a putut fi actualizată.', 'error');
+      throw error;
+    }
+  };
+  const removeCollaboratorAssignment = async () => {
+    if (!canEditClients || !financials?.collaborator) return;
+    try {
+      await clientRepository.update(client.id, { collaboratorId: '' });
+      await state.reload(true);
+      showToast('Atribuirea colaboratorului a fost eliminată.', 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Atribuirea colaboratorului nu a putut fi eliminată.', 'error');
+      throw error;
+    }
+  };
   return <Screen header={<AppHeader title="Detalii client" back />} refreshing={state.refreshing} onRefresh={() => void state.reload(true)}>
     <Card style={styles.profile}>
       <View style={[styles.avatar, { backgroundColor: colors.primary }]}><AppText variant="title" style={{ color: '#fff' }}>{initials(client.firstName, client.lastName)}</AppText></View>
@@ -112,7 +138,8 @@ export default function ClientDetailsScreen() {
     </Card>
     <View style={styles.actions}><Button compact variant="secondary" icon="call-outline" label="Sună" onPress={() => void contact(`tel:${client.phone}`)} /><Button compact variant="secondary" icon="logo-whatsapp" label="WhatsApp" onPress={() => void contact(`https://wa.me/${client.phone.replace(/\D/g, '')}`)} /><Button compact variant="secondary" icon="mail-outline" label="Email" disabled={!client.email} onPress={() => void contact(`mailto:${client.email}`)} /><Button compact icon="document-text-outline" label="Fișă de service" onPress={openServiceSheet} /></View>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.tabScroller, { borderBottomColor: colors.border }]} contentContainerStyle={styles.tabs}>{tabs.map((item) => <Pressable key={item} onPress={() => setTab(item)} style={[styles.tab, tab === item && { borderBottomColor: colors.primary }]}><AppText variant="caption" style={{ color: tab === item ? colors.primary : colors.textMuted, fontWeight: '800' }}>{item}</AppText></Pressable>)}</ScrollView>
-    {tab === 'Detalii' ? <><Details client={client} financials={financials} onOpenFinancials={canViewFinancials ? () => setTab('Finanțe') : undefined} />{canEditClients ? <ClientLifecycleAction finalized={client.status === 'FINALIZED'} loading={statusSaving} onConfirm={changeClientStatus} /> : null}</> : tab === 'QR' ? <ClientQRPanel client={client} /> : tab === 'Finanțe' && financials ? <ClientFinanceSection
+    {tab === 'Detalii' ? <><Details client={client} financials={financials} onOpenFinancials={canViewFinancials ? () => setTab('Finanțe') : undefined} />{canEditClients ? <ClientLifecycleAction finalized={client.status === 'FINALIZED'} loading={statusSaving} onConfirm={changeClientStatus} /> : null}</> : tab === 'QR' ? <ClientQRPanel client={client} /> : tab === 'Finanțe' && financials ? <>
+      <ClientFinanceSection
       value={financials.financials}
       expenses={financials.expenses}
       collaboratorCost={financials.summary.collaboratorCost}
@@ -125,7 +152,17 @@ export default function ClientDetailsScreen() {
       onAddExpense={canEditFinancials ? async (input) => { await clientRepository.addExpense(client.id, input); await refreshExpenses(); await reloadFinanceHistory(); showToast('Cheltuiala a fost adăugată.', 'success'); } : undefined}
       onUpdateExpense={canEditFinancials ? async (expenseId, input) => { await clientRepository.updateExpense(client.id, expenseId, input); await refreshExpenses(); await reloadFinanceHistory(); showToast('Cheltuiala a fost actualizată.', 'success'); } : undefined}
       onDeleteExpense={canEditFinancials ? async (expenseId) => { await clientRepository.removeExpense(client.id, expenseId); await refreshExpenses(); await reloadFinanceHistory(); showToast('Cheltuiala a fost ștearsă.', 'success'); } : undefined}
-    /> : tab === 'Colaboratori' ? <Card style={styles.empty}><Ionicons name="people-circle-outline" size={44} color={colors.primary} /><AppText variant="heading">Colaborator atribuit</AppText><AppText muted>{client.collaboratorId ? 'Clientul are un colaborator atribuit. Comisioanele apar automat la crearea fișelor și pot fi urmărite din dashboard.' : 'Nu există un colaborator atribuit acestui client.'}</AppText><Button compact label={client.collaboratorId ? 'Modifică atribuirea' : 'Atribuie colaborator'} icon="person-add-outline" onPress={() => router.push(`/service/clients/${client.id}/edit`)} /></Card> : <History items={history} />}
+      />
+      <ClientCollaboratorFinanceCard
+        collaborator={financials.collaborator}
+        currencyCode={financials.financials.currencyCode}
+        canEditAssignment={canEditClients}
+        canManagePayment={canManageCollaborators}
+        onEditAssignment={() => router.push(`/service/clients/${client.id}/edit`)}
+        onRemoveAssignment={removeCollaboratorAssignment}
+        onSetPaid={setCollaboratorPaid}
+      />
+    </> : <History items={history} />}
   </Screen>;
 }
 

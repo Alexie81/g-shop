@@ -169,6 +169,20 @@ export interface ClientFinancialOverview {
   financials: ClientFinancialRecord;
   summary: ClientFinancialSummary;
   expenses: ClientExpense[];
+  collaborator: ClientFinancialCollaborator | null;
+}
+
+export interface ClientFinancialCollaborator {
+  id: UUID;
+  name: string;
+  role?: string;
+  commissionType?: CommissionType;
+  commissionValue?: number;
+  amount: number;
+  paid: number;
+  due: number;
+  status: 'PAID' | 'UNPAID';
+  hasCommission: boolean;
 }
 
 export type UpdateClientFinancialsPayload = Partial<Pick<ClientFinancialRecord,
