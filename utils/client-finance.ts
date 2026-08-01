@@ -75,7 +75,7 @@ export function calculateClientFinance(
   const actualPartsCost = nonNegative(value.actualPartsCost);
   const normalizedCollaboratorCost = roundMoney(nonNegative(collaboratorCost));
   const internalCosts = roundMoney(actualPartsCost + additionalExpenses);
-  const gshopNet = roundMoney(totalDue - internalCosts - normalizedCollaboratorCost);
+  const gshopNet = roundMoney(receivedAmount - internalCosts - normalizedCollaboratorCost);
   const displayedBreakdownDifference = roundMoney(
     nonNegative(value.displayedPartsCost) + nonNegative(value.displayedLaborCost) - workPrice,
   );
@@ -114,4 +114,3 @@ export function toRon(value: number, currencyCode: string, exchangeRateToRon: nu
   if (currencyCode === 'RON') return roundMoney(value);
   return roundMoney(value * nonNegative(exchangeRateToRon));
 }
-

@@ -84,9 +84,13 @@ Valorile calculate nu sunt stocate. API-ul folosește următoarele formule în m
 - `additionalExpenses = suma cheltuielilor`;
 - `internalCosts = actualPartsCost + additionalExpenses`;
 - comisionul colaboratorului se calculează din atribuirea curentă a clientului: procent din total, procent din `max(totalDue - internalCosts, 0)` sau sumă fixă;
-- `gshopNet = totalDue - internalCosts - collaboratorCost`.
+- `gshopNet = receivedAmount - internalCosts - collaboratorCost`.
 
-`displayedPartsCost` și `displayedLaborCost` sunt doar defalcări pentru afișare și precompletarea fișei de service; nu se adună din nou în total. Fiecare cheltuială conține doar `description` și `amount`, în moneda unică a clientului, pentru a evita repetarea cursului în fiecare rând. Prima cheltuială creează atomic rândul financiar implicit, iar acesta este păstrat cât timp există cheltuieli. Dashboard-ul convertește valorile noi în RON cu `exchangeRateToRon`: `totalRevenue` însumează valorile încasate, iar `revenueOnHold` valorile rămase. Pentru clienții fără rând în `client_financials` folosește fișele de service existente, fără dublare.
+`displayedPartsCost` și `displayedLaborCost` sunt doar defalcări pentru afișare și precompletarea fișei de service; nu se adună din nou în total. Fiecare cheltuială conține doar `description` și `amount`, în moneda unică a clientului, pentru a evita repetarea cursului în fiecare rând. Prima cheltuială creează atomic rândul financiar implicit, iar acesta este păstrat cât timp există cheltuieli.
+
+Dashboard-ul convertește valorile noi în RON cu `exchangeRateToRon`. Pentru fiecare client, `totalRevenue` primește `receivedAmount` (`totalDue` dacă plata este `PAID`, altfel `min(advancePaid, totalDue)`), `revenueOnHold` primește `totalDue - receivedAmount`, iar netul realizat este `receivedAmount - internalCosts - collaboratorCost`. Astfel avansul intră imediat în încasări și în G-Shop Net, dar restul neachitat nu umflă netul; trecerea statusului la `PAID` mută restul din on hold în încasări și în net. Reducerea este aplicată înaintea tuturor acestor calcule, iar costurile și comisionul sunt scăzute o singură dată. Aceeași formulă de net realizat este returnată în `summary.gshopNet` din profilul clientului și în dashboard.
+
+Pentru clienții legacy fără `client_financials` și fără cheltuieli, fișele `COMPLETED`/`DELIVERED` sunt tratate ca încasate, iar fișele deschise sunt tratate ca on hold. Costurile directe și comisioanele legacy active sunt scăzute din netul realizat, fără dublarea clienților care au trecut la finanțele noi.
 
 Participanții sunt salvați compact ca legături client–utilizator. `PUT /clients/{id}/participants` primește `{ "userIds": ["uuid"] }`, acceptă maximum 100 de ID-uri unice și refuză utilizatorii inactivi sau din altă proprietate. Toate mutațiile financiare, de cheltuieli și participanți sunt auditate pe entitatea `Client`, pentru ca evenimentele să apară în istoricul clientului.
 

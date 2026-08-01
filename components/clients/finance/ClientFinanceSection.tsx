@@ -193,7 +193,7 @@ export function ClientFinanceSection({
           <AppText variant="caption" style={{ flex: 1 }}>Defalcarea piese + manoperă diferă de prețul lucrării cu {money(Math.abs(calculations.displayedBreakdownDifference))}. Poți salva; valorile sunt informative.</AppText>
         </View> : <View style={[styles.notice, { backgroundColor: `${palette.success}10`, borderColor: `${palette.success}40` }]}><Ionicons name="checkmark-circle-outline" size={20} color={palette.success} /><AppText variant="caption" style={{ color: palette.success, flex: 1 }}>Defalcarea corespunde prețului lucrării.</AppText></View>}
         <View style={[styles.netBreakdown, { borderColor: colors.border }]}>
-          <CalculationLine label="Total client" value={money(calculations.totalDue)} />
+          <CalculationLine label="Încasat" value={money(calculations.receivedAmount)} />
           <CalculationLine label="Cost efectiv piese" value={`− ${money(normalizedValue.actualPartsCost)}`} muted />
           <CalculationLine label="Cheltuieli suplimentare" value={`− ${money(calculations.additionalExpenses)}`} muted />
           <CalculationLine label="Comision colaborator" value={`− ${money(calculations.collaboratorCost)}`} muted />
