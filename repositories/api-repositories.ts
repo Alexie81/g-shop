@@ -1,5 +1,5 @@
 import { apiRequest } from '@/services/api';
-import { AuthRepository, AuditRepository, ClientRepository, CollaboratorRepository, DashboardRepository, InterventionRepository, PropertyRepository, ServiceSheetRepository, UserRepository } from '@/repositories/interfaces';
+import { AuthRepository, AuditRepository, ClientRepository, CollaboratorRepository, DashboardRepository, PropertyRepository, ServiceSheetRepository, UserRepository } from '@/repositories/interfaces';
 
 export const authRepository: AuthRepository = {
   login: (username, password, device) => apiRequest('/auth/login', { method: 'POST', authenticated: false, body: JSON.stringify({ username, password, device }) }),
@@ -25,10 +25,6 @@ export const serviceSheetRepository: ServiceSheetRepository = {
   create: (input) => apiRequest('/service-sheets', { method: 'POST', body: JSON.stringify(input) }),
   update: (id, input) => apiRequest(`/service-sheets/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
   saveSignature: (id, signature) => apiRequest(`/service-sheets/${id}/signature`, { method: 'POST', body: JSON.stringify({ signature }) }),
-};
-export const interventionRepository: InterventionRepository = {
-  list: (propertyId) => apiRequest(`/interventions?propertyId=${propertyId}`),
-  create: (input) => apiRequest('/interventions', { method: 'POST', body: JSON.stringify(input) }),
 };
 export const collaboratorRepository: CollaboratorRepository = { list: (propertyId) => apiRequest(`/collaborators?propertyId=${propertyId}`) };
 export const userRepository: UserRepository = {

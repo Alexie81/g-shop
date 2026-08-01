@@ -17,7 +17,7 @@ import { Linking, Modal, Platform, Pressable, Share, StyleSheet, View } from 're
 import QRCode from 'react-native-qrcode-svg';
 import { captureRef } from 'react-native-view-shot';
 
-const messageFor = (link: string) => `Bună ziua, pentru înregistrarea solicitării dumneavoastră, vă rugăm să accesați linkul următor și să completați datele necesare intervenției: ${link}`;
+const messageFor = (link: string) => `Bună ziua, pentru înregistrarea solicitării dumneavoastră, vă rugăm să accesați linkul următor și să completați datele necesare service-ului: ${link}`;
 export function ClientQRPanel({ client, onChanged }: { client: Client; onChanged: (client: Client) => void }) {
   const { colors } = useAppTheme(); const { showToast } = useToast(); const qrRef = useRef<View>(null); const [loading, setLoading] = useState(false); const [shareOpen, setShareOpen] = useState(false); const qr = client.qr; const link = qr?.publicUrl ?? '';
   const generate = async () => { setLoading(true); try { const updated = await clientRepository.generateQr(client.id); onChanged(updated); showToast(qr ? 'Codul anterior a fost invalidat, iar unul nou a fost creat.' : 'Codul QR a fost generat.', 'success'); } catch (error) { showToast(error instanceof Error ? error.message : 'Generarea a eșuat.', 'error'); } finally { setLoading(false); } };

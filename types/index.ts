@@ -27,8 +27,6 @@ export type Permission =
   | 'service_sheets.create'
   | 'service_sheets.update'
   | 'service_sheets.sign'
-  | 'interventions.view'
-  | 'interventions.manage'
   | 'collaborators.view'
   | 'collaborators.manage'
   | 'users.view'
@@ -109,7 +107,6 @@ export interface Client extends BaseEntity {
   commissionValue?: number;
   qr?: ClientQR;
   serviceSheetsCount: number;
-  interventionsCount: number;
   lastActivityAt?: ISODate;
 }
 
@@ -172,34 +169,6 @@ export interface ServiceSheet extends BaseEntity {
   client?: Pick<Client, 'id' | 'firstName' | 'lastName' | 'phone'>;
 }
 
-export type InterventionStatus =
-  | 'SCHEDULED'
-  | 'CONFIRMED'
-  | 'TRAVELLING'
-  | 'IN_PROGRESS'
-  | 'WAITING'
-  | 'COMPLETED'
-  | 'CANCELLED';
-
-export interface Intervention extends BaseEntity {
-  propertyId: UUID;
-  clientId: UUID;
-  serviceSheetId?: UUID;
-  technicianId?: UUID;
-  collaboratorId?: UUID;
-  title: string;
-  description?: string;
-  scheduledAt: ISODate;
-  estimatedMinutes?: number;
-  status: InterventionStatus;
-  cost: number;
-  directCosts: number;
-  netValue: number;
-  location?: string;
-  notes?: string;
-  client?: Pick<Client, 'id' | 'firstName' | 'lastName'>;
-}
-
 export type CommissionType = 'PERCENT_NET' | 'FIXED';
 export type CommissionStatus = 'ESTIMATED' | 'CALCULATED' | 'APPROVED' | 'PAID' | 'CANCELLED';
 
@@ -218,7 +187,7 @@ export interface Collaborator extends BaseEntity {
 export interface CollaboratorAssignment extends BaseEntity {
   collaboratorId: UUID;
   propertyId: UUID;
-  entityType: 'CLIENT' | 'SERVICE_SHEET' | 'INTERVENTION';
+  entityType: 'CLIENT' | 'SERVICE_SHEET';
   entityId: UUID;
   commissionType: CommissionType;
   commissionValue: number;
@@ -229,7 +198,6 @@ export interface Commission extends BaseEntity {
   collaboratorId: UUID;
   clientId: UUID;
   serviceSheetId?: UUID;
-  interventionId?: UUID;
   propertyId: UUID;
   totalValue: number;
   directCosts: number;
@@ -239,6 +207,34 @@ export interface Commission extends BaseEntity {
   commissionValue: number;
   status: CommissionStatus;
   paidAt?: ISODate;
+}
+
+export interface CollaboratorFinanceClient {
+  clientId: UUID;
+  clientName: string;
+  serviceSheetsCount: number;
+  paid: number;
+  due: number;
+  total: number;
+  lastActivityAt?: ISODate;
+}
+
+export interface CollaboratorFinanceGroup {
+  collaboratorId: UUID;
+  collaboratorName: string;
+  role?: string;
+  clientsCount: number;
+  paid: number;
+  due: number;
+  total: number;
+  clients: CollaboratorFinanceClient[];
+}
+
+export interface CollaboratorFinanceSummary {
+  paid: number;
+  due: number;
+  total: number;
+  collaborators: CollaboratorFinanceGroup[];
 }
 
 export interface ProductCategory extends BaseEntity {
@@ -292,8 +288,6 @@ export interface AuditLog extends BaseEntity {
 export interface DashboardMetrics {
   clientsTotal: number;
   clientsNew: number;
-  interventionsActive: number;
-  interventionsScheduled: number;
   serviceSheetsOpen: number;
   serviceSheetsInProgress: number;
   serviceSheetsCompleted: number;
@@ -304,6 +298,7 @@ export interface DashboardMetrics {
   qrUnused: number;
   estimatedRevenue: number;
   collaboratorCommissions: number;
+  collaboratorPayments: number;
 }
 
 export interface Paginated<T> {

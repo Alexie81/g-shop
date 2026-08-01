@@ -16,7 +16,6 @@ export default function ServiceLayout() {
     <Tabs.Screen name="service-sheets" options={{ title: 'Fișe service' }} />
     <Tabs.Screen name="qr-scanner" options={{ title: 'Scanare QR' }} />
     <Tabs.Screen name="more" options={{ title: 'Mai mult' }} />
-    <Tabs.Screen name="interventions" options={{ href: null }} />
     <Tabs.Screen name="collaborators" options={{ href: null }} />
     <Tabs.Screen name="users" options={{ href: null }} />
     <Tabs.Screen name="reports" options={{ href: null }} />

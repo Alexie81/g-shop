@@ -10,7 +10,7 @@ export const INITIAL_PROPERTIES: Property[] = [
     domain: 'reparatiicalculatoare-bucuresti.ro',
     type: 'SERVICE',
     isActive: true,
-    enabledModules: ['dashboard', 'clients', 'qr', 'serviceSheets', 'interventions', 'collaborators', 'users', 'reports'],
+    enabledModules: ['dashboard', 'clients', 'qr', 'serviceSheets', 'collaborators', 'users', 'reports'],
     createdAt: now,
     updatedAt: now,
     createdBy: SYSTEM_USER,

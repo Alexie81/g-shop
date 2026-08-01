@@ -1,4 +1,4 @@
-import { AuditLog, AuthSession, Client, Collaborator, DashboardMetrics, Intervention, Paginated, Permission, Property, ServiceSheet, User, UUID } from '@/types';
+import { AuditLog, AuthSession, Client, Collaborator, DashboardMetrics, Paginated, Permission, Property, ServiceSheet, User, UUID } from '@/types';
 
 export interface AuthRepository {
   login(username: string, password: string, device: string): Promise<AuthSession>;
@@ -24,10 +24,6 @@ export interface ServiceSheetRepository {
   create(input: Partial<ServiceSheet>): Promise<ServiceSheet>;
   update(id: UUID, input: Partial<ServiceSheet>): Promise<ServiceSheet>;
   saveSignature(id: UUID, signature: string): Promise<ServiceSheet>;
-}
-export interface InterventionRepository {
-  list(propertyId: UUID): Promise<Paginated<Intervention>>;
-  create(input: Partial<Intervention>): Promise<Intervention>;
 }
 export interface CollaboratorRepository { list(propertyId: UUID): Promise<Collaborator[]>; }
 export interface UserRepository {

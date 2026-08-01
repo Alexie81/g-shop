@@ -1,6 +1,6 @@
 # G-Shop
 
-Aplicație mobilă Expo/React Native pentru gestionarea activității de service: clienți, coduri QR, formulare publice, fișe de service, semnături electronice, intervenții, colaboratori, comisioane, utilizatori, permisiuni, rapoarte și audit.
+Aplicație mobilă Expo/React Native pentru gestionarea activității de service: clienți, coduri QR, formulare publice, fișe de service, semnături electronice, colaboratori, comisioane, utilizatori, permisiuni, rapoarte și audit.
 
 Interfața folosește identitatea G-Shop din `logo/logo.png`, este responsive pentru Android, iPhone, web și tabletă și suportă Light, Dark și tema sistemului.
 
@@ -55,7 +55,7 @@ npx expo export --platform android
 
 Aplicația tratează proprietățile ca workspaces separate:
 
-- **Reparații Calculatoare București** (`SERVICE`) — dashboard, clienți, QR, fișe, intervenții, colaboratori, utilizatori, rapoarte și audit.
+- **Reparații Calculatoare București** (`SERVICE`) — dashboard, clienți, QR, fișe, colaboratori, utilizatori, rapoarte și audit.
 - **Calculatoare Profesionale** (`SHOP`) — navigație separată și pagină premium „În lucru”. Funcțiile magazinului sunt dezactivate prin `EXPO_PUBLIC_SHOP_MODULE_ENABLED=false`.
 
 Schimbarea proprietății resetează ruta activă și reconstruiește taburile. Proprietatea și tema sunt păstrate local; datele operaționale rămân exclusiv în MySQL online.

@@ -1,4 +1,5 @@
 import { QRChart } from '@/components/dashboard/QRChart';
+import { CollaboratorFinanceSheet } from '@/components/dashboard/CollaboratorFinanceSheet';
 import { QuickAction } from '@/components/dashboard/QuickAction';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -11,36 +12,43 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useProperty } from '@/contexts/PropertyContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
-import { dashboardRepository, interventionRepository, serviceSheetRepository } from '@/repositories/api-repositories';
+import { dashboardRepository, serviceSheetRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { formatCurrency, formatDate } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 export default function DashboardScreen() {
   const { user } = useAuth(); const { activeProperty } = useProperty(); const propertyId = activeProperty?.id ?? '';
+  const { colors } = useAppTheme();
+  const [financeOpen, setFinanceOpen] = useState(false);
   const { width } = useWindowDimensions();
   const statColumns = width < 600 ? 2 : width < 950 ? 3 : 6;
-  const actionColumns = width < 600 ? 2 : width < 900 ? 3 : 5;
+  const actionColumns = width < 750 ? 2 : 4;
   const statCardBasis = statColumns === 3 ? 170 : 150;
-  const actionCardBasis = actionColumns === 3 ? 160 : actionColumns === 5 ? 145 : 150;
-  const state = useAsyncData(async () => { const [metrics, interventions, sheets] = await Promise.all([dashboardRepository.get(propertyId), interventionRepository.list(propertyId), serviceSheetRepository.list(propertyId)]); return { metrics, interventions: interventions.data.slice(0, 3), sheets: sheets.data.slice(0, 3) }; }, [propertyId]);
+  const actionCardBasis = actionColumns === 4 ? 145 : 150;
+  const state = useAsyncData(async () => { const [metrics, sheets] = await Promise.all([dashboardRepository.get(propertyId), serviceSheetRepository.list(propertyId)]); return { metrics, sheets: sheets.data.slice(0, 3) }; }, [propertyId]);
   const hour = new Date().getHours(); const greeting = hour < 12 ? 'Bună dimineața' : hour < 18 ? 'Bună ziua' : 'Bună seara';
   if (state.loading) return <Screen header={<AppHeader />}><LoadingState rows={6} /></Screen>;
   if (state.error || !state.data) return <Screen header={<AppHeader />}><ErrorState message={state.error?.message ?? 'Date indisponibile.'} onRetry={() => void state.reload()} /></Screen>;
-  const { metrics, interventions, sheets } = state.data;
-  return <Screen header={<AppHeader />} refreshing={state.refreshing} onRefresh={() => void state.reload(true)}>
-    <LinearGradient colors={['#082376', '#075CFF', '#0D78FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}><View style={styles.heroCopy}><AppText variant="title" style={{ color: '#fff' }}>{greeting}, {user?.firstName}! <AppText style={{ color: '#FFD75C' }}>👋</AppText></AppText><AppText style={{ color: '#DDE8FF' }}>Ai control complet asupra activității din {activeProperty?.name}.</AppText></View><View style={styles.heroGraphic}><Ionicons name="analytics" size={74} color="#8CB7FF" /></View></LinearGradient>
-    <View style={styles.section}>
+  const { metrics, sheets } = state.data;
+  return <Screen header={<AppHeader />} scroll={false} bottomInset={false} style={styles.screen}>
+    <View style={styles.dashboardRoot}>
+      <LinearGradient colors={['#082376', '#075CFF', '#0D78FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, styles.fixedHero]}><View style={styles.heroCopy}><AppText variant="title" style={{ color: '#fff' }}>{greeting}, {user?.firstName}! <AppText style={{ color: '#FFD75C' }}>👋</AppText></AppText><AppText style={{ color: '#DDE8FF' }}>Ai control complet asupra activității din {activeProperty?.name}.</AppText></View><View style={styles.heroGraphic}><Ionicons name="analytics" size={74} color="#8CB7FF" /></View></LinearGradient>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={state.refreshing} onRefresh={() => void state.reload(true)} tintColor={colors.primary} />}>
+        <View style={[styles.dashboardSheet, { backgroundColor: colors.background, shadowColor: colors.shadow }]}>
+          <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+    <View style={[styles.section, styles.firstSection]}>
       <DashboardSectionTitle title="Privire de ansamblu" subtitle="Indicatorii esențiali ai proprietății" icon="grid-outline" />
       <View style={styles.stats}>
         <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Clienți" value={metrics.clientsTotal} icon="people-outline" color={palette.electric} helper={`+${metrics.clientsNew} noi`} />
-        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Intervenții active" value={metrics.interventionsActive} icon="construct-outline" color={palette.warning} />
         <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Fișe deschise" value={metrics.serviceSheetsOpen} icon="document-text-outline" color={palette.purple} />
+        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Fișe în lucru" value={metrics.serviceSheetsInProgress} icon="build-outline" color={palette.warning} />
         <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Fișe finalizate" value={metrics.serviceSheetsCompleted} icon="checkmark-done-outline" color={palette.success} />
-        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Colaboratori" value={metrics.collaboratorsActive} icon="person-add-outline" color={palette.cyan} />
+        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Plătit colaboratorilor" value={formatCurrency(metrics.collaboratorPayments)} icon="cash-outline" color={palette.cyan} helper="Ține apăsat" helperIcon="finger-print-outline" onLongPress={() => setFinanceOpen(true)} />
         <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Venit estimat" value={formatCurrency(metrics.estimatedRevenue)} icon="wallet-outline" color={palette.success} />
       </View>
     </View>
@@ -50,15 +58,17 @@ export default function DashboardScreen() {
         <QuickAction style={{ flexGrow: 1, flexBasis: actionCardBasis }} label="Adaugă client" icon="person-add-outline" onPress={() => router.push('/service/clients/create')} />
         <QuickAction style={{ flexGrow: 1, flexBasis: actionCardBasis }} label="Creează fișă" icon="document-text-outline" accent={palette.purple} onPress={() => router.push('/service/service-sheets/create')} />
         <QuickAction style={{ flexGrow: 1, flexBasis: actionCardBasis }} label="Scanează QR" icon="scan-outline" accent={palette.success} onPress={() => router.push('/service/qr-scanner')} />
-        <QuickAction style={{ flexGrow: 1, flexBasis: actionCardBasis }} label="Adaugă intervenție" icon="calendar-outline" accent={palette.warning} onPress={() => router.push('/service/interventions/create')} />
-        <QuickAction style={{ flexGrow: 1, flexBasis: actionColumns === 2 ? '100%' : actionCardBasis }} label="Atribuie colaborator" icon="people-circle-outline" accent={palette.cyan} onPress={() => router.push('/service/collaborators')} />
+        <QuickAction style={{ flexGrow: 1, flexBasis: actionCardBasis }} label="Atribuie colaborator" icon="people-circle-outline" accent={palette.cyan} onPress={() => router.push('/service/collaborators')} />
       </View>
     </View>
     <View style={[styles.columns, styles.lowerSection]}>
       <Card style={styles.panel}><SectionHeader title="Activitate QR azi" action="Vezi clienții" onAction={() => router.push('/service/clients')} /><QRChart generated={metrics.qrGenerated} used={metrics.qrUsed} waiting={metrics.qrUnused} /><AppText variant="caption" style={{ color: palette.success, textAlign: 'right' }}>↗ actualizat în timp real</AppText></Card>
-      <Card style={styles.panel}><SectionHeader title="Programări recente" action="Toate" onAction={() => router.push('/service/interventions')} />{interventions.length ? interventions.map((item) => <View key={item.id} style={styles.activity}><View style={[styles.activityIcon, { backgroundColor: '#FFF4DE' }]}><Ionicons name="calendar-outline" size={18} color={palette.warning} /></View><View style={{ flex: 1 }}><AppText variant="label">{item.title}</AppText><AppText variant="caption" muted>{item.client ? `${item.client.firstName} ${item.client.lastName}` : 'Client'} · {formatDate(item.scheduledAt, true)}</AppText></View></View>) : <AppText muted>Nu sunt programări recente.</AppText>}</Card>
+      <Card style={styles.panel}><SectionHeader title="Fișe de service recente" action="Vezi toate" onAction={() => router.push('/service/service-sheets')} />{sheets.length ? sheets.map((sheet) => <View key={sheet.id} style={styles.sheetRow}><View style={{ flex: 1 }}><AppText variant="label">{sheet.number} · {sheet.equipment}</AppText><AppText variant="caption" muted>{sheet.client ? `${sheet.client.firstName} ${sheet.client.lastName}` : 'Client'} · {formatDate(sheet.receivedAt)}</AppText></View><AppText variant="label" style={{ color: palette.electric }}>{formatCurrency(sheet.totalCost)}</AppText></View>) : <AppText muted>Nu există fișe recente.</AppText>}</Card>
     </View>
-    <Card style={styles.panel}><SectionHeader title="Fișe de service recente" action="Vezi toate" onAction={() => router.push('/service/service-sheets')} />{sheets.length ? sheets.map((sheet) => <View key={sheet.id} style={styles.sheetRow}><View style={{ flex: 1 }}><AppText variant="label">{sheet.number} · {sheet.equipment}</AppText><AppText variant="caption" muted>{sheet.client ? `${sheet.client.firstName} ${sheet.client.lastName}` : 'Client'} · {formatDate(sheet.receivedAt)}</AppText></View><AppText variant="label" style={{ color: palette.electric }}>{formatCurrency(sheet.totalCost)}</AppText></View>) : <AppText muted>Nu există fișe recente.</AppText>}</Card>
+        </View>
+      </ScrollView>
+    <CollaboratorFinanceSheet visible={financeOpen} propertyId={propertyId} onClose={() => setFinanceOpen(false)} onChanged={() => void state.reload(true)} />
+    </View>
   </Screen>;
 }
 
@@ -71,10 +81,18 @@ function DashboardSectionTitle({ title, subtitle, icon }: { title: string; subti
 }
 
 const styles = StyleSheet.create({
+  screen: { flex: 1, padding: 0, paddingBottom: 0 },
+  dashboardRoot: { flex: 1, overflow: 'hidden' },
+  scroll: { flex: 1 },
+  scrollContent: { paddingTop: 148 },
+  dashboardSheet: { minHeight: 720, borderTopLeftRadius: 32, borderTopRightRadius: 32, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: 112, shadowOpacity: 0.18, shadowRadius: 24, shadowOffset: { width: 0, height: -8 }, elevation: 12 },
+  sheetHandle: { width: 44, height: 5, borderRadius: radius.pill, alignSelf: 'center', marginBottom: spacing.sm },
   hero: { minHeight: 164, borderRadius: radius.xl, padding: spacing.xxl, flexDirection: 'row', alignItems: 'center', overflow: 'hidden' },
+  fixedHero: { position: 'absolute', top: spacing.lg, left: spacing.lg, right: spacing.lg },
   heroCopy: { flex: 1, gap: spacing.sm, maxWidth: 620 },
   heroGraphic: { width: 110, height: 110, borderRadius: 55, backgroundColor: '#FFFFFF16', alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-8deg' }] },
   section: { gap: spacing.lg, marginTop: spacing.xxxl },
+  firstSection: { marginTop: spacing.sm },
   sectionHeading: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   sectionIcon: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   sectionCopy: { minWidth: 0, flex: 1, gap: 1 },
@@ -83,7 +101,5 @@ const styles = StyleSheet.create({
   lowerSection: { marginTop: spacing.xxxl },
   columns: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   panel: { minWidth: 290, flex: 1, gap: spacing.lg },
-  activity: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
-  activityIcon: { width: 38, height: 38, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   sheetRow: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#8090A040' },
 });
