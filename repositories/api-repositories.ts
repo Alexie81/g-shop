@@ -16,6 +16,7 @@ export const clientRepository: ClientRepository = {
   get: (id) => apiRequest(`/clients/${id}`),
   create: (input) => apiRequest('/clients', { method: 'POST', body: JSON.stringify(input) }),
   update: (id, input) => apiRequest(`/clients/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
+  remove: (id) => apiRequest(`/clients/${id}`, { method: 'DELETE' }),
   ensureQr: (id) => apiRequest(`/clients/${id}/qr`, { method: 'POST' }),
   markQrUsed: (id) => apiRequest(`/clients/${id}/qr/use`, { method: 'POST' }),
   recordQrShare: (id, method) => apiRequest(`/clients/${id}/qr/share`, { method: 'POST', body: JSON.stringify({ method }) }),

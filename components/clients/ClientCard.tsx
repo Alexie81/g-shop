@@ -1,36 +1,228 @@
 import { AppText } from '@/components/ui/AppText';
-import { Card } from '@/components/ui/Card';
-import { StatusBadge } from '@/components/ui/StatusBadge';
+import { ClientStatusBadge } from '@/components/clients/ClientStatusBadge';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { Client } from '@/types';
 import { formatDate, fullName, initials } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useCallback, useMemo, useRef } from 'react';
+import { Animated, PanResponder, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 const avatarColors = [palette.electric, palette.purple, palette.success, palette.warning, palette.cyan];
+const SWIPE_LIMIT = 92;
+const SWIPE_TRIGGER = 62;
 
-export function ClientCard({ client, index = 0 }: { client: Client; index?: number }) {
-  const { colors } = useAppTheme();
-  return <Pressable onPress={() => router.push(`/service/clients/${client.id}`)}>
-    <Card style={styles.card}>
-      <View style={[styles.avatar, { backgroundColor: avatarColors[index % avatarColors.length] }]}><AppText variant="label" style={{ color: '#fff' }}>{initials(client.firstName, client.lastName)}</AppText></View>
-      <View style={styles.main}>
-        <View style={styles.heading}><AppText variant="heading" numberOfLines={1} style={{ flex: 1 }}>{fullName(client)}</AppText>{client.qr && client.qr.status !== 'NOT_GENERATED' ? <StatusBadge status={client.qr.status} /> : null}</View>
-        <View style={styles.contact}><Ionicons name="call-outline" size={14} color={colors.textMuted} /><AppText variant="caption" muted>{client.phone}</AppText>{client.email ? <><Ionicons name="mail-outline" size={14} color={colors.textMuted} /><AppText variant="caption" muted numberOfLines={1} style={{ flexShrink: 1 }}>{client.email}</AppText></> : null}</View>
-        <View style={styles.meta}><AppText variant="caption" muted>Fișe: <AppText variant="caption" style={{ fontWeight: '800' }}>{client.serviceSheetsCount}</AppText></AppText><AppText variant="caption" muted>Ultima activitate: {formatDate(client.lastActivityAt ?? client.updatedAt)}</AppText></View>
+type ClientCardProps = {
+  client: Client;
+  index?: number;
+  onWhatsApp?: (client: Client) => void;
+  onDeleteRequest?: (client: Client) => void;
+};
+
+export function ClientCard({ client, index = 0, onWhatsApp, onDeleteRequest }: ClientCardProps) {
+  const { colors, isDark } = useAppTheme();
+  const { width } = useWindowDimensions();
+  const mobile = width < 640;
+  const compact = width < 390;
+  const translateX = useRef(new Animated.Value(0)).current;
+  const swipeStarted = useRef(false);
+  const accent = avatarColors[index % avatarColors.length];
+  const finalized = client.status === 'FINALIZED';
+  const statusColor = finalized ? palette.success : palette.danger;
+
+  const resetPosition = useCallback(() => Animated.spring(translateX, {
+    toValue: 0,
+    useNativeDriver: true,
+    speed: 24,
+    bounciness: 5,
+  }).start(), [translateX]);
+
+  const panResponder = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_, gesture) => {
+      const horizontal = Math.abs(gesture.dx);
+      const vertical = Math.abs(gesture.dy);
+      return horizontal > 10 && horizontal > vertical * 1.45;
+    },
+    onPanResponderGrant: () => {
+      swipeStarted.current = true;
+      translateX.stopAnimation();
+    },
+    onPanResponderMove: (_, gesture) => {
+      translateX.setValue(Math.max(-SWIPE_LIMIT, Math.min(SWIPE_LIMIT, gesture.dx)));
+    },
+    onPanResponderRelease: (_, gesture) => {
+      const action = gesture.dx >= SWIPE_TRIGGER
+        ? () => onWhatsApp?.(client)
+        : gesture.dx <= -SWIPE_TRIGGER
+          ? () => onDeleteRequest?.(client)
+          : undefined;
+      Animated.spring(translateX, {
+        toValue: 0,
+        useNativeDriver: true,
+        speed: 25,
+        bounciness: 4,
+      }).start(() => {
+        swipeStarted.current = false;
+        action?.();
+      });
+    },
+    onPanResponderTerminate: () => {
+      swipeStarted.current = false;
+      resetPosition();
+    },
+    onShouldBlockNativeResponder: () => false,
+  }), [client, onDeleteRequest, onWhatsApp, resetPosition, translateX]);
+
+  const openDetails = () => {
+    if (!swipeStarted.current) router.push(`/service/clients/${client.id}`);
+  };
+
+  return <View style={[styles.swipeShell, mobile && styles.swipeShellMobile, { backgroundColor: colors.surfaceMuted }]}>
+    <View style={styles.swipeActions} pointerEvents="none">
+      <View style={[styles.swipeAction, styles.whatsAppAction]}>
+        <Ionicons name="logo-whatsapp" size={25} color="#fff" />
+        <AppText variant="caption" style={styles.actionText}>WhatsApp</AppText>
       </View>
-      <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-    </Card>
-  </Pressable>;
+      <View style={[styles.swipeAction, styles.deleteAction]}>
+        <Ionicons name="trash-outline" size={24} color="#fff" />
+        <AppText variant="caption" style={styles.actionText}>Șterge</AppText>
+      </View>
+    </View>
+
+    <Animated.View
+      {...panResponder.panHandlers}
+      style={[styles.animatedCard, mobile && styles.fullWidth, {
+        backgroundColor: isDark ? colors.surfaceElevated : colors.surface,
+        borderColor: colors.border,
+        shadowColor: colors.shadow,
+        transform: [{ translateX }],
+      }]}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${fullName(client)}, ${client.phone}, ${finalized ? 'finalizat' : 'activ'}`}
+        accessibilityHint="Deschide detaliile. Glisează spre dreapta pentru WhatsApp sau spre stânga pentru ștergere."
+        accessibilityActions={[
+          { name: 'activate', label: 'Deschide detaliile clientului' },
+          { name: 'whatsapp', label: 'Deschide WhatsApp' },
+          { name: 'delete', label: 'Solicită ștergerea clientului' },
+        ]}
+        onAccessibilityAction={(event) => {
+          if (event.nativeEvent.actionName === 'whatsapp') onWhatsApp?.(client);
+          else if (event.nativeEvent.actionName === 'delete') onDeleteRequest?.(client);
+          else if (event.nativeEvent.actionName === 'activate') openDetails();
+        }}
+        onPress={openDetails}
+        style={({ pressed }) => [styles.pressable, mobile && styles.fullWidth, compact && styles.pressableCompact, pressed && styles.pressed]}
+      >
+        <View style={[styles.accent, { backgroundColor: statusColor }]} />
+        <View style={[styles.avatar, compact && styles.avatarCompact, { backgroundColor: `${accent}${isDark ? '35' : '18'}` }]}>
+          <AppText variant="heading" style={{ color: accent }}>{initials(client.firstName, client.lastName)}</AppText>
+        </View>
+
+        <View style={styles.main}>
+          <View style={styles.heading}>
+            <AppText variant="heading" numberOfLines={1} style={styles.name}>{fullName(client)}</AppText>
+            <ClientStatusBadge status={client.status} />
+          </View>
+
+          <View style={styles.detailLine}>
+            <Ionicons name="call-outline" size={15} color={colors.textMuted} />
+            <AppText variant="caption" muted numberOfLines={1} style={styles.detailText}>{client.phone}</AppText>
+          </View>
+          <View style={styles.detailLine}>
+            <Ionicons name="calendar-clear-outline" size={14} color={colors.textMuted} />
+            <AppText variant="caption" muted numberOfLines={1} style={styles.detailText}>Adăugat {formatDate(client.createdAt)}</AppText>
+          </View>
+        </View>
+
+        <View style={[styles.chevron, compact && styles.chevronCompact, { backgroundColor: colors.primarySoft }]}>
+          <Ionicons name="chevron-forward" size={18} color={colors.primary} />
+        </View>
+      </Pressable>
+    </Animated.View>
+  </View>;
 }
 
 const styles = StyleSheet.create({
-  card: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md },
-  avatar: { width: 48, height: 48, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
-  main: { flex: 1, gap: 6 },
-  heading: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  contact: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' },
-  meta: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flexWrap: 'wrap' },
+  swipeShell: {
+    flexGrow: 1,
+    flexBasis: 410,
+    maxWidth: '100%',
+    minWidth: 0,
+    borderRadius: radius.xl,
+    overflow: 'hidden',
+  },
+  swipeShellMobile: { width: '100%', maxWidth: '100%', flexBasis: '100%' },
+  swipeActions: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  swipeAction: {
+    width: SWIPE_LIMIT,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+  },
+  whatsAppAction: { backgroundColor: '#16A34A' },
+  deleteAction: { backgroundColor: palette.danger },
+  actionText: { color: '#fff', fontWeight: '800' },
+  animatedCard: {
+    minWidth: 0,
+    maxWidth: '100%',
+    borderWidth: 1,
+    borderRadius: radius.xl,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 18,
+    shadowOpacity: 0.07,
+    elevation: 2,
+  },
+  pressable: {
+    width: '100%',
+    maxWidth: '100%',
+    minWidth: 0,
+    minHeight: 106,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    overflow: 'hidden',
+  },
+  fullWidth: { width: '100%', maxWidth: '100%' },
+  pressableCompact: { gap: spacing.sm },
+  pressed: { opacity: 0.82 },
+  accent: {
+    position: 'absolute',
+    top: spacing.lg,
+    bottom: spacing.lg,
+    left: 0,
+    width: 4,
+    borderTopRightRadius: radius.pill,
+    borderBottomRightRadius: radius.pill,
+  },
+  avatar: {
+    width: 54,
+    height: 54,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarCompact: { width: 46, height: 46, borderRadius: radius.md },
+  main: { flex: 1, minWidth: 0, gap: 6 },
+  heading: { minHeight: 27, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
+  name: { flexGrow: 1, flexShrink: 1 },
+  detailLine: { minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  detailText: { flexShrink: 1 },
+  chevron: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+  },
+  chevronCompact: { display: 'none' },
 });
