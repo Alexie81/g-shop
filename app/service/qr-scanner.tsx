@@ -1,4 +1,5 @@
 import { AppHeader } from '@/components/layout/AppHeader';
+import { ScanServiceSheetModal } from '@/components/service-sheets/ScanServiceSheetModal';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -6,8 +7,10 @@ import { Screen } from '@/components/ui/Screen';
 import { useProperty } from '@/contexts/PropertyContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
+import { serviceSheetRepository } from '@/repositories/api-repositories';
 import { apiRequest } from '@/services/api';
 import { palette, radius, spacing } from '@/theme/tokens';
+import { ServiceSheet, UUID } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-camera';
@@ -17,10 +20,13 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Platform, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
+type ScanTarget = { clientId: UUID; clientName: string; existingSheet: ServiceSheet | null };
+
 export default function QRScannerScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [scanTarget, setScanTarget] = useState<ScanTarget | null>(null);
   const { colors, isDark } = useAppTheme();
   const { activeProperty } = useProperty();
   const { showToast } = useToast();
@@ -34,6 +40,7 @@ export default function QRScannerScreen() {
   useFocusEffect(useCallback(() => {
     setScanned(false);
     setBusy(false);
+    setScanTarget(null);
   }, []));
 
   useEffect(() => {
@@ -60,9 +67,12 @@ export default function QRScannerScreen() {
         method: 'POST',
         body: JSON.stringify({ data, action: 'OPEN_PROFILE', propertyId: activeProperty?.id, device: `${Platform.OS} ${Platform.Version}` }),
       });
+      const existingSheet = activeProperty?.id
+        ? await serviceSheetRepository.list(activeProperty.id).then((response) => response.data.find((sheet) => sheet.clientId === result.clientId) ?? null).catch(() => null)
+        : null;
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-      showToast(`${result.clientName}: cod QR valid.`, 'success');
-      router.push(`/service/clients/${result.clientId}`);
+      showToast(`${result.clientName}: completează fișa rapidă.`, 'success');
+      setScanTarget({ clientId: result.clientId, clientName: result.clientName, existingSheet });
     } catch (error) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
       showToast(error instanceof Error ? error.message : 'Codul nu este valid.', 'error');
@@ -93,7 +103,7 @@ export default function QRScannerScreen() {
           <View style={styles.heroGlowLarge} />
           <View style={styles.heroGlowSmall} />
           <View style={styles.heroIcon}><Ionicons name="qr-code-outline" size={30} color="#fff" /></View>
-          <View style={styles.heroCopy}><View style={styles.eyebrow}><View style={styles.liveDot} /><AppText variant="caption" style={styles.eyebrowText}>CAMERĂ PREGĂTITĂ</AppText></View><AppText variant="title" style={styles.heroTitle}>Scanează codul clientului</AppText><AppText variant="caption" style={styles.heroSubtitle}>Încadrează codul în chenar. Profilul clientului se deschide automat.</AppText></View>
+          <View style={styles.heroCopy}><View style={styles.eyebrow}><View style={styles.liveDot} /><AppText variant="caption" style={styles.eyebrowText}>CAMERĂ PREGĂTITĂ</AppText></View><AppText variant="title" style={styles.heroTitle}>Scanează codul clientului</AppText><AppText variant="caption" style={styles.heroSubtitle}>Încadrează codul în chenar. Fișa rapidă se deschide automat.</AppText></View>
         </LinearGradient>
       </View>
 
@@ -117,11 +127,20 @@ export default function QRScannerScreen() {
               </View>
             </View>
 
-            <View style={[styles.tip, { backgroundColor: colors.surface, borderColor: colors.border }]}><View style={[styles.tipIcon, { backgroundColor: isDark ? '#123A2C' : palette.successSoft }]}><Ionicons name="shield-checkmark-outline" size={22} color={palette.success} /></View><View style={styles.tipCopy}><AppText variant="label">Scanare sigură</AppText><AppText variant="caption" muted>Codul este validat online și deschide direct clientul asociat.</AppText></View></View>
+            <View style={[styles.tip, { backgroundColor: colors.surface, borderColor: colors.border }]}><View style={[styles.tipIcon, { backgroundColor: isDark ? '#123A2C' : palette.successSoft }]}><Ionicons name="shield-checkmark-outline" size={22} color={palette.success} /></View><View style={styles.tipCopy}><AppText variant="label">Scanare sigură</AppText><AppText variant="caption" muted>Codul este validat online și pregătește fișa clientului asociat.</AppText></View></View>
             {scanned && !busy ? <Button variant="outline" label="Scanează din nou" icon="refresh" onPress={() => setScanned(false)} style={styles.retryButton} /> : null}
           </View>
         </View>
       </ScrollView>
+      {scanTarget && activeProperty?.id ? <ScanServiceSheetModal
+        visible
+        propertyId={activeProperty.id}
+        clientId={scanTarget.clientId}
+        clientName={scanTarget.clientName}
+        existingSheet={scanTarget.existingSheet}
+        onCancel={() => { setScanTarget(null); setScanned(false); }}
+        onCompleted={(sheet) => { setScanTarget(null); router.replace(`/service/service-sheets/${sheet.id}`); }}
+      /> : null}
     </View>
   </Screen>;
 }

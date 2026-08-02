@@ -18,7 +18,7 @@ import {
 import { formatDate } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 export type ClientFinanceSectionProps = {
   value: ClientFinanceValue;
@@ -64,6 +64,8 @@ export function ClientFinanceSection({
   const [currencyOpen, setCurrencyOpen] = useState(false);
   const [expenseOpen, setExpenseOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<ClientFinanceExpense | null>(null);
+  const [deletingExpense, setDeletingExpense] = useState<ClientFinanceExpense | null>(null);
+  const [expenseDeleting, setExpenseDeleting] = useState(false);
   const [actionError, setActionError] = useState('');
   const calculations = useMemo(() => {
     const beforeCommission = calculateClientFinance(normalizedValue, expenses, 0);
@@ -124,18 +126,22 @@ export function ClientFinanceSection({
 
   const requestExpenseDelete = (expense: ClientFinanceExpense) => {
     if (!onDeleteExpense) return;
-    Alert.alert(
-      'Ștergi cheltuiala?',
-      `„${expense.description}” (${money(expense.amount)}) va fi eliminată definitiv din calculul clientului.`,
-      [
-        { text: 'Anulează', style: 'cancel' },
-        {
-          text: 'Șterge',
-          style: 'destructive',
-          onPress: () => void Promise.resolve(onDeleteExpense(expense.id)).catch((caught: unknown) => setActionError(caught instanceof Error ? caught.message : 'Cheltuiala nu a putut fi ștearsă.')),
-        },
-      ],
-    );
+    setActionError('');
+    setDeletingExpense(expense);
+  };
+
+  const confirmExpenseDelete = async () => {
+    if (!deletingExpense || !onDeleteExpense || expenseDeleting) return;
+    setExpenseDeleting(true);
+    setActionError('');
+    try {
+      await onDeleteExpense(deletingExpense.id);
+      setDeletingExpense(null);
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : 'Cheltuiala nu a putut fi ștearsă.');
+    } finally {
+      setExpenseDeleting(false);
+    }
   };
 
   return <View style={[styles.root, mobile && styles.rootMobile]}>
@@ -260,6 +266,20 @@ export function ClientFinanceSection({
 
     <CurrencyPickerModal visible={currencyOpen} value={currency.code} onClose={() => setCurrencyOpen(false)} onSelect={(code) => onChange({ ...normalizedValue, currencyCode: code, exchangeRateToRon: code === DEFAULT_CURRENCY_CODE ? 1 : normalizedValue.currencyCode === DEFAULT_CURRENCY_CODE ? 0 : normalizedValue.exchangeRateToRon })} />
     <ExpenseEditorModal visible={expenseOpen} currencyCode={currency.code} expense={editingExpense} onClose={() => { setExpenseOpen(false); setEditingExpense(null); }} onSubmit={submitExpense} />
+    <Modal visible={Boolean(deletingExpense)} transparent animationType="fade" statusBarTranslucent onRequestClose={() => !expenseDeleting && setDeletingExpense(null)}>
+      <View style={[styles.deleteOverlay, { backgroundColor: colors.overlay }]}>
+        <Pressable accessibilityLabel="Închide confirmarea" disabled={expenseDeleting} style={StyleSheet.absoluteFill} onPress={() => setDeletingExpense(null)} />
+        {deletingExpense ? <View style={[styles.deleteCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
+          <View style={[styles.deleteIcon, { backgroundColor: isDark ? `${palette.danger}22` : palette.dangerSoft }]}><Ionicons name="trash-outline" size={28} color={palette.danger} /></View>
+          <AppText variant="title" style={styles.deleteText}>Ștergi cheltuiala?</AppText>
+          <AppText muted style={styles.deleteText}>„{deletingExpense.description}” ({money(deletingExpense.amount)}) va fi eliminată din calculul clientului și din fișa de service.</AppText>
+          <View style={styles.deleteActions}>
+            <Button variant="outline" label="Anulează" disabled={expenseDeleting} onPress={() => setDeletingExpense(null)} style={styles.deleteAction} />
+            <Button variant="danger" label="Șterge" icon="trash-outline" loading={expenseDeleting} onPress={() => void confirmExpenseDelete()} style={styles.deleteAction} />
+          </View>
+        </View> : null}
+      </View>
+    </Modal>
   </View>;
 }
 
@@ -351,4 +371,10 @@ const styles = StyleSheet.create({
   error: { borderWidth: 1, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   saveButton: { alignSelf: 'flex-end', minWidth: 250 },
   saveButtonMobile: { width: '100%', minWidth: 0, alignSelf: 'stretch' },
+  deleteOverlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
+  deleteCard: { width: '100%', maxWidth: 460, borderWidth: 1, borderRadius: radius.xl, padding: spacing.xl, alignItems: 'center', gap: spacing.lg, shadowColor: '#000', shadowOpacity: 0.22, shadowRadius: 28, elevation: 16 },
+  deleteIcon: { width: 62, height: 62, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  deleteText: { textAlign: 'center' },
+  deleteActions: { width: '100%', flexDirection: 'row', gap: spacing.md },
+  deleteAction: { flex: 1, minWidth: 0 },
 });

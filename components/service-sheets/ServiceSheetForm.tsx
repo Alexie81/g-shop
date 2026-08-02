@@ -1,9 +1,10 @@
-import { ClientFinanceSection } from '@/components/clients/finance';
+import { ClientFinanceSection, type ExpenseInput } from '@/components/clients/finance';
 import { ServiceSheetCollaborators } from '@/components/service-sheets/ServiceSheetCollaborators';
 import { SERVICE_STATUS_LABELS } from '@/components/service-sheets/ServiceSheetStatus';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { DateTimeField } from '@/components/ui/DateTimeField';
 import { Input } from '@/components/ui/Input';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
@@ -80,7 +81,7 @@ const blank: Form = {
   approveRepair: false,
   repairRefused: false,
   productDelivered: false,
-  receivedAt: new Date().toISOString().slice(0, 10),
+  receivedAt: '',
   estimatedAt: '',
   completedAt: '',
   status: 'NEW',
@@ -112,9 +113,9 @@ function formFromSheet(sheet: ServiceSheet): Form {
     approveRepair: sheet.approveRepair ?? false,
     repairRefused: sheet.repairRefused ?? false,
     productDelivered: sheet.productDelivered ?? false,
-    receivedAt: sheet.receivedAt?.slice(0, 10) ?? '',
-    estimatedAt: sheet.estimatedAt?.slice(0, 10) ?? '',
-    completedAt: sheet.completedAt?.slice(0, 10) ?? '',
+    receivedAt: sheet.receivedAt || new Date().toISOString(),
+    estimatedAt: sheet.estimatedAt ?? '',
+    completedAt: sheet.completedAt ?? '',
     status: sheet.status,
     internalNotes: sheet.internalNotes ?? '',
   };
@@ -122,7 +123,7 @@ function formFromSheet(sheet: ServiceSheet): Form {
 
 export function ServiceSheetForm({ propertyId, clientId, sheet, initialShowCompanyDetails = true }: Props) {
   const associatedClientId = sheet?.clientId ?? clientId;
-  const [form, setForm] = useState<Form>(() => sheet ? formFromSheet(sheet) : { ...blank, clientId: clientId ?? '', showCompanyDetails: initialShowCompanyDetails });
+  const [form, setForm] = useState<Form>(() => sheet ? formFromSheet(sheet) : { ...blank, clientId: clientId ?? '', showCompanyDetails: initialShowCompanyDetails, receivedAt: new Date().toISOString() });
   const [client, setClient] = useState<Client | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(false);
@@ -254,9 +255,35 @@ export function ServiceSheetForm({ propertyId, clientId, sheet, initialShowCompa
     setFinanceOverview(nextOverview);
   }, [form.clientId]);
 
+  const refreshExpenses = useCallback(async () => {
+    if (!form.clientId) return;
+    setFinanceOverview(await clientRepository.getFinancials(form.clientId));
+  }, [form.clientId]);
+
+  const addExpense = async (input: ExpenseInput) => {
+    if (!form.clientId) throw new Error('Alege clientul înainte să adaugi cheltuiala.');
+    await clientRepository.addExpense(form.clientId, input);
+    await refreshExpenses();
+    showToast('Cheltuiala a fost adăugată.', 'success');
+  };
+
+  const updateExpense = async (expenseId: string, input: ExpenseInput) => {
+    if (!form.clientId) throw new Error('Clientul asociat nu este disponibil.');
+    await clientRepository.updateExpense(form.clientId, expenseId, input);
+    await refreshExpenses();
+    showToast('Cheltuiala a fost actualizată.', 'success');
+  };
+
+  const deleteExpense = async (expenseId: string) => {
+    if (!form.clientId) throw new Error('Clientul asociat nu este disponibil.');
+    await clientRepository.removeExpense(form.clientId, expenseId);
+    await refreshExpenses();
+    showToast('Cheltuiala a fost ștearsă.', 'success');
+  };
+
   const submit = async () => {
-    if (!form.clientId || form.equipment.trim().length < 2 || form.reportedIssue.trim().length < 5) {
-      return showToast('Alege clientul și completează echipamentul și problema.', 'error');
+    if (!form.clientId || form.reportedIssue.trim().length < 5) {
+      return showToast('Alege clientul și completează problema declarată.', 'error');
     }
 
     const editableFields = {
@@ -346,6 +373,9 @@ export function ServiceSheetForm({ propertyId, clientId, sheet, initialShowCompa
       collaboratorPaid={collaboratorPaid}
       disabled={!canEditFinancials || financePrefilling}
       onChange={setFinanceValue}
+      onAddExpense={canEditFinancials && !financePrefilling ? addExpense : undefined}
+      onUpdateExpense={canEditFinancials && !financePrefilling ? updateExpense : undefined}
+      onDeleteExpense={canEditFinancials && !financePrefilling ? deleteExpense : undefined}
     /> : null}
 
     {financeOverview && form.clientId ? <ServiceSheetCollaborators
@@ -361,7 +391,7 @@ export function ServiceSheetForm({ propertyId, clientId, sheet, initialShowCompa
     <Card style={styles.section}>
       <AppText variant="heading">Echipament</AppText>
       <View style={styles.row}>
-        <View style={styles.field}><Input label="Tip echipament *" value={form.equipment} onChangeText={(value) => update('equipment', value)} /></View>
+        <View style={styles.field}><Input label="Tip echipament" value={form.equipment} onChangeText={(value) => update('equipment', value)} /></View>
         <View style={styles.field}><Input label="Marcă" value={form.brand} onChangeText={(value) => update('brand', value)} /></View>
       </View>
       <View style={styles.row}>
@@ -381,7 +411,11 @@ export function ServiceSheetForm({ propertyId, clientId, sheet, initialShowCompa
 
     <Card style={styles.section}>
       <AppText variant="heading">Planificare și observații</AppText>
-      <View style={styles.row}><View style={styles.field}><Input label="Data primirii" placeholder="AAAA-LL-ZZ" value={form.receivedAt} onChangeText={(value) => update('receivedAt', value)} /></View><View style={styles.field}><Input label="Termen estimat" placeholder="AAAA-LL-ZZ" value={form.estimatedAt} onChangeText={(value) => update('estimatedAt', value)} /></View><View style={styles.field}><Input label="Data finalizării" placeholder="AAAA-LL-ZZ" value={form.completedAt} onChangeText={(value) => update('completedAt', value)} /></View></View>
+      <View style={styles.row}>
+        <View style={styles.field}><DateTimeField label="Data primirii" value={form.receivedAt} onChange={(value) => update('receivedAt', value)} /></View>
+        <View style={styles.field}><DateTimeField label="Termen estimat" value={form.estimatedAt} onChange={(value) => update('estimatedAt', value)} allowClear /></View>
+        <View style={styles.field}><DateTimeField label="Data finalizării" value={form.completedAt} onChange={(value) => update('completedAt', value)} allowClear /></View>
+      </View>
       <Input label="Numele tehnicianului" placeholder="ex. Andrei Popescu" value={form.technicianName} onChangeText={(value) => update('technicianName', value)} />
       <Input label="Observații client / service" multiline numberOfLines={4} textAlignVertical="top" style={{ minHeight: 90 }} value={form.handoverNotes} onChangeText={(value) => update('handoverNotes', value)} />
       <Input label="Observații interne (nu apar în PDF)" multiline value={form.internalNotes} onChangeText={(value) => update('internalNotes', value)} />

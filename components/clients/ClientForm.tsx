@@ -1,7 +1,7 @@
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { ClientFinanceSection } from '@/components/clients/finance';
+import { ClientFinanceSection, type ExpenseInput } from '@/components/clients/finance';
 import { Input } from '@/components/ui/Input';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
@@ -48,6 +48,13 @@ const emptyFinance: ClientFinanceValue = {
 
 const isPreset = (collaborator: Collaborator) => Boolean(collaborator.isPreset);
 const parseCommissionValue = (value: string) => Number(value.trim().replace(',', '.'));
+const createDraftExpense = (input: ExpenseInput): ClientExpense => ({
+  id: `draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  clientId: 'draft',
+  description: input.description,
+  amount: input.amount,
+  createdAt: new Date().toISOString(),
+});
 
 function SegmentOption({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   const { colors } = useAppTheme();
@@ -207,6 +214,44 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
   }, 0);
   const filteredCollaborators = collaborators.filter((item) => item.name.toLocaleLowerCase('ro').includes(collaboratorQuery.trim().toLocaleLowerCase('ro')));
 
+  const refreshSavedExpenses = async () => {
+    if (!client) return;
+    const overview = await clientRepository.getFinancials(client.id);
+    setFinanceExpenses(overview.expenses);
+    setFinanceCollaboratorCost(overview.summary.collaboratorCost);
+    setFinanceCollaboratorPaid((overview.collaborators ?? (overview.collaborator ? [overview.collaborator] : [])).reduce((sum, item) => sum + item.paid, 0));
+  };
+
+  const addFinanceExpense = async (input: ExpenseInput) => {
+    if (!client) {
+      setFinanceExpenses((current) => [...current, createDraftExpense(input)]);
+      return;
+    }
+    await clientRepository.addExpense(client.id, input);
+    await refreshSavedExpenses();
+    showToast('Cheltuiala a fost adăugată.', 'success');
+  };
+
+  const updateFinanceExpense = async (expenseId: string, input: ExpenseInput) => {
+    if (!client) {
+      setFinanceExpenses((current) => current.map((expense) => expense.id === expenseId ? { ...expense, ...input, updatedAt: new Date().toISOString() } : expense));
+      return;
+    }
+    await clientRepository.updateExpense(client.id, expenseId, input);
+    await refreshSavedExpenses();
+    showToast('Cheltuiala a fost actualizată.', 'success');
+  };
+
+  const deleteFinanceExpense = async (expenseId: string) => {
+    if (!client) {
+      setFinanceExpenses((current) => current.filter((expense) => expense.id !== expenseId));
+      return;
+    }
+    await clientRepository.removeExpense(client.id, expenseId);
+    await refreshSavedExpenses();
+    showToast('Cheltuiala a fost ștearsă.', 'success');
+  };
+
   const submit = async () => {
     if (!client && (collaboratorsLoading || collaboratorsError)) {
       showToast(collaboratorsLoading ? 'Așteaptă încărcarea colaboratorilor.' : 'Reîncarcă lista colaboratorilor înainte să salvezi.', 'error');
@@ -271,8 +316,13 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
       if (canEditFinancials) {
         try {
           await clientRepository.updateFinancials(saved.id, finance);
+          if (!client) {
+            for (const expense of financeExpenses) {
+              await clientRepository.addExpense(saved.id, { description: expense.description, amount: expense.amount });
+            }
+          }
         } catch (error) {
-          showToast(`Clientul a fost salvat, dar finanțele nu au putut fi salvate: ${error instanceof Error ? error.message : 'eroare necunoscută'}`, 'error');
+          showToast(`Clientul a fost salvat, dar finanțele sau cheltuielile nu au putut fi salvate: ${error instanceof Error ? error.message : 'eroare necunoscută'}`, 'error');
           router.replace(`/service/clients/${saved.id}`);
           return;
         }
@@ -323,8 +373,11 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
           collaboratorPaid={financeCollaboratorPaid}
           disabled={!canEditFinancials}
           onChange={setFinance}
+          onAddExpense={canEditFinancials ? addFinanceExpense : undefined}
+          onUpdateExpense={canEditFinancials ? updateFinanceExpense : undefined}
+          onDeleteExpense={canEditFinancials ? deleteFinanceExpense : undefined}
         />
-        <AppText variant="caption" muted>{client ? 'Valorile de mai sus se salvează împreună cu modificările clientului. Cheltuielile, participanții și istoricul se gestionează din profilul clientului.' : 'Finanțele vor fi salvate imediat după crearea clientului și a codului QR.'}</AppText>
+        <AppText variant="caption" muted>{client ? 'Valorile financiare se salvează împreună cu clientul, iar cheltuielile se actualizează imediat.' : 'Finanțele și cheltuielile pregătite aici vor fi salvate imediat după crearea clientului și a codului QR.'}</AppText>
       </> : null}
 
       <Card style={styles.section}>
