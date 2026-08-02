@@ -52,3 +52,7 @@ app-example
 # Local runtime output
 .expo-server.log
 .expo-server.err.log
+/output/
+/tmp/
+__pycache__/
+*.pyc
