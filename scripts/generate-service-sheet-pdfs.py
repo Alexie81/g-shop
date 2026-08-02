@@ -4,6 +4,7 @@ import argparse
 import base64
 import json
 from dataclasses import dataclass
+from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Iterable
@@ -97,6 +98,27 @@ def first_value(data: dict[str, Any], paths: Iterable[tuple[str, ...]]) -> str:
         if value:
             return value
     return ""
+
+
+def money_display(value: str, currency: str) -> str:
+    if value == "":
+        return ""
+    try:
+        amount = float(value.replace(" ", "").replace(",", "."))
+    except ValueError:
+        return f"{value} {currency}".strip()
+    formatted = f"{amount:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+    return f"{formatted} {currency}".strip()
+
+
+def date_time_display(value: str) -> str:
+    if not value:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return value
+    return parsed.strftime("%d.%m.%Y, %H:%M")
 
 
 def full_name(data: dict[str, Any]) -> str:
@@ -365,18 +387,25 @@ def financial_summary_card(
     fill: Color = SURFACE_MUTED,
     value_color: Color = ELECTRIC_DARK,
     status: str | None = None,
+    dark: bool = False,
+    accent: Color | None = None,
 ) -> None:
-    rounded_box(c, x, y, w, 43, radius=8, fill=fill, stroke=LINE, line_width=0.7)
-    c.setFillColor(SLATE)
-    c.setFont("GShop-Bold", 5.5)
-    c.drawString(x + 10, y + 29, label_text.upper())
+    stroke = fill if dark else (accent or LINE)
+    rounded_box(c, x, y, w, 57, radius=9, fill=fill, stroke=stroke, line_width=0.8)
+    if accent:
+        c.setFillColor(accent)
+        c.roundRect(x, y + 8, 3.5, 41, 1.75, fill=1, stroke=0)
+    c.setFillColor(white if dark else SLATE)
+    c.setFont("GShop-Bold", 5.8)
+    c.drawString(x + 11, y + 40, label_text.upper())
     if status:
         status_width = 43 if status == "ACHITAT" else 51
-        status_badge(c, x + w - status_width - 8, y + 25, status)
+        status_badge(c, x + w - status_width - 9, y + 35, status)
     if value:
         c.setFillColor(value_color)
-        c.setFont("GShop-Bold", 10.0)
-        c.drawString(x + 10, y + 9, fit_text(value, "GShop-Bold", 10.0, w - 20))
+        value_size = 12.2 if w >= 180 else 10.6
+        c.setFont("GShop-Bold", value_size)
+        c.drawString(x + 11, y + 13, fit_text(value, "GShop-Bold", value_size, w - 22))
 
 
 def financial_detail(
@@ -387,13 +416,14 @@ def financial_detail(
     label_text: str,
     value: str = "",
 ) -> None:
+    rounded_box(c, x, y, w, 30, radius=7, fill=SURFACE_MUTED, stroke=LINE, line_width=0.55)
     c.setFillColor(SLATE)
-    c.setFont("GShop-Bold", 4.8)
-    c.drawString(x, y + 14, label_text.upper())
+    c.setFont("GShop-Bold", 4.7)
+    c.drawString(x + 8, y + 17, label_text.upper())
     if value:
         c.setFillColor(NAVY)
-        c.setFont("GShop-Bold", 6.7)
-        c.drawString(x, y + 2, fit_text(value, "GShop-Bold", 6.7, w))
+        c.setFont("GShop-Bold", 7.0)
+        c.drawString(x + 8, y + 5, fit_text(value, "GShop-Bold", 7.0, w - 16))
 
 
 def draw_company_field(
@@ -498,7 +528,7 @@ def draw_diagnostic(c: canvas.Canvas, data: dict[str, Any]) -> None:
 
 def draw_financials(c: canvas.Canvas, data: dict[str, Any], variant: Variant) -> None:
     section_title(c, 349, 3, "Costuri și plată", "valorile pentru client")
-    y, h = 248, 88
+    y, h = 213, 123
     rounded_box(c, MARGIN, y, CONTENT_W, h, fill=white)
 
     # The application is the single source of truth for currency. Blank print
@@ -508,55 +538,56 @@ def draw_financials(c: canvas.Canvas, data: dict[str, Any], variant: Variant) ->
     parts = first_value(data, (("financials", "displayedPartsCost"), ("sheet", "partsCost")))
     labor = first_value(data, (("financials", "displayedLaborCost"), ("sheet", "laborCost")))
     discount = text(data, "financials", "discountPercent")
-    advance = text(data, "financials", "advancePaid")
+    received = first_value(data, (("summary", "receivedAmount"), ("financials", "advancePaid")))
     total = first_value(data, (("summary", "totalDue"), ("sheet", "totalCost")))
     rest = text(data, "summary", "remainingDue")
 
+    total_display = money_display(total, currency)
+    received_display = money_display(received, currency)
+    rest_display = money_display(rest, currency)
     payment_status = variant.total_status
     paid = payment_status == "ACHITAT"
     summary = (
-        ("Total de plată", total, ELECTRIC_LIGHT, ELECTRIC_DARK, None),
-        ("Avans încasat", advance, SUCCESS_SOFT, SUCCESS, None),
-        ("Rest de plată", rest, SUCCESS_SOFT if paid else WARNING_SOFT, SUCCESS if paid else WARNING, payment_status),
+        ("Total de plată", total_display, ELECTRIC, white, payment_status, True, None, 207),
+        ("Achitat", received_display, white, SUCCESS, None, False, SUCCESS, 143),
+        ("Rest de plată", rest_display, white, SUCCESS if paid else WARNING, payment_status, False, SUCCESS if paid else WARNING, 163),
     )
     gap = 8
-    card_w = (CONTENT_W - 22 - gap * 2) / 3
     x = MARGIN + 11
-    for label_text, value, fill, value_color, status in summary:
+    for label_text, value, fill, value_color, status, dark, accent, card_w in summary:
         financial_summary_card(
             c,
             x,
-            y + 34,
+            y + 54,
             card_w,
             label_text,
             value,
             fill=fill,
             value_color=value_color,
             status=status,
+            dark=dark,
+            accent=accent,
         )
         x += card_w + gap
 
     details = (
-        ("Diagnostic", diagnostic),
-        ("Piese", parts),
-        ("Manoperă", labor),
+        ("Diagnostic", money_display(diagnostic, currency)),
+        ("Piese", money_display(parts, currency)),
+        ("Manoperă", money_display(labor, currency)),
         ("Reducere", f"{discount}%" if discount else ""),
         ("Monedă", currency),
     )
-    detail_w = (CONTENT_W - 22) / 5
+    detail_gap = 6
+    detail_w = (CONTENT_W - 22 - detail_gap * 4) / 5
     x = MARGIN + 11
-    for index, (label_text, value) in enumerate(details):
-        financial_detail(c, x, y + 2, detail_w - 11, label_text, value)
-        if index < len(details) - 1:
-            c.setStrokeColor(LINE)
-            c.setLineWidth(0.7)
-            c.line(x + detail_w - 6, y + 4, x + detail_w - 6, y + 24)
-        x += detail_w
+    for label_text, value in details:
+        financial_detail(c, x, y + 12, detail_w, label_text, value)
+        x += detail_w + detail_gap
 
 
 def draw_planning(c: canvas.Canvas, data: dict[str, Any]) -> None:
-    section_title(c, 221, 4, "Planificare și observații", "termene și mențiuni pentru dosarul service")
-    y, h = 48, 160
+    section_title(c, 196, 4, "Planificare și observații", "termene și mențiuni pentru dosarul service")
+    y, h = 48, 135
     rounded_box(c, MARGIN, y, CONTENT_W, h)
     col_gap = 12
     field_w = (CONTENT_W - 22 - col_gap * 2) / 3
@@ -567,14 +598,14 @@ def draw_planning(c: canvas.Canvas, data: dict[str, Any]) -> None:
         ("Data finalizării", text(data, "sheet", "completedAt")),
     )
     for label_text, value in dates:
-        draw_line_field(c, x, y + 132, field_w, label_text, value)
+        draw_line_field(c, x, y + 108, field_w, label_text, value)
         x += field_w + col_gap
-    draw_line_field(c, MARGIN + 11, y + 111, CONTENT_W - 22, "Tehnician", text(data, "sheet", "technicianName"))
-    draw_narrative(c, MARGIN + 11, y + 8, CONTENT_W - 22, 89, "Observații client / service", text(data, "sheet", "handoverNotes"), lines=5)
+    draw_line_field(c, MARGIN + 11, y + 87, CONTENT_W - 22, "Tehnician", text(data, "sheet", "technicianName"))
+    draw_narrative(c, MARGIN + 11, y + 8, CONTENT_W - 22, 65, "Observații client / service", text(data, "sheet", "handoverNotes"), lines=4)
 
 
 TERMS_LEFT = (
-    ("1", "Clientul declară că deține vehiculul sau este autorizat să îl predea și că datele comunicate sunt corecte."),
+    ("1", "Clientul declară că deține echipamentul sau este autorizat să îl predea și că datele comunicate sunt corecte."),
     ("2", "Predarea autorizează recepția, fotografierea stării, diagnosticul, demontarea necesară și testele tehnice."),
     ("3", "Devizul inițial este informativ. Lucrările ori piesele suplimentare se execută după acordul clientului."),
     ("4", "Termenul estimat se poate modifica din cauza pieselor indisponibile, defectelor ascunse sau incompatibilităților."),
@@ -627,12 +658,18 @@ def draw_handover(c: canvas.Canvas, data: dict[str, Any]) -> None:
     y, h = 300, 138
     rounded_box(c, MARGIN, y, CONTENT_W, h)
     equipment = text(data, "sheet", "equipment").lower()
-    checkbox_labels = ("Aprob diagnosticul și testarea", "Aprob reparația / devizul", "Refuz reparația", "Produs predat")
+    checkbox_labels = (
+        ("approveDiagnostics", "Aprob diagnosticul și testarea"),
+        ("approveRepair", "Aprob reparația / devizul"),
+        ("repairRefused", "Refuz reparația"),
+        ("productDelivered", "Produs predat"),
+    )
     grid_x = MARGIN + 12
     grid_w = CONTENT_W - 24
     column_w = grid_w / 4
-    for column_index, label_text in enumerate(checkbox_labels):
-        checkbox(c, grid_x + column_index * column_w, y + 98, label_text)
+    sheet = data.get("sheet", {}) if isinstance(data.get("sheet"), dict) else {}
+    for column_index, (key, label_text) in enumerate(checkbox_labels):
+        checkbox(c, grid_x + column_index * column_w, y + 98, label_text, bool(sheet.get(key)))
     draw_line_field(c, MARGIN + 12, y + 48, 160, "Garanție", text(data, "sheet", "warranty"))
     draw_line_field(c, MARGIN + 192, y + 48, 150, "Depozitare după", text(data, "sheet", "storageAfter"))
     draw_line_field(c, MARGIN + 362, y + 48, CONTENT_W - 374, "Status final", text(data, "sheet", "status"))
@@ -654,8 +691,17 @@ def draw_signatures(c: canvas.Canvas, data: dict[str, Any], show_company: bool) 
     left_x = MARGIN + 12
     left_w = split - left_x - 12
     draw_line_field(c, left_x, y + 173, left_w, "Nume client", full_name(data))
-    draw_line_field(c, left_x, y + 145, left_w * 0.58, "Data / ora", text(data, "sheet", "signedAt"))
-    draw_line_field(c, left_x + left_w * 0.62, y + 145, left_w * 0.38, "Document identitate")
+    draw_line_field(c, left_x, y + 145, left_w * 0.44, "Data / ora", date_time_display(text(data, "sheet", "signedAt")))
+    draw_line_field(
+        c,
+        left_x + left_w * 0.48,
+        y + 145,
+        left_w * 0.52,
+        "Document identitate",
+        text(data, "sheet", "identityDocument"),
+        label_size=5.2,
+        label_width=72,
+    )
     c.setFillColor(SLATE)
     c.setFont("GShop-Bold", 6.0)
     c.drawString(left_x, y + 120, "SEMNĂTURĂ CLIENT")

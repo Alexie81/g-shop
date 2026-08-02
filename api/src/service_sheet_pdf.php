@@ -127,11 +127,13 @@ function gshop_pdf_overlay_page_one(Fpdi $pdf, array $sheet, array $client, arra
 
     $summaryCards = [
         $summary['totalDue'] ?? $sheet['totalCost'] ?? 0,
-        $financial['advancePaid'] ?? 0,
+        $summary['receivedAmount'] ?? $financial['advancePaid'] ?? 0,
         $summary['remainingDue'] ?? 0,
     ];
+    $summaryPositions = [[44, 280, 185], [259, 280, 121], [410, 280, 141]];
     foreach ($summaryCards as $index => $value) {
-        gshop_pdf_text($pdf, 43 + $index * 179, 291 + $shift, gshop_pdf_money($value, $currency), 10, 'B', 151);
+        [$x, $baseline, $width] = $summaryPositions[$index];
+        gshop_pdf_text($pdf, $x, $baseline + $shift, gshop_pdf_money($value, $currency), $index === 0 ? 12.2 : 10.6, 'B', $width);
     }
     $details = [
         gshop_pdf_money($financial['diagnosticFee'] ?? 0, $currency),
@@ -141,14 +143,14 @@ function gshop_pdf_overlay_page_one(Fpdi $pdf, array $sheet, array $client, arra
         $currency,
     ];
     foreach ($details as $index => $value) {
-        gshop_pdf_text($pdf, 33 + $index * 105.8, 252 + $shift, $value, 6.7, 'B', 94);
+        gshop_pdf_text($pdf, 41 + $index * 107, 230 + $shift, $value, 7, 'B', 85);
     }
 
-    gshop_pdf_text($pdf, 118, 182 + $shift, gshop_pdf_date($sheet['receivedAt'] ?? ''), 6.8, '', 80);
-    gshop_pdf_text($pdf, 295, 182 + $shift, gshop_pdf_date($sheet['estimatedAt'] ?? ''), 6.8, '', 82);
-    gshop_pdf_text($pdf, 455, 182 + $shift, gshop_pdf_date($sheet['completedAt'] ?? ''), 6.8, '', 103);
-    gshop_pdf_text($pdf, 100, 161 + $shift, $sheet['technicianName'] ?? '', 6.8, '', 455);
-    gshop_pdf_multiline($pdf, 33, 121 + $shift, 525, $sheet['handoverNotes'] ?? '', 5, 6.8, 14);
+    gshop_pdf_text($pdf, 118, 158 + $shift, gshop_pdf_date($sheet['receivedAt'] ?? ''), 6.8, '', 80);
+    gshop_pdf_text($pdf, 295, 158 + $shift, gshop_pdf_date($sheet['estimatedAt'] ?? ''), 6.8, '', 82);
+    gshop_pdf_text($pdf, 455, 158 + $shift, gshop_pdf_date($sheet['completedAt'] ?? ''), 6.8, '', 103);
+    gshop_pdf_text($pdf, 100, 137 + $shift, $sheet['technicianName'] ?? '', 6.8, '', 455);
+    gshop_pdf_multiline($pdf, 33, 97 + $shift, 525, $sheet['handoverNotes'] ?? '', 4, 6.8, 14);
 }
 
 function gshop_pdf_overlay_page_two(Fpdi $pdf, array $sheet, array $client, ?string $signaturePath, ?string $stampPath): void {
@@ -164,7 +166,7 @@ function gshop_pdf_overlay_page_two(Fpdi $pdf, array $sheet, array $client, ?str
     $clientName = trim(gshop_pdf_string($client['firstName'] ?? '') . ' ' . gshop_pdf_string($client['lastName'] ?? ''));
     gshop_pdf_text($pdf, 112, 223, $clientName, 7, '', 245);
     gshop_pdf_text($pdf, 110, 195, gshop_pdf_date($sheet['signedAt'] ?? '', true), 6.8, '', 110);
-    gshop_pdf_text($pdf, 300, 195, $sheet['identityDocument'] ?? '', 6.8, '', 84);
+    gshop_pdf_text($pdf, 265, 195, $sheet['identityDocument'] ?? '', 6.8, '', 90);
     gshop_pdf_text($pdf, 455, 223, $sheet['technicianName'] ?? '', 6.8, '', 102);
 
     $signature = gshop_pdf_image_path($signaturePath);
@@ -180,7 +182,7 @@ function gshop_pdf_overlay_page_two(Fpdi $pdf, array $sheet, array $client, ?str
 
 function generate_service_sheet_pdf(array $sheet, array $client, array $financial, array $summary, array $company, ?string $signaturePath, ?string $stampPath): array {
     $withCompany = !empty($sheet['showCompanyDetails']);
-    $paid = ($financial['paymentStatus'] ?? 'UNPAID') === 'PAID';
+    $paid = ($financial['paymentStatus'] ?? 'UNPAID') === 'PAID' && (float)($summary['remainingDue'] ?? 0) <= 0.009;
     $template = __DIR__ . '/../assets/service-sheet-templates/' . ($withCompany ? 'with-company' : 'without-company') . '/' . ($paid ? 'paid.pdf' : 'unpaid.pdf');
     if (!is_file($template)) throw new RuntimeException('Șablonul PDF al fișei nu este disponibil.');
 
