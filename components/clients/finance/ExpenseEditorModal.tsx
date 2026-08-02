@@ -50,7 +50,7 @@ export function ExpenseEditorModal({ visible, currencyCode, expense, onSubmit, o
   };
 
   return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-    <KeyboardAvoidingView style={[styles.overlay, { backgroundColor: colors.overlay }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={[styles.overlay, { backgroundColor: colors.overlay }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
       <View style={[styles.modal, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <View style={styles.header}>

@@ -17,6 +17,7 @@
     },
     "android": {
       "package": "ro.gshop.mobile",
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./logo/app-icon.png",
         "backgroundColor": "#07152D"

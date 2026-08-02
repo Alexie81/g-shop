@@ -552,7 +552,7 @@ function EditorModal({ visible, isEditing, compact, form, saving, onChange, onSa
   const commissionValue = Number(form.commissionValue.replace(',', '.')) || 0;
 
   return <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-    <KeyboardAvoidingView style={styles.modalRoot} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={styles.modalRoot} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <Pressable accessibilityRole="button" accessibilityLabel="Închide formularul" style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }]} onPress={onClose} />
       <View style={[
         styles.editor,

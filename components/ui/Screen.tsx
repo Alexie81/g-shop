@@ -1,7 +1,7 @@
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { spacing } from '@/theme/tokens';
 import { PropsWithChildren, ReactNode } from 'react';
-import { RefreshControl, ScrollView, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export function Screen({ children, scroll = true, refreshing = false, onRefresh, style, bottomInset = true, header }:
@@ -11,9 +11,17 @@ export function Screen({ children, scroll = true, refreshing = false, onRefresh,
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safe, { backgroundColor: colors.background }]}>
       {header}
-      {scroll ? <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.scroll} refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} /> : undefined}>{content}</ScrollView> : content}
+      <KeyboardAvoidingView style={styles.avoider} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        {scroll ? <ScrollView
+          automaticallyAdjustKeyboardInsets
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.scroll}
+          refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} /> : undefined}
+        >{content}</ScrollView> : content}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({ safe: { flex: 1 }, scroll: { flexGrow: 1 }, content: { width: '100%', maxWidth: 1180, alignSelf: 'center', padding: spacing.lg, paddingBottom: 112 } });
+const styles = StyleSheet.create({ safe: { flex: 1 }, avoider: { flex: 1 }, scroll: { flexGrow: 1 }, content: { width: '100%', maxWidth: 1180, alignSelf: 'center', padding: spacing.lg, paddingBottom: 112 } });

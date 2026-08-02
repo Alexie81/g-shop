@@ -45,7 +45,7 @@ export default function LoginScreen() {
     <View pointerEvents="none" style={[styles.orb, styles.orbBottom, { backgroundColor: isDark ? 'rgba(0,189,255,0.12)' : 'rgba(0,151,255,0.10)' }]} />
     <LinearGradient pointerEvents="none" colors={['transparent', isDark ? 'rgba(32,111,255,0.30)' : 'rgba(32,111,255,0.16)', 'transparent']} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={styles.lightBeam} />
 
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <Animated.View style={[styles.shell, { opacity: entrance, transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }, { scale: entrance.interpolate({ inputRange: [0, 1], outputRange: [0.98, 1] }) }] }]}>
           <View style={styles.logoArea}>

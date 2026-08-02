@@ -150,7 +150,7 @@ function EditorModal({ draft, saving, onChange, onSave, onClose }: { draft: Draf
   }), [closeByDrag, saving, translateY]);
   const appendToken = (token: string) => draft && onChange({ ...draft, message: `${draft.message}${draft.message ? ' ' : ''}${token}` });
   return <Modal visible={Boolean(draft)} transparent animationType="slide" onRequestClose={onClose}>
-    <KeyboardAvoidingView style={[styles.modalOverlay, { backgroundColor: colors.overlay }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={[styles.modalOverlay, { backgroundColor: colors.overlay }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <Pressable accessibilityLabel="Închide editorul" style={StyleSheet.absoluteFill} onPress={onClose} />
       {draft ? <Animated.View style={[styles.editor, mobile && styles.editorMobile, { backgroundColor: colors.surface, borderColor: colors.border, transform: [{ translateY }] }]}>
         <View {...panResponder.panHandlers} accessibilityRole="adjustable" accessibilityLabel="Trage în jos pentru a închide" style={styles.draggableModalHeader}>

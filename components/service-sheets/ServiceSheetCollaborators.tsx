@@ -12,7 +12,7 @@ import { ClientFinancialCollaborator, ClientFinancialOverview, Collaborator, Com
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 type AssignmentDraft = {
   collaboratorId: UUID;
@@ -166,7 +166,7 @@ export function ServiceSheetCollaborators({ propertyId, clientId, overview, hasS
     />}
 
     <Modal visible={editorOpen} transparent animationType="slide" statusBarTranslucent onRequestClose={() => !saving && setEditorOpen(false)}>
-      <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
+      <KeyboardAvoidingView style={[styles.overlay, { backgroundColor: colors.overlay }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Pressable accessibilityLabel="Închide editorul" style={StyleSheet.absoluteFill} onPress={() => !saving && setEditorOpen(false)} />
         <Card style={[styles.sheet, { borderColor: colors.border }]} elevated>
           <View style={styles.handleWrap}><View style={[styles.handle, { backgroundColor: colors.border }]} /></View>
@@ -179,7 +179,7 @@ export function ServiceSheetCollaborators({ propertyId, clientId, overview, hasS
           <Input label="Caută colaborator" value={query} onChangeText={setQuery} placeholder="Nume sau rol" />
           {error ? <View style={[styles.notice, { backgroundColor: `${palette.danger}12` }]}><Ionicons name="alert-circle-outline" size={19} color={palette.danger} /><AppText variant="caption" style={[styles.copy, { color: palette.danger }]}>{error}</AppText></View> : null}
 
-          <ScrollView style={styles.content} contentContainerStyle={styles.contentInner} keyboardShouldPersistTaps="handled">
+          <ScrollView automaticallyAdjustKeyboardInsets keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} style={styles.content} contentContainerStyle={styles.contentInner} keyboardShouldPersistTaps="handled">
             <View style={styles.options}>
               {loading ? <AppText muted>Se încarcă lista…</AppText> : filtered.map((item) => {
                 const selected = drafts.some((draft) => draft.collaboratorId === item.id);
@@ -206,7 +206,7 @@ export function ServiceSheetCollaborators({ propertyId, clientId, overview, hasS
 
           <Button label="Salvează colaboratorii" icon="checkmark-circle-outline" loading={saving} disabled={loading} onPress={() => void save()} />
         </Card>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   </>;
 }
