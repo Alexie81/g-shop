@@ -101,6 +101,139 @@ function gshop_pdf_image_path(?string $relativePath): ?string {
     return $png;
 }
 
+function gshop_pdf_png_paeth(int $left, int $above, int $upperLeft): int {
+    $estimate = $left + $above - $upperLeft;
+    $leftDistance = abs($estimate - $left);
+    $aboveDistance = abs($estimate - $above);
+    $upperLeftDistance = abs($estimate - $upperLeft);
+    if ($leftDistance <= $aboveDistance && $leftDistance <= $upperLeftDistance) return $left;
+    return $aboveDistance <= $upperLeftDistance ? $above : $upperLeft;
+}
+
+/** @return array{path:string,width:int,height:int}|null */
+function gshop_pdf_signature_image(?string $relativePath): ?array {
+    if (!$relativePath) return null;
+    $candidate = realpath(__DIR__ . '/../' . ltrim($relativePath, '/\\'));
+    $apiRoot = realpath(__DIR__ . '/..');
+    if ($candidate === false || $apiRoot === false || !str_starts_with($candidate, $apiRoot) || !is_file($candidate)) return null;
+    $binary = @file_get_contents($candidate);
+    if (!is_string($binary) || !str_starts_with($binary, "\x89PNG\r\n\x1a\n")) return null;
+
+    $offset = 8;
+    $ihdr = null;
+    $compressed = '';
+    $binaryLength = strlen($binary);
+    while ($offset + 12 <= $binaryLength) {
+        $lengthData = unpack('Nlength', substr($binary, $offset, 4));
+        $length = (int)($lengthData['length'] ?? -1);
+        $type = substr($binary, $offset + 4, 4);
+        if ($length < 0 || $offset + 12 + $length > $binaryLength) return null;
+        $chunk = substr($binary, $offset + 8, $length);
+        if ($type === 'IHDR') $ihdr = $chunk;
+        if ($type === 'IDAT') $compressed .= $chunk;
+        $offset += 12 + $length;
+        if ($type === 'IEND') break;
+    }
+    if (!is_string($ihdr) || strlen($ihdr) !== 13 || $compressed === '') return null;
+    $header = unpack('Nwidth/Nheight/CbitDepth/CcolorType/Ccompression/Cfilter/Cinterlace', $ihdr);
+    $width = (int)($header['width'] ?? 0);
+    $height = (int)($header['height'] ?? 0);
+    if ($width < 1 || $height < 1 || $width > 4096 || $height > 4096 || (int)($header['bitDepth'] ?? 0) !== 8 || (int)($header['colorType'] ?? -1) !== 6 || (int)($header['interlace'] ?? 1) !== 0) return null;
+    $inflated = @gzuncompress($compressed);
+    $bytesPerPixel = 4;
+    $stride = $width * $bytesPerPixel;
+    if (!is_string($inflated) || strlen($inflated) < ($stride + 1) * $height) return null;
+
+    $rows = [];
+    $previous = '';
+    $cursor = 0;
+    for ($y = 0; $y < $height; $y++) {
+        $filter = ord($inflated[$cursor]);
+        $filtered = substr($inflated, $cursor + 1, $stride);
+        $cursor += $stride + 1;
+        $decoded = '';
+        for ($i = 0; $i < $stride; $i++) {
+            $value = ord($filtered[$i]);
+            $left = $i >= $bytesPerPixel ? ord($decoded[$i - $bytesPerPixel]) : 0;
+            $above = $previous !== '' ? ord($previous[$i]) : 0;
+            $upperLeft = $previous !== '' && $i >= $bytesPerPixel ? ord($previous[$i - $bytesPerPixel]) : 0;
+            $predictor = match ($filter) {
+                0 => 0,
+                1 => $left,
+                2 => $above,
+                3 => intdiv($left + $above, 2),
+                4 => gshop_pdf_png_paeth($left, $above, $upperLeft),
+                default => -1,
+            };
+            if ($predictor < 0) return null;
+            $decoded .= chr(($value + $predictor) & 255);
+        }
+        $rows[] = $decoded;
+        $previous = $decoded;
+    }
+
+    $corners = [[0,0],[$width - 1,0],[0,$height - 1],[$width - 1,$height - 1]];
+    $background = [0,0,0,0];
+    foreach ($corners as [$x,$y]) {
+        $pixel = $x * 4;
+        for ($channel = 0; $channel < 4; $channel++) $background[$channel] += ord($rows[$y][$pixel + $channel]);
+    }
+    $background = array_map(static fn(int $value): int => intdiv($value, 4), $background);
+    $opaqueBackground = $background[3] > 240;
+    $inkAlpha = static function (string $row, int $x) use ($background, $opaqueBackground): int {
+        $pixel = $x * 4;
+        $sourceAlpha = ord($row[$pixel + 3]);
+        if (!$opaqueBackground) return $sourceAlpha;
+        $difference = max(
+            abs(ord($row[$pixel]) - $background[0]),
+            abs(ord($row[$pixel + 1]) - $background[1]),
+            abs(ord($row[$pixel + 2]) - $background[2])
+        );
+        return max(0, min(255, ($difference - 6) * 4));
+    };
+
+    $minX = $width;
+    $minY = $height;
+    $maxX = -1;
+    $maxY = -1;
+    foreach ($rows as $y => $row) {
+        for ($x = 0; $x < $width; $x++) {
+            if ($inkAlpha($row, $x) <= 8) continue;
+            $minX = min($minX, $x);
+            $minY = min($minY, $y);
+            $maxX = max($maxX, $x);
+            $maxY = max($maxY, $y);
+        }
+    }
+    if ($maxX < $minX || $maxY < $minY) return null;
+    $padding = max(4, (int)round(max($maxX - $minX + 1, $maxY - $minY + 1) * 0.018));
+    $minX = max(0, $minX - $padding);
+    $minY = max(0, $minY - $padding);
+    $maxX = min($width - 1, $maxX + $padding);
+    $maxY = min($height - 1, $maxY + $padding);
+    $croppedWidth = $maxX - $minX + 1;
+    $croppedHeight = $maxY - $minY + 1;
+
+    $scanlines = '';
+    for ($y = $minY; $y <= $maxY; $y++) {
+        $scanlines .= "\x00";
+        for ($x = $minX; $x <= $maxX; $x++) $scanlines .= "\x00\x00\x00" . chr($inkAlpha($rows[$y], $x));
+    }
+    $pngChunk = static function (string $type, string $data): string {
+        return pack('N', strlen($data)) . $type . $data . pack('N', crc32($type . $data));
+    };
+    $normalized = "\x89PNG\r\n\x1a\n"
+        . $pngChunk('IHDR', pack('NNCCCCC', $croppedWidth, $croppedHeight, 8, 6, 0, 0, 0))
+        . $pngChunk('IDAT', gzcompress($scanlines, 7))
+        . $pngChunk('IEND', '');
+    $temporary = tempnam(sys_get_temp_dir(), 'gshop-signature-');
+    if ($temporary === false) return null;
+    $png = $temporary . '.png';
+    @unlink($temporary);
+    if (@file_put_contents($png, $normalized, LOCK_EX) === false) return null;
+    return ['path'=>$png,'width'=>$croppedWidth,'height'=>$croppedHeight];
+}
+
 function gshop_pdf_overlay_page_one(Fpdi $pdf, array $sheet, array $client, array $financial, array $summary, array $company): void {
     $showCompany = !empty($sheet['showCompanyDetails']);
     $shift = $showCompany ? 0.0 : 48.0;
@@ -188,13 +321,29 @@ function gshop_pdf_overlay_page_two(Fpdi $pdf, array $sheet, array $client, stri
     gshop_pdf_text($pdf, 110, 355, gshop_pdf_date($sheet['signedAt'] ?? '', true), 6.8, '', 245);
     gshop_pdf_text($pdf, 455, 379, $sheet['technicianName'] ?? '', 6.8, '', 102);
 
-    $signature = gshop_pdf_image_path($signaturePath);
-    if ($signature) $pdf->Image($signature, 34, 517, 323, 38);
+    $signature = gshop_pdf_signature_image($signaturePath);
+    if ($signature) {
+        $boxX = 34.0;
+        $boxY = 517.0;
+        $boxWidth = 323.0;
+        $boxHeight = 38.0;
+        $scale = min($boxWidth / $signature['width'], $boxHeight / $signature['height']);
+        $drawWidth = $signature['width'] * $scale;
+        $drawHeight = $signature['height'] * $scale;
+        $pdf->Image(
+            $signature['path'],
+            $boxX + ($boxWidth - $drawWidth) / 2,
+            $boxY + ($boxHeight - $drawHeight) / 2,
+            $drawWidth,
+            $drawHeight,
+            'PNG'
+        );
+    }
     if (!empty($sheet['showCompanyDetails'])) {
         $stamp = gshop_pdf_image_path($stampPath);
         if ($stamp) $pdf->Image($stamp, 381, 517, 168, 38);
     }
-    foreach ([$signature ?? null, isset($stamp) ? $stamp : null] as $temporary) {
+    foreach ([$signature['path'] ?? null, isset($stamp) ? $stamp : null] as $temporary) {
         if ($temporary && str_starts_with($temporary, sys_get_temp_dir()) && is_file($temporary)) @unlink($temporary);
     }
 }
