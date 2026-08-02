@@ -10,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { clientRepository, serviceSheetRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { ClientFinancialOverview, ServiceSheet, ServiceSheetStatus as Status } from '@/types';
@@ -43,6 +44,7 @@ export default function ServiceSheetDetails() {
       : null;
     return { sheet, financials };
   }, [canViewFinancials, serviceSheetId]);
+  useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);
 
   const header = <AppHeader title="Fișă service" back onBack={returnToServiceSheets} />;
   if (state.loading) return <Screen header={header}><LoadingState rows={5} /></Screen>;
@@ -189,7 +191,7 @@ export default function ServiceSheetDetails() {
     <Card style={[styles.panel, mobile && styles.cardMobile]}>
       <SectionTitle icon="pencil-outline" title="Semnătura clientului" />
       {sheet.signatureUrl ? <>
-        <Image source={{ uri: sheet.signatureUrl }} resizeMode="contain" style={[styles.signature, veryNarrow && styles.signatureNarrow, { backgroundColor: colors.surfaceMuted }]} />
+        <Image source={{ uri: sheet.signatureUrl }} resizeMode="contain" style={[styles.signature, veryNarrow && styles.signatureNarrow, { backgroundColor: colors.surfaceMuted, tintColor: colors.text }]} />
         <View style={styles.signatureFooter}>
           <View style={styles.signedCopy}>
             <Ionicons name="checkmark-circle" size={18} color={palette.success} />
