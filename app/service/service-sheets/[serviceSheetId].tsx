@@ -53,6 +53,10 @@ export default function ServiceSheetDetails() {
   if (state.error || !state.data) return <Screen header={header}><ErrorState message={state.error?.message ?? 'Fișa nu există.'} onRetry={() => void state.reload()} /></Screen>;
 
   const { sheet, financials } = state.data;
+  const signatureVersion = sheet.signedAt ?? sheet.updatedAt;
+  const signaturePreviewUrl = sheet.signatureUrl && signatureVersion && !/[?&]v=/.test(sheet.signatureUrl)
+    ? `${sheet.signatureUrl}${sheet.signatureUrl.includes('?') ? '&' : '?'}v=${encodeURIComponent(signatureVersion)}`
+    : sheet.signatureUrl;
   const currencyCode = sheet.currencyCode ?? financials?.financials.currencyCode ?? 'RON';
   const formatCurrency = (value: number) => formatFinanceMoney(value, currencyCode);
   const currentStatusIndex = statusOrder.indexOf(sheet.status);
@@ -246,8 +250,8 @@ export default function ServiceSheetDetails() {
 
     <Card style={[styles.panel, mobile && styles.cardMobile]}>
       <SectionTitle icon="pencil-outline" title="Semnătura clientului" />
-      {sheet.signatureUrl ? <>
-        <Image source={{ uri: sheet.signatureUrl }} resizeMode="contain" style={[styles.signature, veryNarrow && styles.signatureNarrow, { backgroundColor: colors.surfaceMuted, tintColor: colors.text }]} />
+      {signaturePreviewUrl ? <>
+        <Image key={signaturePreviewUrl} source={{ uri: signaturePreviewUrl }} resizeMode="contain" style={[styles.signature, veryNarrow && styles.signatureNarrow, { backgroundColor: colors.surfaceMuted, tintColor: colors.text }]} />
         <View style={styles.signatureFooter}>
           <View style={styles.signedCopy}>
             <Ionicons name="checkmark-circle" size={18} color={palette.success} />

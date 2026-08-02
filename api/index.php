@@ -503,7 +503,10 @@ function map_sheet(array $row): array {
     foreach (['partsCost','laborCost','totalCost','directCosts','netValue','collaboratorCommission'] as $key) $sheet[$key] = $sheet[$key] !== null ? (float)$sheet[$key] : null;
     foreach (['showCompanyDetails','approveDiagnostics','approveRepair','repairRefused','productDelivered'] as $key) $sheet[$key] = (bool)$sheet[$key];
     $sheet['technicianName'] = $technicianName !== '' ? $technicianName : null;
-    $sheet['signatureUrl'] = $sheet['signaturePath'] ? public_base_url() . '/' . ltrim($sheet['signaturePath'], '/') : null;
+    $signatureVersion = (string)($sheet['signedAt'] ?? $sheet['updatedAt'] ?? '');
+    $sheet['signatureUrl'] = $sheet['signaturePath']
+        ? public_base_url() . '/' . ltrim($sheet['signaturePath'], '/') . ($signatureVersion !== '' ? '?v=' . rawurlencode($signatureVersion) : '')
+        : null;
     unset($sheet['signaturePath']); $sheet['client'] = $client;
     return $sheet;
 }
