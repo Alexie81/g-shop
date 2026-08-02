@@ -4,6 +4,7 @@ import { ClientStatusBadge } from '@/components/clients/ClientStatusBadge';
 import { WhatsAppQuickMessagesModal } from '@/components/clients/WhatsAppQuickMessagesModal';
 import { ClientCollaboratorFinanceCard } from '@/components/clients/finance/ClientCollaboratorFinanceCard';
 import { ClientFinanceOverviewCard, ClientFinanceSection } from '@/components/clients/finance';
+import { ServiceSheetTypeModal } from '@/components/service-sheets/ServiceSheetTypeModal';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
@@ -39,6 +40,7 @@ export default function ClientDetailsScreen() {
   const [financeSaving, setFinanceSaving] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
   const [whatsAppOpen, setWhatsAppOpen] = useState(false);
+  const [serviceSheetTypeOpen, setServiceSheetTypeOpen] = useState(false);
   const isAdmin = user?.role === 'ADMIN';
   const compactLayout = width <= 390;
   const canViewFinancials = hasPermission('financials.view');
@@ -73,9 +75,7 @@ export default function ClientDetailsScreen() {
   const { client, sheets, financials, history, whatsAppMessages } = state.data;
   const serviceSheet = sheets[0];
   const contact = async (url: string) => { if (await Linking.canOpenURL(url)) await Linking.openURL(url); else showToast('Acțiunea nu este disponibilă.', 'error'); };
-  const openServiceSheet = () => serviceSheet
-    ? router.push(`/service/service-sheets/${serviceSheet.id}`)
-    : router.push({ pathname: '/service/service-sheets/create', params: { clientId: client.id, returnTo: `/service/clients/${client.id}` } });
+  const openServiceSheet = () => serviceSheet ? router.push(`/service/service-sheets/${serviceSheet.id}`) : setServiceSheetTypeOpen(true);
   const selectTab = (next: Tab) => {
     if (next === tab) return;
     Haptics.selectionAsync().catch(() => undefined);
@@ -205,6 +205,7 @@ export default function ClientDetailsScreen() {
         onSetPaid={() => undefined}
       />}
     </> : <History items={history} />}
+    <ServiceSheetTypeModal visible={serviceSheetTypeOpen} onClose={() => setServiceSheetTypeOpen(false)} onSelect={(showCompanyDetails) => { setServiceSheetTypeOpen(false); Haptics.selectionAsync().catch(() => undefined); router.push({ pathname: '/service/service-sheets/create', params: { clientId: client.id, returnTo: `/service/clients/${client.id}`, showCompanyDetails: showCompanyDetails ? '1' : '0' } }); }} />
     <WhatsAppQuickMessagesModal visible={whatsAppOpen} client={client} propertyName={activeProperty?.name ?? 'G-Shop'} messages={whatsAppMessages} onClose={() => setWhatsAppOpen(false)} />
   </Screen>;
 }

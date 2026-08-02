@@ -9,7 +9,7 @@ import { BackHandler } from 'react-native';
 
 export default function CreateServiceSheetScreen() {
   const { activeProperty } = useProperty();
-  const { clientId, returnTo } = useLocalSearchParams<{ clientId?: string; returnTo?: string }>();
+  const { clientId, returnTo, showCompanyDetails } = useLocalSearchParams<{ clientId?: string; returnTo?: string; showCompanyDetails?: string }>();
   const [formVersion, setFormVersion] = useState(0);
   const cancelCreation = useCallback(() => {
     setFormVersion((current) => current + 1);
@@ -30,6 +30,6 @@ export default function CreateServiceSheetScreen() {
   }, [cancelCreation]));
 
   return <Screen header={<AppHeader title="Fișă de service nouă" back onBack={cancelCreation} />}>
-    <ServiceSheetForm key={formVersion} propertyId={activeProperty?.id ?? ''} clientId={clientId} />
+    <ServiceSheetForm key={formVersion} propertyId={activeProperty?.id ?? ''} clientId={clientId} initialShowCompanyDetails={showCompanyDetails !== '0'} />
   </Screen>;
 }
