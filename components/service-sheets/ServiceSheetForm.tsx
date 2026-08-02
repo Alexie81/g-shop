@@ -1,4 +1,5 @@
 import { ClientFinanceSection } from '@/components/clients/finance';
+import { ServiceSheetCollaborators } from '@/components/service-sheets/ServiceSheetCollaborators';
 import { SERVICE_STATUS_LABELS } from '@/components/service-sheets/ServiceSheetStatus';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
@@ -11,7 +12,7 @@ import { clientRepository, serviceSheetRepository } from '@/repositories/api-rep
 import { apiRequest, ApiError } from '@/services/api';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { Client, ClientFinancialOverview, ServiceSheet, ServiceSheetStatus, UUID } from '@/types';
-import { calculateClientFinance, ClientFinanceValue, formatFinanceMoney } from '@/utils/client-finance';
+import { calculateClientFinance, ClientFinanceValue } from '@/utils/client-finance';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
@@ -127,16 +128,16 @@ export function ServiceSheetForm({ propertyId, clientId, sheet, initialShowCompa
   const [financeOverview, setFinanceOverview] = useState<ClientFinancialOverview | null>(null);
   const [financeValue, setFinanceValue] = useState<ClientFinanceValue>(() => ({ ...emptyFinance, currencyCode: sheet?.currencyCode ?? 'RON', displayedPartsCost: sheet?.partsCost ?? 0, displayedLaborCost: sheet?.laborCost ?? 0 }));
   const [financeSourceClientId, setFinanceSourceClientId] = useState<UUID | null>(null);
-  const [currencyCode, setCurrencyCode] = useState(sheet?.currencyCode ?? 'RON');
   const [choosingClient, setChoosingClient] = useState(false);
   const { hasPermission } = useAuth();
   const { colors } = useAppTheme();
   const canLoadFinancials = hasPermission('financials.view');
   const canEditFinancials = canLoadFinancials && hasPermission('clients.update');
+  const canEditCollaborators = hasPermission('clients.update') && hasPermission('collaborators.view');
+  const canManageCollaboratorPayments = hasPermission('collaborators.manage');
   const { showToast } = useToast();
 
   const applyClientFinance = useCallback((overview: ClientFinancialOverview, selectedClientId: UUID) => {
-    setCurrencyCode(overview.financials.currencyCode || 'RON');
     setFinanceValue({ ...emptyFinance, ...overview.financials });
     setForm((current) => current.clientId !== selectedClientId ? current : {
       ...current,
@@ -221,7 +222,6 @@ export function ServiceSheetForm({ propertyId, clientId, sheet, initialShowCompa
         actualPartsCost: '0',
       }));
       setClient(clients.find((item) => item.id === nextClientId) ?? null);
-      setCurrencyCode('RON');
       setFinanceValue({ ...emptyFinance });
       setFinanceOverview(null);
       setFinanceSourceClientId(null);
@@ -240,6 +240,16 @@ export function ServiceSheetForm({ propertyId, clientId, sheet, initialShowCompa
   const direct = calculations.internalCosts;
   const total = calculations.totalDue;
   const net = calculations.gshopNet;
+
+  const refreshCollaborators = useCallback(async () => {
+    if (!form.clientId) return;
+    const [nextClient, nextOverview] = await Promise.all([
+      clientRepository.get(form.clientId),
+      clientRepository.getFinancials(form.clientId),
+    ]);
+    setClient(nextClient);
+    setFinanceOverview(nextOverview);
+  }, [form.clientId]);
 
   const submit = async () => {
     if (!form.clientId || form.equipment.trim().length < 2 || form.reportedIssue.trim().length < 5) {
@@ -331,14 +341,18 @@ export function ServiceSheetForm({ propertyId, clientId, sheet, initialShowCompa
       collaboratorCost={collaboratorCost}
       collaboratorPaid={collaboratorPaid}
       disabled={!canEditFinancials || financePrefilling}
-      onChange={(next) => { setFinanceValue(next); setCurrencyCode(next.currencyCode); }}
+      onChange={setFinanceValue}
     /> : null}
 
-    {financeOverview && collaborators.length ? <Card style={styles.section}>
-      <AppText variant="heading">Colaboratorii fișei</AppText>
-      <AppText variant="caption" muted>Atribuirile și comisioanele sunt preluate automat din client.</AppText>
-      <View style={styles.collaboratorList}>{collaborators.map((collaborator) => <View key={collaborator.id} style={[styles.collaboratorChip, { borderColor: palette.cyan }]}><Ionicons name="person-outline" size={17} color={palette.cyan} /><View style={styles.clientCopy}><AppText variant="label">{collaborator.name}</AppText><AppText variant="caption" muted>{collaborator.commissionType === 'FIXED' ? `${formatFinanceMoney(collaborator.commissionValue ?? 0, currencyCode)} sumă fixă` : `${collaborator.commissionValue ?? 0}% ${collaborator.commissionType === 'PERCENT_TOTAL' ? 'din total' : 'din net'}`} · {collaborator.status === 'PAID' ? 'achitat' : `${formatFinanceMoney(collaborator.due, currencyCode)} de achitat`}</AppText></View></View>)}</View>
-    </Card> : null}
+    {financeOverview && form.clientId ? <ServiceSheetCollaborators
+      propertyId={propertyId}
+      clientId={form.clientId}
+      overview={financeOverview}
+      hasServiceSheet={Boolean(sheet)}
+      canEditAssignment={canEditCollaborators}
+      canManagePayment={canManageCollaboratorPayments}
+      onRefresh={refreshCollaborators}
+    /> : null}
 
     <Card style={styles.section}>
       <AppText variant="heading">Echipament</AppText>
@@ -378,7 +392,7 @@ export function ServiceSheetForm({ propertyId, clientId, sheet, initialShowCompa
       </View>
       <View style={styles.row}><View style={styles.field}><Input label="Garanție" placeholder="ex. 90 zile" value={form.warranty} onChangeText={(value) => update('warranty', value)} /></View><View style={styles.field}><Input label="Depozitare după termen" placeholder="ex. 5 RON / zi" value={form.storageAfter} onChangeText={(value) => update('storageAfter', value)} /></View></View>
       <AppText variant="label">Statusul fișei</AppText>
-      <View style={styles.statusGrid}>{(Object.keys(SERVICE_STATUS_LABELS) as ServiceSheetStatus[]).map((status) => <Pressable key={status} accessibilityRole="button" accessibilityState={{ selected: form.status === status }} onPress={() => update('status', status)} style={({ pressed }) => [styles.statusButton, { borderColor: form.status === status ? colors.primary : colors.border, backgroundColor: form.status === status ? colors.primary : colors.surfaceMuted, opacity: pressed ? 0.75 : 1 }]}><AppText variant="caption" style={{ color: form.status === status ? '#FFFFFF' : colors.text, fontWeight: '800' }}>{SERVICE_STATUS_LABELS[status]}</AppText></Pressable>)}</View>
+      <View style={styles.statusGrid}>{(Object.keys(SERVICE_STATUS_LABELS) as ServiceSheetStatus[]).map((status) => <Pressable key={status} accessibilityRole="button" accessibilityState={{ selected: form.status === status }} onPress={() => update('status', status)} style={({ pressed }) => [styles.statusButton, { borderColor: form.status === status ? colors.primary : colors.border, backgroundColor: form.status === status ? colors.primary : colors.surfaceMuted, opacity: pressed ? 0.75 : 1 }]}><AppText variant="caption" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82} style={[styles.statusButtonLabel, { color: form.status === status ? '#FFFFFF' : colors.text }]}>{SERVICE_STATUS_LABELS[status]}</AppText></Pressable>)}</View>
     </Card>
 
     <Button label={sheet ? 'Salvează modificările' : 'Creează fișa de service'} icon={sheet ? 'save-outline' : 'document-text-outline'} loading={loading} onPress={() => void submit()} />
@@ -408,14 +422,13 @@ const styles = StyleSheet.create({
   toggleOption: { minHeight: 52, minWidth: 190, flexGrow: 1, flexBasis: '46%', borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   toggleOptionIcon: { width: 34, height: 34, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   statusGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  statusButton: { minHeight: 40, borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center' },
+  statusButton: { minWidth: 136, minHeight: 46, flexBasis: 136, flexGrow: 1, flexShrink: 0, borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: spacing.md, alignItems: 'center', justifyContent: 'center' },
+  statusButtonLabel: { width: '100%', flexShrink: 0, textAlign: 'center', fontWeight: '800' },
   financeHint: { color: '#14A83B', fontWeight: '700' },
   expensesBlock: { gap: spacing.sm, paddingTop: spacing.md },
   expensesHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md },
   expenseRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md },
   expenseName: { flex: 1 },
-  collaboratorList: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  collaboratorChip: { minWidth: 190, flex: 1, borderWidth: 1, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   calculationTotal: { gap: spacing.sm, paddingTop: spacing.lg },
   totalLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md },
 });
