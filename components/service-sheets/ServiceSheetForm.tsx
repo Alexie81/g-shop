@@ -33,6 +33,7 @@ type Form = {
   partsCost: string;
   laborCost: string;
   actualPartsCost: string;
+  technicianName: string;
   showCompanyDetails: boolean;
   warranty: string;
   storageAfter: string;
@@ -69,6 +70,7 @@ const blank: Form = {
   partsCost: '0',
   laborCost: '0',
   actualPartsCost: '0',
+  technicianName: '',
   showCompanyDetails: true,
   warranty: '',
   storageAfter: '',
@@ -100,6 +102,7 @@ function formFromSheet(sheet: ServiceSheet): Form {
     partsCost: String(sheet.partsCost ?? 0),
     laborCost: String(sheet.laborCost ?? 0),
     actualPartsCost: '0',
+    technicianName: sheet.technicianName ?? '',
     showCompanyDetails: sheet.showCompanyDetails ?? true,
     warranty: sheet.warranty ?? '',
     storageAfter: sheet.storageAfter ?? '',
@@ -272,6 +275,7 @@ export function ServiceSheetForm({ propertyId, clientId, sheet, initialShowCompa
       directCosts: direct,
       netValue: net,
       currencyCode: financeValue.currencyCode,
+      technicianName: form.technicianName.trim(),
       showCompanyDetails: form.showCompanyDetails,
       warranty: form.warranty.trim(),
       storageAfter: form.storageAfter.trim(),
@@ -378,6 +382,7 @@ export function ServiceSheetForm({ propertyId, clientId, sheet, initialShowCompa
     <Card style={styles.section}>
       <AppText variant="heading">Planificare și observații</AppText>
       <View style={styles.row}><View style={styles.field}><Input label="Data primirii" placeholder="AAAA-LL-ZZ" value={form.receivedAt} onChangeText={(value) => update('receivedAt', value)} /></View><View style={styles.field}><Input label="Termen estimat" placeholder="AAAA-LL-ZZ" value={form.estimatedAt} onChangeText={(value) => update('estimatedAt', value)} /></View><View style={styles.field}><Input label="Data finalizării" placeholder="AAAA-LL-ZZ" value={form.completedAt} onChangeText={(value) => update('completedAt', value)} /></View></View>
+      <Input label="Numele tehnicianului" placeholder="ex. Andrei Popescu" value={form.technicianName} onChangeText={(value) => update('technicianName', value)} />
       <Input label="Observații client / service" multiline numberOfLines={4} textAlignVertical="top" style={{ minHeight: 90 }} value={form.handoverNotes} onChangeText={(value) => update('handoverNotes', value)} />
       <Input label="Observații interne (nu apar în PDF)" multiline value={form.internalNotes} onChangeText={(value) => update('internalNotes', value)} />
     </Card>

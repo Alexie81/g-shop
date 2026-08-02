@@ -20,7 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Image, Linking, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Image, Linking, Pressable, StyleSheet, Switch, useWindowDimensions, View } from 'react-native';
 
 const statusOrder: Status[] = ['NEW', 'WAITING', 'VERIFYING', 'IN_PROGRESS', 'WAITING_PARTS', 'COMPLETED', 'DELIVERED'];
 const selectableStatuses: Status[] = [...statusOrder, 'CANCELLED'];
@@ -34,6 +34,7 @@ export default function ServiceSheetDetails() {
   const [signing, setSigning] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const [pdfAction, setPdfAction] = useState<'download' | 'whatsapp' | null>(null);
+  const [companyPreferenceSaving, setCompanyPreferenceSaving] = useState(false);
   const mobile = width < 520;
   const veryNarrow = width <= 360;
   const canViewFinancials = hasPermission('financials.view');
@@ -78,6 +79,20 @@ export default function ServiceSheetDetails() {
   };
 
   const replaceSheet = (next: ServiceSheet) => state.setData((current) => current ? { ...current, sheet: next } : current);
+  const changeCompanyPreference = async (value: boolean) => {
+    if (companyPreferenceSaving || value === sheet.showCompanyDetails) return;
+    setCompanyPreferenceSaving(true);
+    void Haptics.selectionAsync().catch(() => undefined);
+    try {
+      const updated = await serviceSheetRepository.update(sheet.id, { showCompanyDetails: value });
+      replaceSheet(updated);
+      showToast(value ? 'Datele firmei vor apărea în PDF.' : 'Datele firmei au fost ascunse din PDF.', 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Preferința nu a putut fi salvată.', 'error');
+    } finally {
+      setCompanyPreferenceSaving(false);
+    }
+  };
   const changeStatus = async (status: Status) => {
     try {
       const updated = await serviceSheetRepository.update(sheet.id, {
@@ -131,6 +146,24 @@ export default function ServiceSheetDetails() {
       <SheetAction mobile={mobile} icon="download-outline" label={pdfAction === 'download' ? 'Se generează…' : 'Descarcă PDF'} color={palette.cyan} loading={pdfAction === 'download'} onPress={() => void openFreshPdf('download')} />
       <SheetAction mobile={mobile} icon="logo-whatsapp" label={pdfAction === 'whatsapp' ? 'Se generează…' : 'Trimite pe WhatsApp'} color="#19B85A" loading={pdfAction === 'whatsapp'} onPress={() => void openFreshPdf('whatsapp')} />
     </View>
+
+    <Card style={[styles.companyPreference, mobile && styles.cardMobile, { borderColor: sheet.showCompanyDetails ? `${colors.primary}70` : colors.border }]}>
+      <View style={[styles.companyPreferenceIcon, { backgroundColor: sheet.showCompanyDetails ? colors.primarySoft : colors.surfaceMuted }]}>
+        <Ionicons name="business-outline" size={22} color={sheet.showCompanyDetails ? colors.primary : colors.textMuted} />
+      </View>
+      <View style={styles.companyPreferenceCopy}>
+        <AppText variant="label">Afișează datele firmei</AppText>
+        <AppText variant="caption" muted>{companyPreferenceSaving ? 'Se salvează automat…' : sheet.showCompanyDetails ? 'Datele juridice și ștampila apar în PDF.' : 'PDF-ul este generat fără datele firmei.'}</AppText>
+      </View>
+      <Switch
+        accessibilityLabel="Afișează datele firmei în PDF"
+        disabled={companyPreferenceSaving}
+        value={sheet.showCompanyDetails}
+        onValueChange={(value) => void changeCompanyPreference(value)}
+        trackColor={{ false: colors.border, true: colors.primary }}
+        thumbColor="#FFFFFF"
+      />
+    </Card>
 
     {statusOpen ? <Card style={[styles.panel, mobile && styles.cardMobile]} elevated>
       <SectionTitle icon="git-branch-outline" title="Schimbă statusul" />
@@ -337,6 +370,9 @@ const styles = StyleSheet.create({
   heroSummary: { minHeight: 54, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   total: { flex: 1, minWidth: 0, alignItems: 'flex-end' },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  companyPreference: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderWidth: 1.5 },
+  companyPreferenceIcon: { width: 44, height: 44, flexShrink: 0, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  companyPreferenceCopy: { flex: 1, minWidth: 0, gap: 2 },
   quickAction: { minWidth: 0, minHeight: 66, flexGrow: 1, flexBasis: 190, borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   quickActionMobile: { flexBasis: '46%', minHeight: 62 },
   quickActionIcon: { width: 38, height: 38, flexShrink: 0, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },

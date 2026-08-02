@@ -283,6 +283,7 @@ CREATE TABLE IF NOT EXISTS service_sheets (
   direct_costs DECIMAL(12,2) NOT NULL DEFAULT 0,
   net_value DECIMAL(12,2) NOT NULL DEFAULT 0,
   technician_id BINARY(16) NULL,
+  technician_name VARCHAR(120) NULL,
   collaborator_id BINARY(16) NULL,
   collaborator_commission DECIMAL(12,2) NULL,
   show_company_details TINYINT(1) NOT NULL DEFAULT 1,
