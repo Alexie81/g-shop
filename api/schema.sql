@@ -349,6 +349,23 @@ CREATE TABLE IF NOT EXISTS notifications (
   INDEX idx_notifications_user_read (user_id, read_at, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS whatsapp_messages (
+  id BINARY(16) PRIMARY KEY,
+  property_id BINARY(16) NOT NULL,
+  user_id BINARY(16) NOT NULL,
+  title VARCHAR(80) NOT NULL,
+  message VARCHAR(1000) NOT NULL,
+  sort_order SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  created_by BINARY(16) NOT NULL,
+  updated_by BINARY(16) NOT NULL,
+  INDEX idx_whatsapp_messages_owner (property_id,user_id,is_active,sort_order,title),
+  CONSTRAINT fk_whatsapp_message_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE,
+  CONSTRAINT fk_whatsapp_message_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS audit_logs (
   id BINARY(16) PRIMARY KEY,
   user_id BINARY(16) NULL,

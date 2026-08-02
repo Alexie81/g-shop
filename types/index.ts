@@ -378,6 +378,14 @@ export interface Notification extends BaseEntity {
   readAt?: ISODate;
 }
 
+export interface WhatsAppMessage extends BaseEntity {
+  propertyId: UUID;
+  userId: UUID;
+  title: string;
+  message: string;
+  sortOrder: number;
+}
+
 export interface AuditLog extends BaseEntity {
   userId?: UUID;
   userName?: string;

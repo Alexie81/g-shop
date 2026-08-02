@@ -236,6 +236,61 @@ function migrate_client_finance(PDO $pdo): array {
     }
     return $changes;
 }
+function migrate_whatsapp_messages(PDO $pdo): array {
+    $lockName = 'gshop_whatsapp_messages_v1';
+    $lock = $pdo->prepare('SELECT GET_LOCK(?,10)');
+    $lock->execute([$lockName]);
+    if ((int)$lock->fetchColumn() !== 1) throw new RuntimeException('Migrarea mesajelor WhatsApp nu a putut obține blocarea bazei de date.');
+    $changes = [];
+    try {
+        $exists = (bool)$pdo->query("SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='whatsapp_messages' LIMIT 1")->fetchColumn();
+        if (!$exists) {
+            $pdo->exec("CREATE TABLE whatsapp_messages (
+                id BINARY(16) PRIMARY KEY,
+                property_id BINARY(16) NOT NULL,
+                user_id BINARY(16) NOT NULL,
+                title VARCHAR(80) NOT NULL,
+                message VARCHAR(1000) NOT NULL,
+                sort_order SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+                is_active TINYINT(1) NOT NULL DEFAULT 1,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL,
+                created_by BINARY(16) NOT NULL,
+                updated_by BINARY(16) NOT NULL,
+                INDEX idx_whatsapp_messages_owner (property_id,user_id,is_active,sort_order,title),
+                CONSTRAINT fk_whatsapp_message_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE,
+                CONSTRAINT fk_whatsapp_message_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            $changes[] = 'whatsapp_messages';
+
+            $owners = $pdo->query("SELECT " . uuid_sql('up.property_id') . " property_id," . uuid_sql('up.user_id') . " user_id FROM user_properties up JOIN properties p ON p.id=up.property_id JOIN users u ON u.id=up.user_id WHERE p.type='SERVICE' AND p.is_active=1 AND u.is_active=1")->fetchAll();
+            $defaults = [
+                ['Actualizare reparație', 'Bună ziua, {prenume}! Vă contactăm din partea {proprietate} cu o actualizare privind reparația dumneavoastră.', 10],
+                ['Reparație finalizată', 'Bună ziua, {prenume}! Reparația dumneavoastră este finalizată și poate fi ridicată. Vă mulțumim, {proprietate}!', 20],
+                ['Link status reparație', 'Bună ziua, {prenume}! Puteți urmări statusul reparației aici: {link_status}', 30],
+            ];
+            $insert = $pdo->prepare('INSERT INTO whatsapp_messages (id,property_id,user_id,title,message,sort_order,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,1,?,?,?,?)');
+            $now = now_utc();
+            foreach ($owners as $owner) foreach ($defaults as $default) $insert->execute([uuid_bin(uuid_v4()),uuid_bin($owner['property_id']),uuid_bin($owner['user_id']),$default[0],$default[1],$default[2],$now,$now,uuid_bin($owner['user_id']),uuid_bin($owner['user_id'])]);
+            if ($owners) $changes[] = 'whatsapp_messages.defaults';
+        }
+    } finally {
+        $release = $pdo->prepare('SELECT RELEASE_LOCK(?)');
+        $release->execute([$lockName]);
+    }
+    return $changes;
+}
+function validated_whatsapp_message_text(mixed $value, string $label, int $minimum, int $maximum): string {
+    if (!is_string($value)) fail($label . ' este obligatoriu.',422);
+    $text = trim(str_replace(["\r\n","\r"],"\n",$value));
+    $length = function_exists('mb_strlen') ? mb_strlen($text,'UTF-8') : strlen($text);
+    if ($length < $minimum || $length > $maximum || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u',$text)) fail($label . ' trebuie să aibă între ' . $minimum . ' și ' . $maximum . ' de caractere.',422);
+    return $text;
+}
+function whatsapp_message_record(string $id): array {
+    $stmt=db()->prepare('SELECT '.uuid_sql('id').' id,'.uuid_sql('property_id').' property_id,'.uuid_sql('user_id').' user_id,title,message,sort_order,is_active,created_at,updated_at,'.uuid_sql('created_by').' created_by,'.uuid_sql('updated_by').' updated_by FROM whatsapp_messages WHERE id=? LIMIT 1');
+    $stmt->execute([uuid_bin($id)]);$row=$stmt->fetch();if(!$row)fail('Mesajul WhatsApp nu există.',404);$item=entity_base($row);$item['sortOrder']=(int)$item['sortOrder'];return$item;
+}
 function client_select(): string {
     return 'SELECT ' . uuid_sql('c.id') . ' id,' . uuid_sql('c.property_id') . ' property_id,c.first_name,c.last_name,c.phone,c.secondary_phone,c.email,c.address,c.city,c.county,c.postal_code,c.notes,c.status,' . uuid_sql('c.collaborator_id') . ' collaborator_id,c.commission_type,c.commission_value,c.is_active,c.created_at,c.updated_at,' . uuid_sql('c.created_by') . ' created_by,' . uuid_sql('c.updated_by') . ' updated_by,(SELECT COUNT(*) FROM service_sheets ss WHERE ss.client_id=c.id AND ss.is_active=1) service_sheets_count,c.updated_at last_activity_at,' . uuid_sql('q.id') . ' qr_id,' . uuid_sql('q.token') . ' qr_token,q.status qr_status,q.generated_at qr_generated_at,q.sent_at qr_sent_at,q.opened_at qr_opened_at,q.used_at qr_used_at,q.expires_at qr_expires_at,q.invalidated_at qr_invalidated_at,' . uuid_sql('q.generated_by') . ' qr_generated_by FROM clients c LEFT JOIN client_qr q ON q.client_id=c.id AND q.is_active=1';
 }
@@ -638,11 +693,44 @@ try {
         if ($changes) audit_log('SCHEMA_MIGRATION_APPLIED','settings','Migrare aplicată pentru finanțele clienților','Database',null,null,null,['migration'=>'client-finance-v1','changes'=>$changes],$user);
         respond(['migration'=>'client-finance-v1','applied'=>(bool)$changes,'changes'=>$changes,'ready'=>true]);
     }
+    if ($method === 'POST' && $path === '/admin/migrations/whatsapp-messages') {
+        $user = require_permission('settings.manage');
+        $changes = migrate_whatsapp_messages(db());
+        if ($changes) audit_log('SCHEMA_MIGRATION_APPLIED','settings','Migrare aplicată pentru mesajele predefinite WhatsApp','Database',null,null,null,['migration'=>'whatsapp-messages-v1','changes'=>$changes],$user);
+        respond(['migration'=>'whatsapp-messages-v1','applied'=>(bool)$changes,'changes'=>$changes,'ready'=>true]);
+    }
 
     if ($method === 'GET' && $path === '/properties') {
         $user = current_user(); $sql = 'SELECT ' . uuid_sql('p.id') . ' id,p.name,p.domain,p.type,p.enabled_modules,p.is_active,p.created_at,p.updated_at,' . uuid_sql('p.created_by') . ' created_by,' . uuid_sql('p.updated_by') . ' updated_by FROM properties p';
         $args=[]; if ($user['role'] !== 'ADMIN') { $sql .= ' JOIN user_properties up ON up.property_id=p.id WHERE up.user_id=?'; $args[] = uuid_bin($user['id']); } else $sql .= ' WHERE 1=1';
         $sql .= ' AND p.is_active=1 ORDER BY p.type,p.name'; $stmt=db()->prepare($sql);$stmt->execute($args);$rows=[];foreach($stmt->fetchAll() as $row){$item=entity_base($row);$item['enabledModules']=json_decode((string)$row['enabled_modules'],true)?:[];unset($item['enabledModules'][0]);$item['enabledModules']=json_decode((string)$row['enabled_modules'],true)?:[];$rows[]=$item;}respond($rows);
+    }
+
+    if ($method === 'GET' && $path === '/whatsapp-messages') {
+        $user=require_permission('clients.view');$propertyId=validated_uuid((string)($_GET['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);
+        $stmt=db()->prepare('SELECT '.uuid_sql('id').' id,'.uuid_sql('property_id').' property_id,'.uuid_sql('user_id').' user_id,title,message,sort_order,is_active,created_at,updated_at,'.uuid_sql('created_by').' created_by,'.uuid_sql('updated_by').' updated_by FROM whatsapp_messages WHERE property_id=? AND user_id=? AND is_active=1 ORDER BY sort_order,title');
+        $stmt->execute([uuid_bin($propertyId),uuid_bin($user['id'])]);$items=[];foreach($stmt->fetchAll()as$row){$item=entity_base($row);$item['sortOrder']=(int)$item['sortOrder'];$items[]=$item;}respond($items);
+    }
+    if ($method === 'POST' && $path === '/whatsapp-messages') {
+        $user=require_permission('clients.view');$body=json_body();$propertyId=validated_uuid((string)($body['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);
+        $title=validated_whatsapp_message_text($body['title']??null,'Titlul',2,80);$message=validated_whatsapp_message_text($body['message']??null,'Mesajul',1,1000);$sortOrder=min(999,max(0,(int)($body['sortOrder']??0)));$id=uuid_v4();$now=now_utc();
+        db()->prepare('INSERT INTO whatsapp_messages (id,property_id,user_id,title,message,sort_order,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,1,?,?,?,?)')->execute([uuid_bin($id),uuid_bin($propertyId),uuid_bin($user['id']),$title,$message,$sortOrder,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);
+        $after=whatsapp_message_record($id);audit_log('WHATSAPP_MESSAGE_CREATED','whatsapp_messages','Mesaj WhatsApp creat: '.$title,'WhatsAppMessage',$id,$propertyId,null,$after,$user);respond($after,201);
+    }
+    if ($method === 'POST' && path_match('/whatsapp-messages/{id}/use',$path,$params)) {
+        $user=require_permission('clients.view');$message=whatsapp_message_record(validated_uuid($params['id'],'Mesajul'));if($message['userId']!==$user['id'])fail('Mesajul nu aparține contului tău.',403);$client=get_client(validated_uuid((string)(json_body()['clientId']??''),'Clientul'));ensure_property($client['propertyId'],$user);if($client['propertyId']!==$message['propertyId'])fail('Mesajul și clientul aparțin unor proprietăți diferite.',422);
+        audit_log('WHATSAPP_MESSAGE_USED','whatsapp_messages','Mesaj WhatsApp pregătit: '.$message['title'],'Client',$client['id'],$client['propertyId'],null,['messageId'=>$message['id'],'title'=>$message['title']],$user);respond(['recorded'=>true]);
+    }
+    if ($method === 'PUT' && path_match('/whatsapp-messages/{id}',$path,$params)) {
+        $user=require_permission('clients.view');$before=whatsapp_message_record(validated_uuid($params['id'],'Mesajul'));ensure_property($before['propertyId'],$user);if($before['userId']!==$user['id'])fail('Poți modifica doar mesajele contului tău.',403);$body=json_body();
+        if(!empty($body['propertyId'])&&$body['propertyId']!==$before['propertyId'])fail('Mesajul aparține altei proprietăți.',422);
+        $title=validated_whatsapp_message_text($body['title']??$before['title'],'Titlul',2,80);$message=validated_whatsapp_message_text($body['message']??$before['message'],'Mesajul',1,1000);$sortOrder=array_key_exists('sortOrder',$body)?min(999,max(0,(int)$body['sortOrder'])):$before['sortOrder'];$now=now_utc();
+        db()->prepare('UPDATE whatsapp_messages SET title=?,message=?,sort_order=?,updated_at=?,updated_by=? WHERE id=?')->execute([$title,$message,$sortOrder,$now,uuid_bin($user['id']),uuid_bin($before['id'])]);
+        $after=whatsapp_message_record($before['id']);audit_log('WHATSAPP_MESSAGE_UPDATED','whatsapp_messages','Mesaj WhatsApp actualizat: '.$title,'WhatsAppMessage',$before['id'],$before['propertyId'],$before,$after,$user);respond($after);
+    }
+    if ($method === 'DELETE' && path_match('/whatsapp-messages/{id}',$path,$params)) {
+        $user=require_permission('clients.view');$before=whatsapp_message_record(validated_uuid($params['id'],'Mesajul'));ensure_property($before['propertyId'],$user);if($before['userId']!==$user['id'])fail('Poți șterge doar mesajele contului tău.',403);
+        db()->prepare('DELETE FROM whatsapp_messages WHERE id=?')->execute([uuid_bin($before['id'])]);audit_log('WHATSAPP_MESSAGE_DELETED','whatsapp_messages','Mesaj WhatsApp șters: '.$before['title'],'WhatsAppMessage',$before['id'],$before['propertyId'],$before,['deleted'=>true],$user);respond(['deleted'=>true]);
     }
 
     if ($method === 'GET' && $path === '/dashboard') {

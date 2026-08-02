@@ -1,4 +1,4 @@
-import { AuditLog, AuthSession, Client, ClientExpense, ClientExpenseDeleteResult, ClientFinancialOverview, ClientParticipant, Collaborator, CreateClientExpensePayload, DashboardMetrics, Paginated, Permission, Property, ServiceSheet, UpdateClientExpensePayload, UpdateClientFinancialsPayload, User, UUID } from '@/types';
+import { AuditLog, AuthSession, Client, ClientExpense, ClientExpenseDeleteResult, ClientFinancialOverview, ClientParticipant, Collaborator, CreateClientExpensePayload, DashboardMetrics, Paginated, Permission, Property, ServiceSheet, UpdateClientExpensePayload, UpdateClientFinancialsPayload, User, UUID, WhatsAppMessage } from '@/types';
 
 export interface AuthRepository {
   login(username: string, password: string, device: string): Promise<AuthSession>;
@@ -51,3 +51,10 @@ export interface UserRepository {
   updatePermissions(id: UUID, permissions: Permission[], propertyIds?: UUID[]): Promise<User>;
 }
 export interface AuditRepository { list(propertyId?: UUID): Promise<Paginated<AuditLog>>; }
+export interface WhatsAppMessageRepository {
+  list(propertyId: UUID): Promise<WhatsAppMessage[]>;
+  create(input: Pick<WhatsAppMessage, 'propertyId' | 'title' | 'message' | 'sortOrder'>): Promise<WhatsAppMessage>;
+  update(id: UUID, input: Pick<WhatsAppMessage, 'propertyId' | 'title' | 'message' | 'sortOrder'>): Promise<WhatsAppMessage>;
+  remove(id: UUID, propertyId: UUID): Promise<void>;
+  recordUse(id: UUID, clientId: UUID): Promise<void>;
+}
