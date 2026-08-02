@@ -809,7 +809,7 @@ try {
     if ($method === 'PUT' && path_match('/company-details/{id}',$path,$params)) {
         $user=require_permission('settings.manage');if($user['role']!=='ADMIN')fail('Doar administratorul poate modifica datele firmei.',403);
         $propertyId=validated_uuid($params['id'],'Proprietatea');ensure_property($propertyId,$user);property_record($propertyId);$body=json_body();$before=company_details_record($propertyId);
-        $legalName=company_detail_text($body['legalName']??null,'Denumirea juridică',160,true);$taxId=company_detail_text($body['taxId']??null,'CUI / CIF',24);$tradeRegister=company_detail_text($body['tradeRegisterNumber']??null,'Numărul Registrului Comerțului',40);
+        $legalName=company_detail_text($body['legalName']??null,'Denumirea juridică',160);$taxId=company_detail_text($body['taxId']??null,'CUI / CIF',24);$tradeRegister=company_detail_text($body['tradeRegisterNumber']??null,'Numărul Registrului Comerțului',40);
         $address=company_detail_text($body['address']??null,'Adresa',220);$city=company_detail_text($body['city']??null,'Localitatea',80);$county=company_detail_text($body['county']??null,'Județul',80);$postalCode=company_detail_text($body['postalCode']??null,'Codul poștal',16);$country=company_detail_text($body['country']??'România','Țara',60)??'România';
         $phone=company_detail_text($body['phone']??null,'Telefonul',30);$email=company_detail_text($body['email']??null,'Emailul',140);if($email!==null&&!filter_var($email,FILTER_VALIDATE_EMAIL))fail('Adresa de email nu este validă.',422);$website=company_detail_text($body['website']??null,'Website-ul',160);
         $bankName=company_detail_text($body['bankName']??null,'Banca',100);$iban=company_detail_text($body['iban']??null,'IBAN-ul',40);if($iban!==null){$iban=strtoupper(str_replace(' ','',$iban));if(!preg_match('/^[A-Z]{2}[A-Z0-9]{13,38}$/',$iban))fail('IBAN-ul nu este valid.',422);}
@@ -1126,8 +1126,6 @@ try {
         $sheet=$sheetStmt->fetch();
         $company=company_details_record($qr['property_id']);
         $contactPhone=$company['phone'];$contactEmail=$company['email'];
-        if(!$contactPhone&&strtolower((string)$qr['property_domain'])==='reparatiicalculatoare-bucuresti.ro')$contactPhone='+40735046534';
-        if(!$contactEmail&&strtolower((string)$qr['property_domain'])==='reparatiicalculatoare-bucuresti.ro')$contactEmail='contact@reparatiicalculatoare-bucuresti.ro';
 
         respond([
             'propertyName'=>$qr['property_name'],

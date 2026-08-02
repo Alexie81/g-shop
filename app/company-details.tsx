@@ -67,7 +67,7 @@ export default function CompanyDetailsScreen() {
   };
 
   const save = async () => {
-    if (!propertyId || form.legalName.trim().length < 2) return showToast('Completează denumirea juridică a firmei.', 'error');
+    if (!propertyId) return showToast('Selectează proprietatea înainte de salvare.', 'error');
     setSaving(true);
     try {
       let result = await companyDetailsRepository.update(propertyId, { ...form, legalName: form.legalName.trim(), iban: form.iban.replace(/\s/g, '').toUpperCase() });
@@ -93,7 +93,7 @@ export default function CompanyDetailsScreen() {
 
       {state.loading ? <LoadingState rows={5} /> : state.error ? <ErrorState message={state.error.message} onRetry={() => void state.reload()} /> : <>
         <FormSection icon="document-text-outline" color={colors.primary} background={colors.primarySoft} title="Date juridice" subtitle="Informațiile de identificare fiscală." compact={compact}>
-          <Field><Input label="Denumire juridică *" icon="business-outline" value={form.legalName} onChangeText={(value) => update('legalName', value)} placeholder="Ex: G-Shop Service SRL" maxLength={160} /></Field>
+          <Field><Input label="Denumire juridică" icon="business-outline" value={form.legalName} onChangeText={(value) => update('legalName', value)} placeholder="Ex: G-Shop Service SRL" maxLength={160} /></Field>
           <Field><Input label="CUI / CIF" icon="barcode-outline" value={form.taxId} onChangeText={(value) => update('taxId', value)} placeholder="Ex: RO12345678" maxLength={24} autoCapitalize="characters" /></Field>
           <Field><Input label="Registrul Comerțului" icon="reader-outline" value={form.tradeRegisterNumber} onChangeText={(value) => update('tradeRegisterNumber', value)} placeholder="Ex: J40/1234/2026" maxLength={40} autoCapitalize="characters" /></Field>
           <View style={[styles.switchBox, compact && styles.fieldCompact, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}><View style={[styles.switchIcon, { backgroundColor: `${palette.success}16` }]}><Ionicons name="receipt-outline" size={20} color={palette.success} /></View><View style={styles.switchCopy}><AppText variant="label">Plătitor de TVA</AppText><AppText variant="caption" muted>Apare în documentele fiscale.</AppText></View><Switch value={form.vatPayer} onValueChange={(value) => update('vatPayer', value)} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#FFFFFF" /></View>
@@ -125,7 +125,7 @@ export default function CompanyDetailsScreen() {
           <View style={[styles.stampActions, compact && styles.stampActionsCompact]}><Button variant="outline" compact label={stampUri ? 'Înlocuiește imaginea' : 'Selectează imaginea'} icon="image-outline" onPress={() => void pickStamp()} style={styles.flexButton} />{stampUri ? <Button variant="danger" compact label="Elimină ștampila" icon="trash-outline" onPress={() => { setStampData(null); setStampRemoved(true); }} style={styles.flexButton} /> : null}</View>
         </Card>
 
-        <View style={[styles.saveBar, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}><View style={styles.saveInfo}><Ionicons name="information-circle-outline" size={20} color={colors.primary} /><AppText variant="caption" muted style={styles.saveCopy}>Câmpurile pot fi completate treptat. Denumirea juridică este singurul câmp obligatoriu.</AppText></View><Button label="Salvează datele firmei" icon="checkmark-circle-outline" loading={saving} onPress={() => void save()} style={styles.saveButton} /></View>
+        <View style={[styles.saveBar, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}><View style={styles.saveInfo}><Ionicons name="information-circle-outline" size={20} color={colors.primary} /><AppText variant="caption" muted style={styles.saveCopy}>Câmpurile sunt opționale și pot fi completate treptat. Telefonul introdus aici este folosit pentru apel și WhatsApp în pagina publică de status.</AppText></View><Button label="Salvează datele firmei" icon="checkmark-circle-outline" loading={saving} onPress={() => void save()} style={styles.saveButton} /></View>
       </>}
     </View>
   </Screen>;
