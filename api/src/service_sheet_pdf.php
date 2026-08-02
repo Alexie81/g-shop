@@ -49,11 +49,12 @@ function gshop_pdf_fit(Fpdi $pdf, string $value, float $width): string {
     return rtrim($value) . $suffix;
 }
 
-function gshop_pdf_text(Fpdi $pdf, float $x, float $sourceBaseline, mixed $value, float $size = 7, string $style = '', float $maxWidth = 0, string $align = 'L'): void {
+function gshop_pdf_text(Fpdi $pdf, float $x, float $sourceBaseline, mixed $value, float $size = 7, string $style = '', float $maxWidth = 0, string $align = 'L', ?array $color = null): void {
     $text = gshop_pdf_string($value);
     if ($text === '') return;
     $pdf->SetFont('DejaVu', $style, $size);
-    $pdf->SetTextColor(7, 21, 45);
+    $textColor = $color ?? [7, 21, 45];
+    $pdf->SetTextColor((int)$textColor[0], (int)$textColor[1], (int)$textColor[2]);
     if ($maxWidth > 0) $text = gshop_pdf_fit($pdf, $text, $maxWidth);
     if ($align === 'R' && $maxWidth > 0) $x += $maxWidth - $pdf->GetStringWidth($text);
     $pdf->Text($x, GSHOP_PDF_PAGE_HEIGHT - $sourceBaseline, $text);
@@ -141,7 +142,17 @@ function gshop_pdf_overlay_page_one(Fpdi $pdf, array $sheet, array $client, arra
     $summaryPositions = [[44, 280, 185], [259, 280, 121], [410, 280, 141]];
     foreach ($summaryCards as $index => $value) {
         [$x, $baseline, $width] = $summaryPositions[$index];
-        gshop_pdf_text($pdf, $x, $baseline + $shift, gshop_pdf_money($value, $currency), $index === 0 ? 12.2 : 10.6, 'B', $width);
+        gshop_pdf_text(
+            $pdf,
+            $x,
+            $baseline + $shift,
+            gshop_pdf_money($value, $currency),
+            $index === 0 ? 12.2 : 10.6,
+            'B',
+            $width,
+            'L',
+            $index === 0 ? [255, 255, 255] : null
+        );
     }
     $details = [
         gshop_pdf_money($financial['diagnosticFee'] ?? 0, $currency),
