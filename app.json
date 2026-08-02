@@ -4,7 +4,7 @@
     "slug": "g-shop",
     "version": "1.0.0",
     "orientation": "default",
-    "icon": "./logo/logo.png",
+    "icon": "./logo/app-icon.png",
     "scheme": "gshop",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -18,7 +18,7 @@
     "android": {
       "package": "ro.gshop.mobile",
       "adaptiveIcon": {
-        "foregroundImage": "./logo/logo.png",
+        "foregroundImage": "./logo/app-icon.png",
         "backgroundColor": "#07152D"
       },
       "edgeToEdgeEnabled": true,
