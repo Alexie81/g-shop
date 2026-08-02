@@ -7,11 +7,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { clientRepository, serviceSheetRepository } from '@/repositories/api-repositories';
 import { apiRequest, ApiError } from '@/services/api';
-import { spacing } from '@/theme/tokens';
+import { radius, spacing } from '@/theme/tokens';
 import { Client, ClientFinancialOverview, ServiceSheet, UUID } from '@/types';
 import { calculateNet } from '@/utils/commission';
 import { formatFinanceMoney } from '@/utils/client-finance';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -264,6 +265,12 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
       subtitle="Preț, plăți și costuri sincronizate automat"
     /> : null}
 
+    {financeOverview && (financeOverview.collaborators ?? (financeOverview.collaborator ? [financeOverview.collaborator] : [])).length ? <Card style={styles.section}>
+      <AppText variant="heading">Colaboratorii fișei</AppText>
+      <AppText variant="caption" muted>Atribuirile și comisioanele sunt preluate automat din client.</AppText>
+      <View style={styles.collaboratorList}>{(financeOverview.collaborators ?? [financeOverview.collaborator!]).map((collaborator) => <View key={collaborator.id} style={[styles.collaboratorChip, { borderColor: '#20B9CF' }]}><Ionicons name="person-outline" size={17} color="#20B9CF" /><View style={styles.clientCopy}><AppText variant="label">{collaborator.name}</AppText><AppText variant="caption" muted>{collaborator.commissionType === 'FIXED' ? `${formatFinanceMoney(collaborator.commissionValue ?? 0, currencyCode)} sumă fixă` : `${collaborator.commissionValue ?? 0}% ${collaborator.commissionType === 'PERCENT_TOTAL' ? 'din total' : 'din net'}`}</AppText></View></View>)}</View>
+    </Card> : null}
+
     <Card style={styles.section}>
       <AppText variant="heading">Echipament</AppText>
       <View style={styles.row}>
@@ -294,17 +301,19 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
         <View style={styles.field}><Input label={`Manoperă afișată (${currencyCode})`} keyboardType="decimal-pad" value={form.laborCost} onChangeText={(value) => update('laborCost', value)} /></View>
       </View>
       {canLoadFinancials ? <View style={styles.expensesBlock}><View style={styles.expensesHeader}><AppText variant="label">Cheltuieli suplimentare</AppText><AppText variant="label">{formatFinanceMoney(additionalExpenses, currencyCode)}</AppText></View>{financeOverview?.expenses.length ? financeOverview.expenses.map((expense) => <View key={expense.id} style={styles.expenseRow}><AppText variant="caption" style={styles.expenseName}>{expense.description}</AppText><AppText variant="caption" muted>{formatFinanceMoney(expense.amount, currencyCode)}</AppText></View>) : <AppText variant="caption" muted>Nicio cheltuială suplimentară.</AppText>}</View> : null}
-      <View style={styles.calculationTotal}>
-        <AppText variant="heading">Calcul total</AppText>
-        <View style={styles.totalLine}><AppText variant="caption" muted>Total afișat</AppText><AppText variant="label">{formatFinanceMoney(total, currencyCode)}</AppText></View>
-        {canLoadFinancials ? <><View style={styles.totalLine}><AppText variant="caption" muted>Costuri interne totale</AppText><AppText variant="label">{formatFinanceMoney(direct, currencyCode)}</AppText></View><View style={styles.totalLine}><AppText variant="label">Valoare netă</AppText><AppText variant="title" style={{ color: '#14A83B' }}>{formatFinanceMoney(net, currencyCode)}</AppText></View></> : null}
-      </View>
     </Card>
 
     <Card style={styles.section}>
       <AppText variant="heading">Planificare și observații</AppText>
       <Input label="Termen estimat" placeholder="AAAA-LL-ZZ" value={form.estimatedAt} onChangeText={(value) => update('estimatedAt', value)} />
       <Input label="Observații interne" multiline value={form.internalNotes} onChangeText={(value) => update('internalNotes', value)} />
+    </Card>
+
+    <Card style={[styles.section, styles.calculationTotal]}>
+      <AppText variant="heading">Calcul total</AppText>
+      <AppText variant="caption" muted>Rezultatul final după completarea datelor fișei.</AppText>
+      <View style={styles.totalLine}><AppText variant="caption" muted>Total afișat</AppText><AppText variant="label">{formatFinanceMoney(total, currencyCode)}</AppText></View>
+      {canLoadFinancials ? <><View style={styles.totalLine}><AppText variant="caption" muted>Costuri interne totale</AppText><AppText variant="label">{formatFinanceMoney(direct, currencyCode)}</AppText></View><View style={styles.totalLine}><AppText variant="label">Valoare netă</AppText><AppText variant="title" style={{ color: '#14A83B' }}>{formatFinanceMoney(net, currencyCode)}</AppText></View></> : null}
     </Card>
 
     <Button label={sheet ? 'Salvează modificările' : 'Creează fișa de service'} icon={sheet ? 'save-outline' : 'document-text-outline'} loading={loading} onPress={() => void submit()} />
@@ -324,6 +333,8 @@ const styles = StyleSheet.create({
   expensesHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md },
   expenseRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md },
   expenseName: { flex: 1 },
+  collaboratorList: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  collaboratorChip: { minWidth: 190, flex: 1, borderWidth: 1, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   calculationTotal: { gap: spacing.sm, paddingTop: spacing.lg },
   totalLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md },
 });

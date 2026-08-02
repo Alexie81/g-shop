@@ -121,12 +121,12 @@ export default function ClientDetailsScreen() {
       setStatusSaving(false);
     }
   };
-  const setCollaboratorPaid = async (paid: boolean) => {
-    if (!financials?.collaborator || !canManageCollaborators) return;
+  const setCollaboratorPaid = async (collaboratorId: string, paid: boolean) => {
+    if (!canManageCollaborators) return;
     try {
       await apiRequest('/commissions/client-status', {
         method: 'PUT',
-        body: JSON.stringify({ propertyId: client.propertyId, collaboratorId: financials.collaborator.id, clientId: client.id, paid }),
+        body: JSON.stringify({ propertyId: client.propertyId, collaboratorId, clientId: client.id, paid }),
       });
       await state.reload(true);
       showToast(paid ? 'Comisionul a fost marcat achitat.' : 'Comisionul a fost marcat neachitat.', 'success');
@@ -135,10 +135,10 @@ export default function ClientDetailsScreen() {
       throw error;
     }
   };
-  const removeCollaboratorAssignment = async () => {
-    if (!canEditClients || !financials?.collaborator) return;
+  const removeCollaboratorAssignment = async (collaboratorId: string) => {
+    if (!canEditClients) return;
     try {
-      await clientRepository.update(client.id, { collaboratorId: '' });
+      await clientRepository.update(client.id, { collaborators: client.collaborators.filter((item) => item.collaboratorId !== collaboratorId) });
       await state.reload(true);
       showToast('Atribuirea colaboratorului a fost eliminată.', 'success');
     } catch (error) {
@@ -174,9 +174,7 @@ export default function ClientDetailsScreen() {
       value={financials.financials}
       expenses={financials.expenses}
       collaboratorCost={financials.summary.collaboratorCost}
-      collaboratorPaid={financials.collaborator?.paid ?? 0}
-      commissionType={client.commissionType}
-      commissionValue={client.commissionValue}
+      collaboratorPaid={(financials.collaborators ?? (financials.collaborator ? [financials.collaborator] : [])).reduce((sum, item) => sum + item.paid, 0)}
       disabled={!canEditFinancials}
       saving={financeSaving}
       onChange={(next) => replaceFinancials({ ...financials, financials: { ...financials.financials, ...next } })}
@@ -186,16 +184,26 @@ export default function ClientDetailsScreen() {
       onUpdateExpense={canEditFinancials ? async (expenseId, input) => { await clientRepository.updateExpense(client.id, expenseId, input); await refreshExpenses(); await reloadFinanceHistory(); showToast('Cheltuiala a fost actualizată.', 'success'); } : undefined}
       onDeleteExpense={canEditFinancials ? async (expenseId) => { await clientRepository.removeExpense(client.id, expenseId); await refreshExpenses(); await reloadFinanceHistory(); showToast('Cheltuiala a fost ștearsă.', 'success'); } : undefined}
       />
-      <ClientCollaboratorFinanceCard
-        collaborator={financials.collaborator}
+      {(financials.collaborators ?? (financials.collaborator ? [financials.collaborator] : [])).length ? (financials.collaborators ?? [financials.collaborator!]).map((collaborator) => <ClientCollaboratorFinanceCard
+        key={collaborator.id}
+        collaborator={collaborator}
         currencyCode={financials.financials.currencyCode}
         hasServiceSheet={Boolean(serviceSheet)}
         canEditAssignment={canEditClients}
         canManagePayment={canManageCollaborators}
         onEditAssignment={() => router.push(`/service/clients/${client.id}/edit`)}
-        onRemoveAssignment={removeCollaboratorAssignment}
-        onSetPaid={setCollaboratorPaid}
-      />
+        onRemoveAssignment={() => removeCollaboratorAssignment(collaborator.id)}
+        onSetPaid={(paid) => setCollaboratorPaid(collaborator.id, paid)}
+      />) : <ClientCollaboratorFinanceCard
+        collaborator={null}
+        currencyCode={financials.financials.currencyCode}
+        hasServiceSheet={Boolean(serviceSheet)}
+        canEditAssignment={canEditClients}
+        canManagePayment={canManageCollaborators}
+        onEditAssignment={() => router.push(`/service/clients/${client.id}/edit`)}
+        onRemoveAssignment={() => undefined}
+        onSetPaid={() => undefined}
+      />}
     </> : <History items={history} />}
     <WhatsAppQuickMessagesModal visible={whatsAppOpen} client={client} propertyName={activeProperty?.name ?? 'G-Shop'} messages={whatsAppMessages} onClose={() => setWhatsAppOpen(false)} />
   </Screen>;

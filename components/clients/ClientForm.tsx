@@ -8,18 +8,17 @@ import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { clientRepository, collaboratorRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
-import { Client, ClientExpense, Collaborator, CommissionType, UUID } from '@/types';
-import { ClientFinanceValue } from '@/utils/client-finance';
+import { Client, ClientCollaboratorAssignment, ClientExpense, Collaborator, UUID } from '@/types';
+import { calculateClientFinance, ClientFinanceValue } from '@/utils/client-finance';
 import { formatCurrency } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 type ContactFields = Pick<Client, 'firstName' | 'lastName' | 'phone' | 'secondaryPhone' | 'email' | 'address' | 'city' | 'county' | 'postalCode' | 'notes'>;
-type ClientCommissionType = CommissionType;
-type PercentageType = Extract<ClientCommissionType, 'PERCENT_NET' | 'PERCENT_TOTAL'>;
-type FormState = ContactFields & { collaboratorId: string; commissionType: ClientCommissionType; commissionValue: string };
+type FormState = ContactFields;
+type AssignmentDraft = Pick<ClientCollaboratorAssignment, 'collaboratorId' | 'commissionType'> & { commissionValue: string };
 
 const emptyForm: FormState = {
   firstName: '',
@@ -32,9 +31,6 @@ const emptyForm: FormState = {
   county: 'București',
   postalCode: '',
   notes: '',
-  collaboratorId: '',
-  commissionType: 'PERCENT_NET',
-  commissionValue: '15',
 };
 
 const emptyFinance: ClientFinanceValue = {
@@ -91,15 +87,17 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
     county: client.county ?? '',
     postalCode: client.postalCode ?? '',
     notes: client.notes ?? '',
-    collaboratorId: client.collaboratorId ?? '',
-    commissionType: client.commissionType ?? 'PERCENT_NET',
-    commissionValue: String(client.commissionValue ?? 15),
   } : { ...emptyForm });
+  const [assignments, setAssignments] = useState<AssignmentDraft[]>(() => {
+    if (client?.collaborators?.length) return client.collaborators.map((item) => ({ collaboratorId: item.collaboratorId, commissionType: item.commissionType, commissionValue: String(item.commissionValue) }));
+    return client?.collaboratorId ? [{ collaboratorId: client.collaboratorId, commissionType: client.commissionType ?? 'PERCENT_NET', commissionValue: String(client.commissionValue ?? 0) }] : [];
+  });
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [collaboratorsLoading, setCollaboratorsLoading] = useState(Boolean(propertyId));
   const [collaboratorsError, setCollaboratorsError] = useState<string>();
   const [collaboratorsReloadKey, setCollaboratorsReloadKey] = useState(0);
-  const [percentageType, setPercentageType] = useState<PercentageType>(client?.commissionType === 'PERCENT_TOTAL' ? 'PERCENT_TOTAL' : 'PERCENT_NET');
+  const [collaboratorPickerOpen, setCollaboratorPickerOpen] = useState(false);
+  const [collaboratorQuery, setCollaboratorQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof ContactFields, string>>>({});
   const [commissionError, setCommissionError] = useState<string>();
@@ -128,7 +126,7 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
       setFinance(overview.financials);
       setFinanceExpenses(overview.expenses);
       setFinanceCollaboratorCost(overview.summary.collaboratorCost);
-      setFinanceCollaboratorPaid(overview.collaborator?.paid ?? 0);
+      setFinanceCollaboratorPaid((overview.collaborators ?? (overview.collaborator ? [overview.collaborator] : [])).reduce((sum, item) => sum + item.paid, 0));
     }).catch((error) => {
       if (!active) return;
       setFinanceError(error instanceof Error ? error.message : 'Datele financiare nu au putut fi încărcate.');
@@ -152,7 +150,7 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
     setCollaboratorsError(undefined);
     if (!client && presetPropertyRef.current !== propertyId) {
       collaboratorChoiceTouchedRef.current = false;
-      setForm((current) => ({ ...current, collaboratorId: '' }));
+      setAssignments([]);
     }
     let active = true;
     collaboratorRepository.list(propertyId).then((items) => {
@@ -164,14 +162,7 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
         presetPropertyRef.current = propertyId;
         collaboratorChoiceTouchedRef.current = false;
         const preset = items.find(isPreset);
-        const type = preset?.defaultCommissionType;
-        setForm((current) => ({
-          ...current,
-          collaboratorId: preset?.id ?? '',
-          commissionType: type ?? current.commissionType,
-          commissionValue: preset ? String(preset.defaultCommissionValue) : current.commissionValue,
-        }));
-        if (type && type !== 'FIXED') setPercentageType(type);
+        setAssignments(preset ? [{ collaboratorId: preset.id, commissionType: preset.defaultCommissionType, commissionValue: String(preset.defaultCommissionValue) }] : []);
       }
     }).catch(() => {
       if (!active) return;
@@ -183,40 +174,38 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
   }, [client, collaboratorsReloadKey, propertyId]);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
-    if (key === 'commissionType' || key === 'commissionValue') collaboratorChoiceTouchedRef.current = true;
     setForm((current) => ({ ...current, [key]: value }));
     if (key in errors) setErrors((current) => ({ ...current, [key]: undefined }));
   };
 
   const selectCollaborator = (next: Collaborator) => {
     collaboratorChoiceTouchedRef.current = true;
-    const type = next.defaultCommissionType;
-    setForm((current) => ({
-      ...current,
-      collaboratorId: next.id,
-      commissionType: type,
-      commissionValue: String(next.defaultCommissionValue),
-    }));
-    if (type !== 'FIXED') setPercentageType(type);
+    setAssignments((current) => current.some((item) => item.collaboratorId === next.id)
+      ? current.filter((item) => item.collaboratorId !== next.id)
+      : [...current, { collaboratorId: next.id, commissionType: next.defaultCommissionType, commissionValue: String(next.defaultCommissionValue) }]);
     setCommissionError(undefined);
   };
 
-  const removeCollaborator = () => {
+  const removeCollaborator = (collaboratorId: UUID) => {
     collaboratorChoiceTouchedRef.current = true;
-    setForm((current) => ({ ...current, collaboratorId: '' }));
+    setAssignments((current) => current.filter((item) => item.collaboratorId !== collaboratorId));
     setCommissionError(undefined);
   };
 
-  const selectPercentageType = (type: PercentageType) => {
-    setPercentageType(type);
-    update('commissionType', type);
+  const updateAssignment = (collaboratorId: UUID, patch: Partial<AssignmentDraft>) => {
+    collaboratorChoiceTouchedRef.current = true;
+    setAssignments((current) => current.map((item) => item.collaboratorId === collaboratorId ? { ...item, ...patch } : item));
+    setCommissionError(undefined);
   };
 
-  const selectedCollaborator = collaborators.find((item) => item.id === form.collaboratorId);
-  const numericCommission = parseCommissionValue(form.commissionValue);
-  const safeCommission = Number.isFinite(numericCommission) ? Math.max(0, numericCommission) : 0;
-  const exampleBase = form.commissionType === 'PERCENT_TOTAL' ? 1000 : 700;
-  const preview = form.commissionType === 'FIXED' ? safeCommission : Math.round(exampleBase * safeCommission) / 100;
+  const financeBase = calculateClientFinance(finance, financeExpenses);
+  const liveCollaboratorCost = assignments.reduce((total, item) => {
+    const value = Math.max(0, parseCommissionValue(item.commissionValue) || 0);
+    if (item.commissionType === 'PERCENT_TOTAL') return total + financeBase.totalDue * value / 100;
+    if (item.commissionType === 'PERCENT_NET') return total + Math.max(0, financeBase.totalDue - financeBase.internalCosts) * value / 100;
+    return total + value;
+  }, 0);
+  const filteredCollaborators = collaborators.filter((item) => item.name.toLocaleLowerCase('ro').includes(collaboratorQuery.trim().toLocaleLowerCase('ro')));
 
   const submit = async () => {
     if (!client && (collaboratorsLoading || collaboratorsError)) {
@@ -231,10 +220,16 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
     if (form.email && !/^\S+@\S+\.\S+$/.test(form.email)) nextErrors.email = 'Adresa de email nu este validă.';
 
     let nextCommissionError: string | undefined;
-    if (form.collaboratorId && (!form.commissionValue.trim() || !Number.isFinite(numericCommission) || numericCommission < 0)) {
-      nextCommissionError = 'Introdu o valoare validă, mai mare sau egală cu zero.';
-    } else if (form.collaboratorId && form.commissionType !== 'FIXED' && numericCommission > 100) {
-      nextCommissionError = 'Procentul nu poate depăși 100%.';
+    for (const assignment of assignments) {
+      const numericCommission = parseCommissionValue(assignment.commissionValue);
+      if (!assignment.commissionValue.trim() || !Number.isFinite(numericCommission) || numericCommission < 0) {
+        nextCommissionError = 'Toate comisioanele trebuie să aibă o valoare validă, mai mare sau egală cu zero.';
+        break;
+      }
+      if (assignment.commissionType !== 'FIXED' && numericCommission > 100) {
+        nextCommissionError = 'Procentele colaboratorilor nu pot depăși 100%.';
+        break;
+      }
     }
 
     if (Object.keys(nextErrors).length || nextCommissionError) {
@@ -258,14 +253,15 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
     }
 
     setLoading(true);
-    const { commissionValue, collaboratorId, ...rest } = form;
-    const includeCollaboratorChoice = Boolean(client) || collaboratorChoiceTouchedRef.current;
-    const hasExplicitAssignment = includeCollaboratorChoice && Boolean(collaboratorId);
+    const collaboratorPayload = assignments.map((item, index) => ({
+      ...item,
+      name: collaborators.find((collaborator) => collaborator.id === item.collaboratorId)?.name ?? 'Colaborator',
+      sortOrder: index + 1,
+      commissionValue: parseCommissionValue(item.commissionValue),
+    }));
     const payload = {
-      ...rest,
-      ...(includeCollaboratorChoice ? { collaboratorId } : {}),
-      commissionValue: hasExplicitAssignment ? numericCommission : undefined,
-      commissionType: hasExplicitAssignment ? form.commissionType : undefined,
+      ...form,
+      collaborators: collaboratorPayload,
     };
 
     try {
@@ -323,10 +319,8 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
         <ClientFinanceSection
           value={finance}
           expenses={financeExpenses}
-          collaboratorCost={financeCollaboratorCost}
+          collaboratorCost={assignments.length ? liveCollaboratorCost : financeCollaboratorCost}
           collaboratorPaid={financeCollaboratorPaid}
-          commissionType={form.collaboratorId ? form.commissionType : undefined}
-          commissionValue={form.collaboratorId ? safeCommission : 0}
           disabled={!canEditFinancials}
           onChange={setFinance}
         />
@@ -345,19 +339,12 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
         </View>
 
         <View style={styles.block}>
-          <AppText variant="label">Alege colaboratorul</AppText>
-          <View style={styles.options}>
-            {collaborators.map((item) => (
-              <Button
-                key={item.id}
-                compact
-                variant={form.collaboratorId === item.id ? 'primary' : 'outline'}
-                icon={isPreset(item) ? 'star-outline' : 'person-outline'}
-                label={item.name}
-                onPress={() => selectCollaborator(item)}
-              />
-            ))}
-          </View>
+          <AppText variant="label">Colaboratori atribuiți</AppText>
+          <Pressable accessibilityRole="button" accessibilityLabel="Caută și selectează colaboratori" onPress={() => setCollaboratorPickerOpen(true)} style={({ pressed }) => [styles.pickerButton, { backgroundColor: colors.input, borderColor: pressed ? colors.primary : colors.border }]}>
+            <View style={[styles.pickerIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="search-outline" size={20} color={colors.primary} /></View>
+            <View style={styles.pickerCopy}><AppText variant="label">Caută și selectează</AppText><AppText variant="caption" muted>{assignments.length ? `${assignments.length} ${assignments.length === 1 ? 'colaborator ales' : 'colaboratori aleși'}` : 'Poți atribui unul sau mai mulți colaboratori'}</AppText></View>
+            <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
+          </Pressable>
           {collaboratorsLoading ? <AppText variant="caption" muted>Se încarcă lista colaboratorilor…</AppText> : null}
           {collaboratorsError ? (
             <View style={[styles.collaboratorError, { backgroundColor: palette.dangerSoft, borderColor: palette.danger }]}>
@@ -371,8 +358,13 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
           {!collaboratorsLoading && !collaboratorsError && !collaborators.length ? <AppText variant="caption" muted>Nu există colaboratori disponibili pentru această proprietate.</AppText> : null}
         </View>
 
-        {form.collaboratorId ? (
-          <View style={[styles.assignmentCard, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
+        {assignments.length ? assignments.map((assignment) => {
+          const selectedCollaborator = collaborators.find((item) => item.id === assignment.collaboratorId);
+          const numericCommission = parseCommissionValue(assignment.commissionValue);
+          const safeCommission = Number.isFinite(numericCommission) ? Math.max(0, numericCommission) : 0;
+          const exampleBase = assignment.commissionType === 'PERCENT_TOTAL' ? 1000 : 700;
+          const preview = assignment.commissionType === 'FIXED' ? safeCommission : Math.round(exampleBase * safeCommission) / 100;
+          return <View key={assignment.collaboratorId} style={[styles.assignmentCard, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
             <View style={styles.assignmentHeader}>
               <View style={styles.assignmentIdentity}>
                 <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
@@ -391,35 +383,32 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
                   <AppText variant="caption" muted>Setările de mai jos se aplică acestui client.</AppText>
                 </View>
               </View>
-              <Button compact variant="danger" icon="trash-outline" label="Elimină" onPress={removeCollaborator} />
+              <Button compact variant="danger" icon="trash-outline" label="Elimină" onPress={() => removeCollaborator(assignment.collaboratorId)} />
             </View>
 
             <View style={styles.block}>
               <AppText variant="label">Tipul comisionului</AppText>
               <View style={[styles.segment, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <SegmentOption label="Sumă fixă" active={form.commissionType === 'FIXED'} onPress={() => update('commissionType', 'FIXED')} />
-                <SegmentOption label="Procent" active={form.commissionType !== 'FIXED'} onPress={() => update('commissionType', percentageType)} />
+                <SegmentOption label="Sumă fixă" active={assignment.commissionType === 'FIXED'} onPress={() => updateAssignment(assignment.collaboratorId, { commissionType: 'FIXED' })} />
+                <SegmentOption label="Procent" active={assignment.commissionType !== 'FIXED'} onPress={() => updateAssignment(assignment.collaboratorId, { commissionType: assignment.commissionType === 'FIXED' ? 'PERCENT_NET' : assignment.commissionType })} />
               </View>
             </View>
 
-            {form.commissionType !== 'FIXED' ? (
+            {assignment.commissionType !== 'FIXED' ? (
               <View style={styles.block}>
                 <AppText variant="label">Procent calculat din</AppText>
                 <View style={[styles.segment, styles.secondarySegment, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                  <SegmentOption label="Din net" active={form.commissionType === 'PERCENT_NET'} onPress={() => selectPercentageType('PERCENT_NET')} />
-                  <SegmentOption label="Din total" active={form.commissionType === 'PERCENT_TOTAL'} onPress={() => selectPercentageType('PERCENT_TOTAL')} />
+                  <SegmentOption label="Din net" active={assignment.commissionType === 'PERCENT_NET'} onPress={() => updateAssignment(assignment.collaboratorId, { commissionType: 'PERCENT_NET' })} />
+                  <SegmentOption label="Din total" active={assignment.commissionType === 'PERCENT_TOTAL'} onPress={() => updateAssignment(assignment.collaboratorId, { commissionType: 'PERCENT_TOTAL' })} />
                 </View>
               </View>
             ) : null}
 
             <Input
-              label={form.commissionType === 'FIXED' ? 'Sumă fixă (lei)' : 'Procent (%)'}
+              label={assignment.commissionType === 'FIXED' ? 'Sumă fixă (lei)' : 'Procent (%)'}
               keyboardType="decimal-pad"
-              value={form.commissionValue}
-              onChangeText={(value) => {
-                update('commissionValue', value);
-                setCommissionError(undefined);
-              }}
+              value={assignment.commissionValue}
+              onChangeText={(value) => updateAssignment(assignment.collaboratorId, { commissionValue: value })}
               error={commissionError}
             />
 
@@ -429,17 +418,17 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
               </View>
               <View style={styles.previewCopy}>
                 <AppText variant="caption" muted>
-                  {form.commissionType === 'FIXED'
+                  {assignment.commissionType === 'FIXED'
                     ? 'Comisionul calculat pentru fiecare fișă'
-                    : form.commissionType === 'PERCENT_TOTAL'
+                    : assignment.commissionType === 'PERCENT_TOTAL'
                       ? 'Exemplu pentru un total de 1.000 lei'
                       : 'Exemplu pentru 1.000 lei total, 300 lei costuri și 700 lei net'}
                 </AppText>
                 <AppText variant="heading" style={{ color: colors.primary }}>{formatCurrency(preview)}</AppText>
               </View>
             </View>
-          </View>
-        ) : (
+          </View>;
+        }) : (
           <View style={[styles.emptyAssignment, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
             <Ionicons name="person-remove-outline" size={21} color={colors.textMuted} />
             <View style={styles.emptyCopy}>
@@ -449,6 +438,24 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
           </View>
         )}
       </Card>
+
+      <Modal visible={collaboratorPickerOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setCollaboratorPickerOpen(false)}>
+        <View style={[styles.pickerOverlay, { backgroundColor: colors.overlay }]}>
+          <Pressable accessibilityLabel="Închide selectorul" style={StyleSheet.absoluteFill} onPress={() => setCollaboratorPickerOpen(false)} />
+          <View style={[styles.pickerModal, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.pickerHeader}><View style={styles.pickerCopy}><AppText variant="title">Alege colaboratorii</AppText><AppText variant="caption" muted>Selectează oricâți colaboratori sunt necesari.</AppText></View><Pressable accessibilityRole="button" accessibilityLabel="Închide" onPress={() => setCollaboratorPickerOpen(false)} style={[styles.closeButton, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={22} color={colors.text} /></Pressable></View>
+            <Input label="Caută după nume" value={collaboratorQuery} onChangeText={setCollaboratorQuery} autoFocus />
+            <ScrollView style={styles.pickerList} contentContainerStyle={styles.pickerListContent} keyboardShouldPersistTaps="handled">
+              {filteredCollaborators.map((item) => {
+                const selected = assignments.some((assignment) => assignment.collaboratorId === item.id);
+                return <Pressable key={item.id} accessibilityRole="checkbox" accessibilityState={{ checked: selected }} onPress={() => selectCollaborator(item)} style={({ pressed }) => [styles.pickerOption, { backgroundColor: selected ? colors.primarySoft : colors.surfaceMuted, borderColor: selected ? colors.primary : colors.border, opacity: pressed ? 0.76 : 1 }]}><View style={[styles.avatar, { backgroundColor: selected ? colors.primary : colors.surface }]}><Ionicons name={selected ? 'checkmark' : 'person-outline'} size={19} color={selected ? '#FFFFFF' : colors.primary} /></View><View style={styles.pickerCopy}><View style={styles.nameRow}><AppText variant="label">{item.name}</AppText>{isPreset(item) ? <Ionicons name="star" size={13} color={colors.primary} /> : null}</View><AppText variant="caption" muted>{item.role || 'Colaborator'} · {item.defaultCommissionType === 'FIXED' ? `${item.defaultCommissionValue} lei` : `${item.defaultCommissionValue}%`}</AppText></View></Pressable>;
+              })}
+              {!filteredCollaborators.length ? <View style={styles.pickerEmpty}><Ionicons name="search-outline" size={28} color={colors.textMuted} /><AppText muted>Niciun colaborator găsit.</AppText></View> : null}
+            </ScrollView>
+            <Button label={`Confirmă selecția (${assignments.length})`} icon="checkmark-circle-outline" onPress={() => setCollaboratorPickerOpen(false)} />
+          </View>
+        </View>
+      </Modal>
 
       <Card style={styles.section}>
         <AppText variant="heading">Observații</AppText>
@@ -470,6 +477,17 @@ const styles = StyleSheet.create({
   sectionTitleCopy: { flex: 1, gap: 2 },
   block: { gap: spacing.sm },
   options: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  pickerButton: { minHeight: 64, borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  pickerIcon: { width: 42, height: 42, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  pickerCopy: { flex: 1, minWidth: 0, gap: 2 },
+  pickerOverlay: { flex: 1, justifyContent: 'flex-end' },
+  pickerModal: { width: '100%', maxWidth: 620, maxHeight: '86%', alignSelf: 'center', borderWidth: 1, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.lg, gap: spacing.md },
+  pickerHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  closeButton: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  pickerList: { maxHeight: 430 },
+  pickerListContent: { gap: spacing.sm, paddingVertical: spacing.xs },
+  pickerOption: { minHeight: 68, borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  pickerEmpty: { minHeight: 130, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   collaboratorError: { borderWidth: 1, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   collaboratorErrorCopy: { flex: 1, alignItems: 'flex-start', gap: spacing.sm },
   assignmentCard: { borderWidth: 1, borderRadius: radius.lg, padding: spacing.md, gap: spacing.lg },
