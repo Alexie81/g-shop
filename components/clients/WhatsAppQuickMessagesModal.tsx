@@ -35,19 +35,22 @@ export function WhatsAppQuickMessagesModal({ visible, client, propertyName, mess
   const closeByDrag = useCallback(() => {
     Animated.timing(translateY, { toValue: 720, duration: 230, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(({ finished }) => {
       if (!finished) return;
-      translateY.setValue(0);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
       onClose();
     });
   }, [onClose, translateY]);
   const panResponder = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => false,
-    onMoveShouldSetPanResponder: (_event, gesture) => gesture.dy > 4 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
-    onMoveShouldSetPanResponderCapture: (_event, gesture) => gesture.dy > 4 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+    onStartShouldSetPanResponder: () => true,
+    onStartShouldSetPanResponderCapture: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponderCapture: () => true,
+    onPanResponderGrant: () => translateY.stopAnimation(),
     onPanResponderMove: (_event, gesture) => translateY.setValue(Math.max(0, gesture.dy)),
     onPanResponderRelease: (_event, gesture) => {
-      if (gesture.dy > 76 || gesture.vy > 0.65) { closeByDrag(); return; }
+      if (gesture.dy > 52 || gesture.vy > 0.38) { closeByDrag(); return; }
       Animated.spring(translateY, { toValue: 0, damping: 20, stiffness: 230, mass: 0.8, useNativeDriver: true }).start();
     },
+    onPanResponderTerminationRequest: () => false,
     onPanResponderTerminate: () => Animated.spring(translateY, { toValue: 0, damping: 20, stiffness: 230, mass: 0.8, useNativeDriver: true }).start(),
   }), [closeByDrag, translateY]);
 
@@ -77,9 +80,9 @@ export function WhatsAppQuickMessagesModal({ visible, client, propertyName, mess
           <View style={styles.header}>
             <View style={styles.whatsAppIcon}><Ionicons name="logo-whatsapp" size={29} color="#fff" /></View>
             <View style={styles.headerCopy}><AppText variant="title">Mesaj rapid</AppText><AppText variant="caption" muted numberOfLines={1}>Către {fullName(client)} · {client.phone}</AppText></View>
-            <Pressable accessibilityLabel="Închide" onPress={onClose} style={[styles.close, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={22} color={colors.text} /></Pressable>
           </View>
         </View>
+        <Pressable accessibilityLabel="Închide" hitSlop={8} onPress={onClose} style={[styles.close, styles.closeFloating, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={22} color={colors.text} /></Pressable>
 
         <AppText variant="label">Alege unul dintre mesajele contului tău</AppText>
         <ScrollView style={styles.listScroll} contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
@@ -108,8 +111,9 @@ export function WhatsAppQuickMessagesModal({ visible, client, propertyName, mess
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end', alignItems: 'center' },
   sheet: { width: '94%', maxWidth: 680, maxHeight: '92%', borderWidth: 1, borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: spacing.xl, gap: spacing.lg },
-  sheetMobile: { width: '100%', paddingHorizontal: spacing.lg }, draggableHeader: { marginHorizontal: -spacing.lg, marginTop: -spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, gap: spacing.md }, handle: { width: 46, height: 5, borderRadius: radius.pill, alignSelf: 'center' },
+  sheetMobile: { width: '100%', paddingHorizontal: spacing.lg }, draggableHeader: { marginHorizontal: -spacing.lg, marginTop: -spacing.sm, paddingLeft: spacing.lg, paddingRight: 76, paddingTop: spacing.sm, gap: spacing.md }, handle: { width: 46, height: 5, borderRadius: radius.pill, alignSelf: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md }, whatsAppIcon: { width: 52, height: 52, borderRadius: 18, backgroundColor: '#25D366', alignItems: 'center', justifyContent: 'center', shadowColor: '#075E54', shadowOpacity: 0.2, shadowRadius: 12, shadowOffset: { width: 0, height: 7 }, elevation: 4 }, headerCopy: { minWidth: 0, flex: 1 }, close: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  closeFloating: { position: 'absolute', top: 34, right: spacing.lg, zIndex: 5, elevation: 5 },
   listScroll: { flexGrow: 0, maxHeight: 290 }, list: { gap: spacing.sm, paddingBottom: spacing.xs }, option: { minHeight: 74, borderWidth: 1, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md }, optionCheck: { width: 24, height: 24, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' }, optionCopy: { minWidth: 0, flex: 1, gap: 3 },
   preview: { borderWidth: 1, borderRadius: radius.md, padding: spacing.md, gap: spacing.sm }, previewTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs }, previewLabel: { color: '#14984E', fontWeight: '900', letterSpacing: 0.8 }, previewText: { lineHeight: 21 },
   empty: { minHeight: 76, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md }, emptyCopy: { minWidth: 0, flex: 1, gap: 3 }, sendButton: { width: '100%', backgroundColor: '#18B95D' },
