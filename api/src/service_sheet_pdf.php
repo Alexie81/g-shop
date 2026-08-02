@@ -156,24 +156,23 @@ function gshop_pdf_overlay_page_one(Fpdi $pdf, array $sheet, array $client, arra
 function gshop_pdf_overlay_page_two(Fpdi $pdf, array $sheet, array $client, ?string $signaturePath, ?string $stampPath): void {
     $checkXs = [34.0, 165.75, 297.5, 429.25];
     $checks = ['approveDiagnostics','approveRepair','repairRefused','productDelivered'];
-    foreach ($checks as $index => $key) if (!empty($sheet[$key])) gshop_pdf_text($pdf, $checkXs[$index] + 1, 398, '✓', 8.5, 'B');
-    gshop_pdf_text($pdf, 100, 350, $sheet['warranty'] ?? '', 6.8, '', 92);
-    gshop_pdf_text($pdf, 270, 350, $sheet['storageAfter'] ?? '', 6.8, '', 86);
+    foreach ($checks as $index => $key) if (!empty($sheet[$key])) gshop_pdf_text($pdf, $checkXs[$index] + 1, 517, '✓', 8.5, 'B');
+    gshop_pdf_text($pdf, 100, 487, $sheet['warranty'] ?? '', 6.8, '', 92);
+    gshop_pdf_text($pdf, 270, 487, $sheet['storageAfter'] ?? '', 6.8, '', 86);
     $statuses = ['NEW'=>'Nouă','WAITING'=>'În așteptare','VERIFYING'=>'În verificare','IN_PROGRESS'=>'În lucru','WAITING_PARTS'=>'Așteptăm piesele','COMPLETED'=>'Finalizată','DELIVERED'=>'Predată','CANCELLED'=>'Anulată'];
-    gshop_pdf_text($pdf, 445, 350, $statuses[$sheet['status'] ?? ''] ?? ($sheet['status'] ?? ''), 6.8, '', 112);
-    gshop_pdf_text($pdf, 130, 320, $sheet['handoverNotes'] ?? '', 6.8, '', 426);
+    gshop_pdf_text($pdf, 445, 487, $statuses[$sheet['status'] ?? ''] ?? ($sheet['status'] ?? ''), 6.8, '', 112);
+    gshop_pdf_text($pdf, 130, 464, $sheet['handoverNotes'] ?? '', 6.8, '', 426);
 
     $clientName = trim(gshop_pdf_string($client['firstName'] ?? '') . ' ' . gshop_pdf_string($client['lastName'] ?? ''));
-    gshop_pdf_text($pdf, 112, 223, $clientName, 7, '', 245);
-    gshop_pdf_text($pdf, 110, 195, gshop_pdf_date($sheet['signedAt'] ?? '', true), 6.8, '', 110);
-    gshop_pdf_text($pdf, 265, 195, $sheet['identityDocument'] ?? '', 6.8, '', 90);
-    gshop_pdf_text($pdf, 455, 223, $sheet['technicianName'] ?? '', 6.8, '', 102);
+    gshop_pdf_text($pdf, 112, 379, $clientName, 7, '', 245);
+    gshop_pdf_text($pdf, 110, 355, gshop_pdf_date($sheet['signedAt'] ?? '', true), 6.8, '', 245);
+    gshop_pdf_text($pdf, 455, 379, $sheet['technicianName'] ?? '', 6.8, '', 102);
 
     $signature = gshop_pdf_image_path($signaturePath);
-    if ($signature) $pdf->Image($signature, 34, 686, 330, 88);
+    if ($signature) $pdf->Image($signature, 34, 517, 323, 38);
     if (!empty($sheet['showCompanyDetails'])) {
         $stamp = gshop_pdf_image_path($stampPath);
-        if ($stamp) $pdf->Image($stamp, 400, 671, 158, 88);
+        if ($stamp) $pdf->Image($stamp, 381, 517, 168, 38);
     }
     foreach ([$signature ?? null, isset($stamp) ? $stamp : null] as $temporary) {
         if ($temporary && str_starts_with($temporary, sys_get_temp_dir()) && is_file($temporary)) @unlink($temporary);

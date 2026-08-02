@@ -629,35 +629,34 @@ def draw_terms_column(
     y = y_top
     for number, item_text in items:
         c.setFillColor(ELECTRIC_DARK)
-        c.setFont("GShop-Bold", 7.0)
+        c.setFont("GShop-Bold", 6.2)
         c.drawString(x, y, f"{number}.")
-        lines = wrap_text(item_text, "GShop-Regular", 7.0, width - 18)
+        lines = wrap_text(item_text, "GShop-Regular", 6.2, width - 18)
         c.setFillColor(NAVY)
-        c.setFont("GShop-Regular", 7.0)
+        c.setFont("GShop-Regular", 6.2)
         for index, line in enumerate(lines):
-            c.drawString(x + 18, y - index * 9, line)
-        y -= len(lines) * 9 + 9
+            c.drawString(x + 18, y - index * 8, line)
+        y -= len(lines) * 8 + 5
 
 
 def draw_terms(c: canvas.Canvas) -> None:
     section_title(c, 718, 5, "Condiții service", "acceptate prin semnare")
-    y, h = 479, 225
+    y, h = 586, 118
     rounded_box(c, MARGIN, y, CONTENT_W, h, fill=ELECTRIC_LIGHT, stroke=HexColor("#B9D0FF"))
     split = MARGIN + CONTENT_W / 2
     c.setStrokeColor(HexColor("#B9D0FF"))
     c.line(split, y + 12, split, y + h - 12)
-    draw_terms_column(c, MARGIN + 12, y + h - 20, CONTENT_W / 2 - 24, TERMS_LEFT)
-    draw_terms_column(c, split + 12, y + h - 20, CONTENT_W / 2 - 24, TERMS_RIGHT)
+    draw_terms_column(c, MARGIN + 12, y + h - 18, CONTENT_W / 2 - 24, TERMS_LEFT)
+    draw_terms_column(c, split + 12, y + h - 18, CONTENT_W / 2 - 24, TERMS_RIGHT)
     c.setFillColor(SLATE)
-    c.setFont("GShop-Regular", 5.5)
-    c.drawString(MARGIN + 12, y + 11, "Repere: OG 21/1992, Legea 193/2000, Regulamentul (UE) 2016/679 și Legea 190/2018.")
+    c.setFont("GShop-Regular", 4.8)
+    c.drawString(MARGIN + 12, y + 8, "Repere: OG 21/1992, Legea 193/2000, Regulamentul (UE) 2016/679 și Legea 190/2018.")
 
 
 def draw_handover(c: canvas.Canvas, data: dict[str, Any]) -> None:
-    section_title(c, 451, 6, "Acord și predare", "confirmarea lucrării și a stării finale")
-    y, h = 300, 138
+    section_title(c, 561, 6, "Acord și predare", "confirmarea lucrării și a stării finale")
+    y, h = 449, 98
     rounded_box(c, MARGIN, y, CONTENT_W, h)
-    equipment = text(data, "sheet", "equipment").lower()
     checkbox_labels = (
         ("approveDiagnostics", "Aprob diagnosticul și testarea"),
         ("approveRepair", "Aprob reparația / devizul"),
@@ -669,20 +668,16 @@ def draw_handover(c: canvas.Canvas, data: dict[str, Any]) -> None:
     column_w = grid_w / 4
     sheet = data.get("sheet", {}) if isinstance(data.get("sheet"), dict) else {}
     for column_index, (key, label_text) in enumerate(checkbox_labels):
-        checkbox(c, grid_x + column_index * column_w, y + 98, label_text, bool(sheet.get(key)))
-    draw_line_field(c, MARGIN + 12, y + 48, 160, "Garanție", text(data, "sheet", "warranty"))
-    draw_line_field(c, MARGIN + 192, y + 48, 150, "Depozitare după", text(data, "sheet", "storageAfter"))
-    draw_line_field(c, MARGIN + 362, y + 48, CONTENT_W - 374, "Status final", text(data, "sheet", "status"))
-    draw_line_field(c, MARGIN + 12, y + 18, CONTENT_W - 24, "Mențiuni la predare", text(data, "sheet", "handoverNotes"))
-    if equipment:
-        c.setFillColor(SLATE)
-        c.setFont("GShop-Regular", 5.4)
-        c.drawRightString(PAGE_W - MARGIN - 12, y + 8, f"Echipament: {fit_text(equipment, 'GShop-Regular', 5.4, 150)}")
+        checkbox(c, grid_x + column_index * column_w, y + 68, label_text, bool(sheet.get(key)))
+    draw_line_field(c, MARGIN + 12, y + 36, 160, "Garanție", text(data, "sheet", "warranty"))
+    draw_line_field(c, MARGIN + 192, y + 36, 150, "Depozitare după", text(data, "sheet", "storageAfter"))
+    draw_line_field(c, MARGIN + 362, y + 36, CONTENT_W - 374, "Status final", text(data, "sheet", "status"))
+    draw_line_field(c, MARGIN + 12, y + 13, CONTENT_W - 24, "Mențiuni la predare", text(data, "sheet", "handoverNotes"))
 
 
 def draw_signatures(c: canvas.Canvas, data: dict[str, Any], show_company: bool) -> None:
-    section_title(c, 273, 7, "Semnături", "confirmarea clientului și identificarea tehnicianului")
-    y, h = 48, 212
+    section_title(c, 424, 7, "Semnături", "confirmarea clientului și identificarea tehnicianului")
+    y, h = 271, 140
     rounded_box(c, MARGIN, y, CONTENT_W, h)
     split = MARGIN + CONTENT_W * 0.63
     c.setStrokeColor(LINE)
@@ -690,43 +685,50 @@ def draw_signatures(c: canvas.Canvas, data: dict[str, Any], show_company: bool) 
 
     left_x = MARGIN + 12
     left_w = split - left_x - 12
-    draw_line_field(c, left_x, y + 173, left_w, "Nume client", full_name(data))
-    draw_line_field(c, left_x, y + 145, left_w * 0.44, "Data / ora", date_time_display(text(data, "sheet", "signedAt")))
-    draw_line_field(
-        c,
-        left_x + left_w * 0.48,
-        y + 145,
-        left_w * 0.52,
-        "Document identitate",
-        text(data, "sheet", "identityDocument"),
-        label_size=5.2,
-        label_width=72,
-    )
+    draw_line_field(c, left_x, y + 106, left_w, "Nume client", full_name(data))
+    draw_line_field(c, left_x, y + 82, left_w, "Data / ora", date_time_display(text(data, "sheet", "signedAt")))
     c.setFillColor(SLATE)
     c.setFont("GShop-Bold", 6.0)
-    c.drawString(left_x, y + 120, "SEMNĂTURĂ CLIENT")
+    c.drawString(left_x, y + 60, "SEMNĂTURĂ CLIENT")
     signature = image_source(text(data, "sheet", "signatureUrl"))
+    sheet = data.get("sheet", {}) if isinstance(data.get("sheet"), dict) else {}
     if signature:
-        c.drawImage(signature, left_x, y + 20, width=left_w, height=88, preserveAspectRatio=True, mask="auto")
+        c.drawImage(signature, left_x, y + 16, width=left_w, height=38, preserveAspectRatio=True, mask="auto")
+    elif sheet.get("demoSignature"):
+        c.saveState()
+        c.setStrokeColor(ELECTRIC_DARK)
+        c.setLineWidth(1.35)
+        signature_path = c.beginPath()
+        signature_path.moveTo(left_x + 40, y + 28)
+        signature_path.curveTo(left_x + 58, y + 48, left_x + 48, y + 18, left_x + 70, y + 37)
+        signature_path.curveTo(left_x + 82, y + 48, left_x + 78, y + 18, left_x + 92, y + 33)
+        signature_path.curveTo(left_x + 108, y + 48, left_x + 101, y + 17, left_x + 118, y + 30)
+        signature_path.curveTo(left_x + 135, y + 43, left_x + 142, y + 20, left_x + 154, y + 29)
+        signature_path.curveTo(left_x + 169, y + 41, left_x + 180, y + 22, left_x + 191, y + 28)
+        signature_path.curveTo(left_x + 205, y + 35, left_x + 220, y + 24, left_x + 236, y + 28)
+        c.drawPath(signature_path, fill=0, stroke=1)
+        c.setLineWidth(0.8)
+        c.line(left_x + 31, y + 23, left_x + 245, y + 23)
+        c.restoreState()
     else:
         c.setStrokeColor(HexColor("#C8D3E3"))
-        c.line(left_x, y + 24, left_x + left_w, y + 24)
+        c.line(left_x, y + 16, left_x + left_w, y + 16)
 
     right_x = split + 12
     right_w = PAGE_W - MARGIN - right_x - 12
-    draw_line_field(c, right_x, y + 173, right_w, "Tehnician", text(data, "sheet", "technicianName"))
+    draw_line_field(c, right_x, y + 106, right_w, "Tehnician", text(data, "sheet", "technicianName"))
 
     if show_company:
         c.setFillColor(SLATE)
         c.setFont("GShop-Bold", 5.8)
-        c.drawString(right_x, y + 132, "ȘTAMPILĂ FIRMĂ")
+        c.drawString(right_x, y + 66, "ȘTAMPILĂ FIRMĂ")
         stamp = image_source(text(data, "company", "stampUrl"))
         if stamp:
-            c.drawImage(stamp, right_x, y + 35, width=right_w, height=88, preserveAspectRatio=True, mask="auto")
+            c.drawImage(stamp, right_x, y + 16, width=right_w, height=38, preserveAspectRatio=True, mask="auto")
         else:
             c.setStrokeColor(HexColor("#C8D3E3"))
             c.setDash(3, 2)
-            c.roundRect(right_x, y + 35, right_w, 84, 6, fill=0, stroke=1)
+            c.roundRect(right_x, y + 16, right_w, 38, 6, fill=0, stroke=1)
             c.setDash()
 
 
