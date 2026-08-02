@@ -112,9 +112,9 @@ function gshop_pdf_overlay_page_one(Fpdi $pdf, array $sheet, array $client, arra
         gshop_pdf_text($pdf, 34, 723, $company['legalName'] ?? '', 7.2, 'B', 216);
         gshop_pdf_text($pdf, 269, 723, $company['taxId'] ?? '', 7.2, 'B', 82);
         gshop_pdf_text($pdf, 370, 723, $company['tradeRegisterNumber'] ?? '', 6.9, '', 181);
-        gshop_pdf_text($pdf, 34, 697, gshop_pdf_full_address($company), 6.8, '', 224);
-        gshop_pdf_text($pdf, 277, 697, $company['phone'] ?? '', 6.8, '', 82);
-        gshop_pdf_text($pdf, 378, 697, $company['email'] ?? '', 6.8, '', 173);
+        gshop_pdf_text($pdf, 34, 697, gshop_pdf_full_address($company), 6.8, '', 249);
+        gshop_pdf_text($pdf, 302, 697, $company['phone'] ?? '', 6.8, '', 65);
+        gshop_pdf_text($pdf, 386, 697, $company['email'] ?? '', 6.6, '', 165);
     }
 
     $clientName = trim(gshop_pdf_string($client['firstName'] ?? '') . ' ' . gshop_pdf_string($client['lastName'] ?? ''));

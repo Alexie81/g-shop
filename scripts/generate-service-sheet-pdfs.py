@@ -475,7 +475,7 @@ def draw_company_block(c: canvas.Canvas, data: dict[str, Any]) -> None:
     c.line(inner_left, 720, inner_right, 720)
     for separator_x in (259, 360):
         c.line(separator_x, 724, separator_x, 741)
-    for separator_x in (267, 368):
+    for separator_x in (292, 376):
         c.line(separator_x, 699, separator_x, 716)
 
     company = data.get("company", {}) if isinstance(data.get("company"), dict) else {}
@@ -483,9 +483,9 @@ def draw_company_block(c: canvas.Canvas, data: dict[str, Any]) -> None:
     draw_company_field(c, 34, 735, 723, 216, "Denumire juridică", text(company_data, "company", "legalName"), emphasized=True, value_size=7.2)
     draw_company_field(c, 269, 735, 723, 82, "CUI / CIF", text(company_data, "company", "taxId"), emphasized=True, value_size=7.2)
     draw_company_field(c, 370, 735, 723, 181, "Registrul Comerțului", text(company_data, "company", "tradeRegisterNumber"), value_size=6.9)
-    draw_company_field(c, 34, 709, 697, 224, "Sediu", full_address(company_data, "company"), value_size=6.8)
-    draw_company_field(c, 277, 709, 697, 82, "Telefon", text(company_data, "company", "phone"), value_size=6.8)
-    draw_company_field(c, 378, 709, 697, 173, "Email", text(company_data, "company", "email"), value_size=6.8)
+    draw_company_field(c, 34, 709, 697, 249, "Sediu", full_address(company_data, "company"), value_size=6.8)
+    draw_company_field(c, 302, 709, 697, 65, "Telefon", text(company_data, "company", "phone"), value_size=6.8)
+    draw_company_field(c, 386, 709, 697, 165, "Email", text(company_data, "company", "email"), value_size=6.6)
 
 
 def draw_client_and_equipment(c: canvas.Canvas, data: dict[str, Any]) -> None:
