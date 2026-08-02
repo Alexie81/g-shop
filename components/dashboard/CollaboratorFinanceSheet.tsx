@@ -1,5 +1,6 @@
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
+import { LoadingExperience } from '@/components/ui/LoadingExperience';
 import { Card } from '@/components/ui/Card';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { apiRequest } from '@/services/api';
@@ -8,7 +9,7 @@ import { CollaboratorFinanceSummary } from '@/types';
 import { formatCurrency, formatDate } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Easing, Modal, PanResponder, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Animated, Easing, Modal, PanResponder, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 type CollaboratorFinanceSheetProps = {
   visible: boolean;
@@ -117,7 +118,7 @@ export function CollaboratorFinanceSheet({ visible, propertyId, collaboratorId, 
           </View>
 
           {error ? <View style={[styles.error, { backgroundColor: isDark ? `${palette.danger}18` : palette.dangerSoft }]}><Ionicons name="alert-circle" size={18} color={palette.danger} /><AppText variant="caption" style={{ color: palette.danger, flex: 1 }}>{error}</AppText></View> : null}
-          {loading && !data ? <View style={styles.loading}><ActivityIndicator size="large" color={colors.primary} /><AppText muted>Se încarcă situația financiară…</AppText></View> : null}
+          {loading && !data ? <LoadingExperience title="Calculăm situația colaboratorilor" message="Sincronizăm sumele achitate și cele rămase de plată." /> : null}
           {!loading && data && !summary.collaborators.length ? <View style={styles.empty}><View style={[styles.emptyIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="people-circle-outline" size={34} color={colors.primary} /></View><AppText variant="heading">Nu există comisioane</AppText><AppText muted style={styles.center}>Comisioanele apar automat când o fișă este creată pentru un client atribuit unui colaborator.</AppText></View> : null}
 
           {summary.collaborators.map((collaborator, index) => {
@@ -174,7 +175,6 @@ const styles = StyleSheet.create({
   summaryMetric: { minWidth: 0, flex: 1, minHeight: 104, padding: spacing.md, borderRadius: radius.lg, borderWidth: 1, justifyContent: 'space-between' },
   summaryIcon: { width: 32, height: 32, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   error: { borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  loading: { minHeight: 220, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   empty: { minHeight: 240, alignItems: 'center', justifyContent: 'center', gap: spacing.md, paddingHorizontal: spacing.xxl },
   emptyIcon: { width: 64, height: 64, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   center: { textAlign: 'center' },

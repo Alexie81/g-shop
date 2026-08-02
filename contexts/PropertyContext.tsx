@@ -2,7 +2,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { propertyRepository } from '@/repositories/api-repositories';
 import { preferenceStorage } from '@/services/storage';
 import { Property } from '@/types';
-import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 type PropertyContextValue = {
   properties: Property[];
@@ -21,6 +21,8 @@ export function PropertyProvider({ children }: PropsWithChildren) {
   const [activeProperty, setActiveProperty] = useState<Property | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requiresPropertySelectionRef = useRef(requiresPropertySelection);
+  requiresPropertySelectionRef.current = requiresPropertySelection;
 
   const reload = useCallback(async () => {
     if (!user) { setProperties([]); setActiveProperty(null); return; }
@@ -33,7 +35,7 @@ export function PropertyProvider({ children }: PropsWithChildren) {
       const stored = result.find((property) => property.id === storedId);
       setActiveProperty((current) => {
         const currentAllowed = result.find((property) => property.id === current?.id);
-        if (user.role === 'ADMIN' && requiresPropertySelection) return null;
+        if (user.role === 'ADMIN' && requiresPropertySelectionRef.current) return null;
         const selected = currentAllowed ?? stored ?? result[0] ?? null;
         if (selected && selected.id !== storedId) void preferenceStorage.set(`property.${user.id}`, selected.id);
         return selected;
@@ -41,7 +43,7 @@ export function PropertyProvider({ children }: PropsWithChildren) {
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Proprietățile nu au putut fi încărcate.');
     } finally { setLoading(false); }
-  }, [requiresPropertySelection, user]);
+  }, [user]);
 
   useEffect(() => { void reload(); }, [reload]);
 

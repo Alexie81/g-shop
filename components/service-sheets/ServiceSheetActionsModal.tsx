@@ -1,11 +1,12 @@
 import { AppText } from '@/components/ui/AppText';
+import { LoadingGlyph } from '@/components/ui/LoadingExperience';
 import { Button } from '@/components/ui/Button';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { ServiceSheet } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import { ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Easing, Modal, PanResponder, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Easing, Modal, PanResponder, Pressable, StyleSheet, View } from 'react-native';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -137,7 +138,7 @@ function Action({ icon, color, label, description, onPress, loading = false }: {
     onPress={onPress}
     style={({ pressed }) => [styles.action, { borderColor: colors.border, backgroundColor: pressed ? colors.surfaceMuted : colors.surface, opacity: loading ? 0.65 : 1 }]}
   >
-    <View style={[styles.actionIcon, { backgroundColor: `${color}16` }]}>{loading ? <ActivityIndicator color={color} /> : <Ionicons name={icon} size={21} color={color} />}</View>
+    <View style={[styles.actionIcon, { backgroundColor: `${color}16` }]}>{loading ? <LoadingGlyph color={color} size={20} /> : <Ionicons name={icon} size={21} color={color} />}</View>
     <View style={styles.actionCopy}><AppText variant="label">{label}</AppText><AppText variant="caption" muted>{description}</AppText></View>
     <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
   </Pressable>;

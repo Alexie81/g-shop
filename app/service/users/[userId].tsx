@@ -11,6 +11,7 @@ import { useProperty } from '@/contexts/PropertyContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { userRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { Permission } from '@/types';
@@ -54,6 +55,7 @@ export default function UserDetails() {
     async () => (await userRepository.list(activeProperty?.id ?? '')).find((item) => item.id === userId) ?? Promise.reject(new Error('Utilizatorul nu există.')),
     [userId, activeProperty?.id],
   );
+  useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [propertyIds, setPropertyIds] = useState<string[]>([]);
   const [password, setPassword] = useState('');

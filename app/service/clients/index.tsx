@@ -1,5 +1,6 @@
 import { ClientCard } from '@/components/clients/ClientCard';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { AnimatedRefreshIcon } from '@/components/ui/AnimatedRefreshIcon';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -17,7 +18,7 @@ import { fullName, normalizePhoneForWhatsApp } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Linking, Modal, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
+import { Linking, Modal, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 
 type ClientStateFilter = '' | 'ACTIVE' | 'FINALIZED';
 type ClientSort = '' | 'NEWEST' | 'OLDEST' | 'NAME_ASC' | 'NAME_DESC';
@@ -178,9 +179,7 @@ export default function ClientsScreen() {
             pressed && styles.filterPressed,
           ]}
         >
-          {state.refreshing
-            ? <ActivityIndicator size="small" color={colors.primary} />
-            : <Ionicons name="refresh" size={20} color={colors.primary} />}
+          <AnimatedRefreshIcon refreshing={state.refreshing} color={colors.primary} />
         </Pressable>
 
         <ScrollView
@@ -200,12 +199,12 @@ export default function ClientsScreen() {
               onPress={() => setFilter(item.value === '' || selected ? '' : item.value)}
               style={({ pressed }) => [
                 styles.filter,
-                { backgroundColor: selected ? colors.primary : colors.surfaceMuted, borderColor: selected ? colors.primary : colors.border },
+                { backgroundColor: colors.surfaceMuted, borderColor: selected ? colors.primary : colors.border },
                 pressed && styles.filterPressed,
               ]}
             >
-              <Ionicons name={item.icon} size={16} color={selected ? '#fff' : colors.textMuted} />
-              <AppText variant="caption" style={{ color: selected ? '#fff' : colors.textMuted, fontWeight: '800' }}>{item.label}</AppText>
+              <Ionicons name={item.icon} size={16} color={selected ? colors.primary : colors.textMuted} />
+              <AppText variant="caption" style={{ color: selected ? colors.primary : colors.textMuted, fontWeight: '800' }}>{item.label}</AppText>
             </Pressable>;
           })}
           {sortOptions.map((item) => {

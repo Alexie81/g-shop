@@ -1,5 +1,6 @@
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { AppText } from '@/components/ui/AppText';
+import { LoadingGlyph } from '@/components/ui/LoadingExperience';
 import { Input } from '@/components/ui/Input';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
@@ -9,7 +10,7 @@ import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Animated, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 export default function LoginScreen() {
   const { colors, isDark } = useAppTheme();
@@ -87,7 +88,7 @@ export default function LoginScreen() {
 
               <Pressable disabled={loading} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined); void submit(); }} style={({ pressed }) => [styles.loginButton, { opacity: loading ? 0.72 : pressed ? 0.88 : 1, transform: [{ scale: pressed ? 0.99 : 1 }] }]}>
                 <LinearGradient colors={['#3988FF', '#075CFF', '#0648D7']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.loginGradient}>
-                  {loading ? <ActivityIndicator color="#FFFFFF" /> : <><AppText variant="label" style={styles.loginLabel}>Intră în G-Shop</AppText><View style={styles.arrowBubble}><Ionicons name="arrow-forward" size={17} color="#FFFFFF" /></View></>}
+                  {loading ? <LoadingGlyph color="#FFFFFF" size={20} /> : <><AppText variant="label" style={styles.loginLabel}>Intră în G-Shop</AppText><View style={styles.arrowBubble}><Ionicons name="arrow-forward" size={17} color="#FFFFFF" /></View></>}
                 </LinearGradient>
               </Pressable>
             </View>

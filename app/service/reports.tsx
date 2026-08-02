@@ -1,6 +1,7 @@
 import { QRChart } from '@/components/dashboard/QRChart';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { AnimatedRefreshIcon } from '@/components/ui/AnimatedRefreshIcon';
 import { AppText } from '@/components/ui/AppText';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -9,6 +10,7 @@ import { ErrorState, LoadingState } from '@/components/ui/States';
 import { useProperty } from '@/contexts/PropertyContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { dashboardRepository } from '@/repositories/api-repositories';
 import { apiRequest } from '@/services/api';
 import { palette, radius, spacing } from '@/theme/tokens';
@@ -79,6 +81,7 @@ export default function ReportsScreen() {
     ]);
     return { ...report, dashboardMetrics: metrics, metrics: report.periodMetrics ?? metrics };
   }, [propertyId, query]);
+  useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);
 
   const returnToMore = () => router.replace('/service/more');
   const choosePeriod = (next: ReportPeriod) => {
@@ -124,7 +127,7 @@ export default function ReportsScreen() {
           <AppText style={styles.heroText}>{activeProperty?.name}</AppText>
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Actualizează rapoartele" disabled={state.refreshing} onPress={() => void state.reload(true)} style={({ pressed }) => [styles.refresh, { opacity: pressed ? 0.72 : 1 }]}>
-          <Ionicons name={state.refreshing ? 'sync' : 'refresh'} size={23} color="#fff" />
+          <AnimatedRefreshIcon refreshing={state.refreshing} color="#fff" size={23} />
         </Pressable>
       </LinearGradient>
 

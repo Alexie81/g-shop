@@ -1,10 +1,11 @@
 import { AppText } from '@/components/ui/AppText';
+import { LoadingGlyph } from '@/components/ui/LoadingExperience';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { ComponentProps } from 'react';
-import { ActivityIndicator, Pressable, StyleProp, StyleSheet, ViewStyle } from 'react-native';
+import { Pressable, StyleProp, StyleSheet, ViewStyle } from 'react-native';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 type Variant = 'primary' | 'secondary' | 'outline' | 'danger' | 'ghost';
@@ -25,7 +26,7 @@ export function Button({ label, onPress, icon, variant = 'primary', loading, dis
       onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined); onPress?.(); }}
       style={({ pressed }) => [styles.button, compact && styles.compact, { backgroundColor, borderColor, opacity: disabled ? 0.45 : pressed ? 0.82 : 1 }, style]}
     >
-      {loading ? <ActivityIndicator color={foreground} /> : icon ? <Ionicons name={icon} size={compact ? 17 : 19} color={foreground} /> : null}
+      {loading ? <LoadingGlyph color={foreground} size={compact ? 17 : 19} /> : icon ? <Ionicons name={icon} size={compact ? 17 : 19} color={foreground} /> : null}
       <AppText variant="label" style={{ color: foreground }}>{label}</AppText>
     </Pressable>
   );

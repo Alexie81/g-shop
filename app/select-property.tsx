@@ -1,5 +1,6 @@
 import { RouteLoader } from '@/components/layout/RouteLoader';
 import { AppText } from '@/components/ui/AppText';
+import { LoadingGlyph } from '@/components/ui/LoadingExperience';
 import { ErrorState } from '@/components/ui/States';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProperty } from '@/contexts/PropertyContext';
@@ -10,7 +11,7 @@ import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Animated, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function SelectPropertyScreen() {
@@ -90,7 +91,7 @@ export default function SelectPropertyScreen() {
                   <AppText variant="caption" muted numberOfLines={1}>{property.domain}</AppText>
                   <View style={[styles.type, { backgroundColor: isDark ? `${accent}20` : `${accent}10` }]}><Ionicons name={service ? 'document-text-outline' : 'bag-handle-outline'} size={13} color={accent} /><AppText variant="caption" style={{ color: accent, fontWeight: '800' }}>{service ? 'Service & fișe' : 'Magazin online · În lucru'}</AppText></View>
                 </View>
-                <View style={[styles.arrow, { backgroundColor: selecting === property.id ? accent : colors.surfaceMuted }]}>{selecting === property.id ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="arrow-forward" size={20} color={accent} />}</View>
+                <View style={[styles.arrow, { backgroundColor: selecting === property.id ? accent : colors.surfaceMuted }]}>{selecting === property.id ? <LoadingGlyph color="#fff" size={18} /> : <Ionicons name="arrow-forward" size={20} color={accent} />}</View>
               </Pressable>
             </Animated.View>;
           })}</View>}
