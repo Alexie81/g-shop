@@ -307,6 +307,16 @@ export interface ServiceSheet extends BaseEntity {
   technicianId?: UUID;
   collaboratorId?: UUID;
   collaboratorCommission?: number;
+  showCompanyDetails: boolean;
+  warranty?: string;
+  storageAfter?: string;
+  handoverNotes?: string;
+  identityDocument?: string;
+  approveDiagnostics: boolean;
+  approveRepair: boolean;
+  repairRefused: boolean;
+  productDelivered: boolean;
+  technicianName?: string;
   internalNotes?: string;
   signatureUrl?: string;
   signedAt?: ISODate;
@@ -315,6 +325,12 @@ export interface ServiceSheet extends BaseEntity {
   completedAt?: ISODate;
   status: ServiceSheetStatus;
   client?: Pick<Client, 'id' | 'firstName' | 'lastName' | 'phone'>;
+}
+
+export interface ServiceSheetPdf {
+  url: string;
+  fileName: string;
+  generatedAt: ISODate;
 }
 
 export type CommissionType = 'PERCENT_NET' | 'PERCENT_TOTAL' | 'FIXED';

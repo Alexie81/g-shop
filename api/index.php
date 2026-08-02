@@ -348,6 +348,37 @@ function migrate_whatsapp_messages(PDO $pdo): array {
     }
     return $changes;
 }
+function migrate_service_sheet_documents(PDO $pdo): array {
+    $lockName = 'gshop_service_sheet_documents_v1';
+    $lock = $pdo->prepare('SELECT GET_LOCK(?,10)');
+    $lock->execute([$lockName]);
+    if ((int)$lock->fetchColumn() !== 1) throw new RuntimeException('Migrarea documentelor fișelor nu a putut obține blocarea bazei de date.');
+    $changes = [];
+    $columns = [
+        'show_company_details' => 'TINYINT(1) NOT NULL DEFAULT 1 AFTER collaborator_commission',
+        'warranty' => 'VARCHAR(120) NULL AFTER show_company_details',
+        'storage_after' => 'VARCHAR(120) NULL AFTER warranty',
+        'handover_notes' => 'TEXT NULL AFTER storage_after',
+        'identity_document' => 'VARCHAR(120) NULL AFTER handover_notes',
+        'approve_diagnostics' => 'TINYINT(1) NOT NULL DEFAULT 0 AFTER identity_document',
+        'approve_repair' => 'TINYINT(1) NOT NULL DEFAULT 0 AFTER approve_diagnostics',
+        'repair_refused' => 'TINYINT(1) NOT NULL DEFAULT 0 AFTER approve_repair',
+        'product_delivered' => 'TINYINT(1) NOT NULL DEFAULT 0 AFTER repair_refused',
+    ];
+    try {
+        $lookup = $pdo->prepare("SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='service_sheets' AND column_name=? LIMIT 1");
+        foreach ($columns as $column => $definition) {
+            $lookup->execute([$column]);
+            if ($lookup->fetchColumn()) continue;
+            $pdo->exec('ALTER TABLE service_sheets ADD COLUMN ' . $column . ' ' . $definition);
+            $changes[] = 'service_sheets.' . $column;
+        }
+    } finally {
+        $release = $pdo->prepare('SELECT RELEASE_LOCK(?)');
+        $release->execute([$lockName]);
+    }
+    return $changes;
+}
 function validated_whatsapp_message_text(mixed $value, string $label, int $minimum, int $maximum): string {
     if (!is_string($value)) fail($label . ' este obligatoriu.',422);
     $text = trim(str_replace(["\r\n","\r"],"\n",$value));
@@ -461,13 +492,16 @@ function client_for_user(array $client, array $user): array {
     return $client;
 }
 function sheet_select(): string {
-    return 'SELECT ' . uuid_sql('s.id') . ' id,' . uuid_sql('s.property_id') . ' property_id,' . uuid_sql('s.client_id') . ' client_id,s.number,s.equipment,s.brand,s.model,s.serial_number,s.accessories,s.reported_issue,s.technical_assessment,s.work_performed,s.parts_used,s.parts_cost,s.labor_cost,s.total_cost,s.direct_costs,s.net_value,' . uuid_sql('s.technician_id') . ' technician_id,' . uuid_sql('s.collaborator_id') . ' collaborator_id,s.collaborator_commission,s.internal_notes,s.signature_path,s.signed_at,s.received_at,s.estimated_at,s.completed_at,s.status,COALESCE(cf.currency_code,\'RON\') currency_code,s.is_active,s.created_at,s.updated_at,' . uuid_sql('s.created_by') . ' created_by,' . uuid_sql('s.updated_by') . ' updated_by,' . uuid_sql('c.id') . ' c_id,c.first_name c_first_name,c.last_name c_last_name,c.phone c_phone FROM service_sheets s JOIN clients c ON c.id=s.client_id LEFT JOIN client_financials cf ON cf.client_id=s.client_id';
+    return 'SELECT ' . uuid_sql('s.id') . ' id,' . uuid_sql('s.property_id') . ' property_id,' . uuid_sql('s.client_id') . ' client_id,s.number,s.equipment,s.brand,s.model,s.serial_number,s.accessories,s.reported_issue,s.technical_assessment,s.work_performed,s.parts_used,s.parts_cost,s.labor_cost,s.total_cost,s.direct_costs,s.net_value,' . uuid_sql('s.technician_id') . ' technician_id,' . uuid_sql('s.collaborator_id') . ' collaborator_id,s.collaborator_commission,s.show_company_details,s.warranty,s.storage_after,s.handover_notes,s.identity_document,s.approve_diagnostics,s.approve_repair,s.repair_refused,s.product_delivered,s.internal_notes,s.signature_path,s.signed_at,s.received_at,s.estimated_at,s.completed_at,s.status,COALESCE(cf.currency_code,\'RON\') currency_code,s.is_active,s.created_at,s.updated_at,' . uuid_sql('s.created_by') . ' created_by,' . uuid_sql('s.updated_by') . ' updated_by,' . uuid_sql('c.id') . ' c_id,c.first_name c_first_name,c.last_name c_last_name,c.phone c_phone,TRIM(CONCAT(COALESCE(t.first_name,\'\'),\' \',COALESCE(t.last_name,\'\'))) t_name FROM service_sheets s JOIN clients c ON c.id=s.client_id LEFT JOIN client_financials cf ON cf.client_id=s.client_id LEFT JOIN users t ON t.id=s.technician_id';
 }
 function map_sheet(array $row): array {
     $client = ['id' => $row['c_id'], 'firstName' => $row['c_first_name'], 'lastName' => $row['c_last_name'], 'phone' => $row['c_phone']];
-    foreach (array_keys($row) as $key) if (str_starts_with($key, 'c_')) unset($row[$key]);
+    $technicianName = trim((string)($row['t_name'] ?? ''));
+    foreach (array_keys($row) as $key) if (str_starts_with($key, 'c_') || str_starts_with($key, 't_')) unset($row[$key]);
     $sheet = entity_base($row);
     foreach (['partsCost','laborCost','totalCost','directCosts','netValue','collaboratorCommission'] as $key) $sheet[$key] = $sheet[$key] !== null ? (float)$sheet[$key] : null;
+    foreach (['showCompanyDetails','approveDiagnostics','approveRepair','repairRefused','productDelivered'] as $key) $sheet[$key] = (bool)$sheet[$key];
+    $sheet['technicianName'] = $technicianName !== '' ? $technicianName : null;
     $sheet['signatureUrl'] = $sheet['signaturePath'] ? public_base_url() . '/' . ltrim($sheet['signaturePath'], '/') : null;
     unset($sheet['signaturePath']); $sheet['client'] = $client;
     return $sheet;
@@ -706,11 +740,13 @@ function financial_summary(array $client, array $financial, array $expenses): ar
 }
 function sync_service_sheet_financials_from_client(PDO $pdo, array $client, array $financial, array $expenses, array $user): bool {
     $summary=financial_summary($client,$financial,$expenses);
+    $collaborators=client_collaborator_finances($client,$financial,$summary);
+    $collaboratorPaid=round(array_sum(array_column($collaborators,'paid')),2);
     $parts=round(max(0,(float)$financial['displayedPartsCost']),2);
     $labor=round(max(0,(float)$financial['displayedLaborCost']),2);
-    $total=round($parts+$labor,2);
+    $total=round((float)$summary['totalDue'],2);
     $direct=round(max(0,(float)$summary['internalCosts']),2);
-    $net=round(max(0,$total-$direct),2);
+    $net=round((float)$summary['receivedAmount']-$direct-$collaboratorPaid,2);
     $now=now_utc();
     $stmt=$pdo->prepare('UPDATE service_sheets SET parts_cost=?,labor_cost=?,total_cost=?,direct_costs=?,net_value=?,updated_at=?,updated_by=? WHERE client_id=? AND is_active=1 AND NOT (parts_cost <=> ? AND labor_cost <=> ? AND total_cost <=> ? AND direct_costs <=> ? AND net_value <=> ?)');
     $stmt->execute([$parts,$labor,$total,$direct,$net,$now,uuid_bin($user['id']),uuid_bin($client['id']),$parts,$labor,$total,$direct,$net]);
@@ -923,6 +959,12 @@ try {
         $changes = migrate_whatsapp_messages(db());
         if ($changes) audit_log('SCHEMA_MIGRATION_APPLIED','settings','Migrare aplicată pentru mesajele predefinite WhatsApp','Database',null,null,null,['migration'=>'whatsapp-messages-v1','changes'=>$changes],$user);
         respond(['migration'=>'whatsapp-messages-v1','applied'=>(bool)$changes,'changes'=>$changes,'ready'=>true]);
+    }
+    if ($method === 'POST' && $path === '/admin/migrations/service-sheet-documents') {
+        $user = require_permission('settings.manage');
+        $changes = migrate_service_sheet_documents(db());
+        if ($changes) audit_log('SCHEMA_MIGRATION_APPLIED','settings','Migrare aplicată pentru documentele fișelor de service','Database',null,null,null,['migration'=>'service-sheet-documents-v1','changes'=>$changes],$user);
+        respond(['migration'=>'service-sheet-documents-v1','applied'=>(bool)$changes,'changes'=>$changes,'ready'=>true]);
     }
 
     if ($method === 'GET' && $path === '/properties') {
@@ -1322,8 +1364,10 @@ try {
             $existingStmt=$pdo->prepare('SELECT '.uuid_sql('id').' id FROM service_sheets WHERE client_id=? AND is_active=1 ORDER BY updated_at DESC,created_at DESC LIMIT 1 FOR UPDATE');$existingStmt->execute([uuid_bin($clientId)]);$existingId=$existingStmt->fetchColumn();
             if($existingId){$pdo->rollBack();fail('Clientul are deja o fișă de service.',409,['code'=>'SERVICE_SHEET_ALREADY_EXISTS','serviceSheetId'=>$existingId]);}
             $seq=(int)$pdo->query("SELECT COUNT(*)+1 FROM service_sheets WHERE YEAR(created_at)=YEAR(UTC_TIMESTAMP())")->fetchColumn();$number='GS-'.gmdate('Y').'-'.str_pad((string)$seq,5,'0',STR_PAD_LEFT);
-            $stmt=$pdo->prepare("INSERT INTO service_sheets (id,property_id,client_id,number,equipment,brand,model,serial_number,accessories,reported_issue,technical_assessment,work_performed,parts_used,parts_cost,labor_cost,total_cost,direct_costs,net_value,technician_id,collaborator_id,collaborator_commission,internal_notes,received_at,estimated_at,status,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'NEW',1,?,?,?,?)");
-            $stmt->execute([uuid_bin($id),uuid_bin($propertyId),uuid_bin($clientId),$number,$body['equipment'],$body['brand']??null,$body['model']??null,$body['serialNumber']??null,$body['accessories']??null,$body['reportedIssue'],$body['technicalAssessment']??null,$body['workPerformed']??null,$body['partsUsed']??null,$partsCost,$laborCost,$totalCost,$directCosts,$netValue,!empty($body['technicianId'])?uuid_bin($body['technicianId']):null,$collaboratorId?uuid_bin($collaboratorId):null,$commissionValue,$body['internalNotes']??null,!empty($body['receivedAt'])?gmdate('Y-m-d H:i:s',strtotime((string)$body['receivedAt'])):$now,!empty($body['estimatedAt'])?gmdate('Y-m-d H:i:s',strtotime((string)$body['estimatedAt'])):null,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);
+            $insertColumns=['id','property_id','client_id','number','equipment','brand','model','serial_number','accessories','reported_issue','technical_assessment','work_performed','parts_used','parts_cost','labor_cost','total_cost','direct_costs','net_value','technician_id','collaborator_id','collaborator_commission','show_company_details','warranty','storage_after','handover_notes','identity_document','approve_diagnostics','approve_repair','repair_refused','product_delivered','internal_notes','received_at','estimated_at','status','is_active','created_at','updated_at','created_by','updated_by'];
+            $insertValues=[uuid_bin($id),uuid_bin($propertyId),uuid_bin($clientId),$number,$body['equipment'],$body['brand']??null,$body['model']??null,$body['serialNumber']??null,$body['accessories']??null,$body['reportedIssue'],$body['technicalAssessment']??null,$body['workPerformed']??null,$body['partsUsed']??null,$partsCost,$laborCost,$totalCost,$directCosts,$netValue,!empty($body['technicianId'])?uuid_bin((string)$body['technicianId']):uuid_bin($user['id']),$collaboratorId?uuid_bin($collaboratorId):null,$commissionValue,array_key_exists('showCompanyDetails',$body)?((bool)$body['showCompanyDetails']?1:0):1,$body['warranty']??null,$body['storageAfter']??null,$body['handoverNotes']??null,$body['identityDocument']??null,!empty($body['approveDiagnostics'])?1:0,!empty($body['approveRepair'])?1:0,!empty($body['repairRefused'])?1:0,!empty($body['productDelivered'])?1:0,$body['internalNotes']??null,!empty($body['receivedAt'])?gmdate('Y-m-d H:i:s',strtotime((string)$body['receivedAt'])):$now,!empty($body['estimatedAt'])?gmdate('Y-m-d H:i:s',strtotime((string)$body['estimatedAt'])):null,'NEW',1,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])];
+            $stmt=$pdo->prepare('INSERT INTO service_sheets ('.implode(',',$insertColumns).') VALUES ('.implode(',',array_fill(0,count($insertColumns),'?')).')');
+            $stmt->execute($insertValues);
             $pdo->prepare("INSERT INTO service_sheet_status_history (id,service_sheet_id,old_status,new_status,changed_by,created_at) VALUES (?,?,NULL,'NEW',?,?)")->execute([uuid_bin(uuid_v4()),uuid_bin($id),uuid_bin($user['id']),$now]);
             $createdSheet=get_sheet($id);$financeSync=sync_client_financials_from_service_sheet($pdo,$client,$createdSheet,$user);$financial=$financeSync['after'];$expenses=$financeSync['expenses'];
             $syncResult=sync_client_commission($pdo,$client,$financial,$expenses,$user,false);$commissionCreated=!empty($syncResult['changed'])&&$collaboratorId!==null;
@@ -1342,8 +1386,8 @@ try {
             $nextTotal=array_key_exists('totalCost',$body)?max(0,(float)$body['totalCost']):((array_key_exists('partsCost',$body)||array_key_exists('laborCost',$body))?$nextParts+$nextLabor:(float)$before['totalCost']);$nextDirect=array_key_exists('directCosts',$body)?max(0,(float)$body['directCosts']):(float)$before['directCosts'];
             $body['partsCost']=$nextParts;$body['laborCost']=$nextLabor;$body['totalCost']=$nextTotal;$body['directCosts']=$nextDirect;$body['netValue']=max(0,$nextTotal-$nextDirect);
         }
-        $map=['equipment'=>'equipment','brand'=>'brand','model'=>'model','serialNumber'=>'serial_number','accessories'=>'accessories','reportedIssue'=>'reported_issue','technicalAssessment'=>'technical_assessment','workPerformed'=>'work_performed','partsUsed'=>'parts_used','partsCost'=>'parts_cost','laborCost'=>'labor_cost','totalCost'=>'total_cost','directCosts'=>'direct_costs','netValue'=>'net_value','internalNotes'=>'internal_notes','estimatedAt'=>'estimated_at','completedAt'=>'completed_at','status'=>'status'];$sets=[];$args=[];
-        foreach($map as$key=>$column)if(array_key_exists($key,$body)){$sets[]="$column=?";$value=$body[$key];if(in_array($key,['estimatedAt','completedAt'],true))$value=$value?gmdate('Y-m-d H:i:s',strtotime((string)$value)):null;elseif($value==='')$value=null;$args[]=$value;}
+        $map=['equipment'=>'equipment','brand'=>'brand','model'=>'model','serialNumber'=>'serial_number','accessories'=>'accessories','reportedIssue'=>'reported_issue','technicalAssessment'=>'technical_assessment','workPerformed'=>'work_performed','partsUsed'=>'parts_used','partsCost'=>'parts_cost','laborCost'=>'labor_cost','totalCost'=>'total_cost','directCosts'=>'direct_costs','netValue'=>'net_value','showCompanyDetails'=>'show_company_details','warranty'=>'warranty','storageAfter'=>'storage_after','handoverNotes'=>'handover_notes','identityDocument'=>'identity_document','approveDiagnostics'=>'approve_diagnostics','approveRepair'=>'approve_repair','repairRefused'=>'repair_refused','productDelivered'=>'product_delivered','internalNotes'=>'internal_notes','receivedAt'=>'received_at','estimatedAt'=>'estimated_at','completedAt'=>'completed_at','status'=>'status'];$sets=[];$args=[];
+        foreach($map as$key=>$column)if(array_key_exists($key,$body)){$sets[]="$column=?";$value=$body[$key];if(in_array($key,['receivedAt','estimatedAt','completedAt'],true))$value=$value?gmdate('Y-m-d H:i:s',strtotime((string)$value)):null;elseif(in_array($key,['showCompanyDetails','approveDiagnostics','approveRepair','repairRefused','productDelivered'],true))$value=(bool)$value?1:0;elseif($value==='')$value=null;$args[]=$value;}
         if(!$sets)fail('Nu există date de actualizat.',422);$now=now_utc();$sets[]='updated_at=?';$args[]=$now;$sets[]='updated_by=?';$args[]=uuid_bin($user['id']);$args[]=uuid_bin($params['id']);$pdo=db();$pdo->beginTransaction();
         try{
             $clientLock=$pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE');$clientLock->execute([uuid_bin($before['clientId'])]);
