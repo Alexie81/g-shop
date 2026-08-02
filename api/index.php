@@ -160,6 +160,43 @@ function migrate_collaborator_presets(PDO $pdo): array {
     }
     return $changes;
 }
+function migrate_client_collaborators(PDO $pdo): array {
+    $lockName = 'gshop_client_collaborators_v1';
+    $lock = $pdo->prepare('SELECT GET_LOCK(?,10)');
+    $lock->execute([$lockName]);
+    if ((int)$lock->fetchColumn() !== 1) throw new RuntimeException('Migrarea colaboratorilor multipli nu a putut obține blocarea bazei de date.');
+    $changes = [];
+    try {
+        $exists = (bool)$pdo->query("SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='client_collaborators' LIMIT 1")->fetchColumn();
+        if (!$exists) {
+            $pdo->exec("CREATE TABLE client_collaborators (
+                client_id BINARY(16) NOT NULL,
+                collaborator_id BINARY(16) NOT NULL,
+                commission_type ENUM('PERCENT_NET','PERCENT_TOTAL','FIXED') NOT NULL,
+                commission_value DECIMAL(10,2) UNSIGNED NOT NULL DEFAULT 0,
+                sort_order SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL,
+                created_by BINARY(16) NOT NULL,
+                updated_by BINARY(16) NOT NULL,
+                PRIMARY KEY (client_id,collaborator_id),
+                INDEX idx_client_collaborators_order (client_id,sort_order),
+                INDEX idx_client_collaborators_collaborator (collaborator_id,client_id),
+                CONSTRAINT fk_client_collaborator_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+                CONSTRAINT fk_client_collaborator_collaborator FOREIGN KEY (collaborator_id) REFERENCES collaborators(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            $changes[] = 'client_collaborators';
+        }
+        $backfilled = $pdo->exec("INSERT IGNORE INTO client_collaborators (client_id,collaborator_id,commission_type,commission_value,sort_order,created_at,updated_at,created_by,updated_by)
+            SELECT id,collaborator_id,commission_type,commission_value,1,created_at,updated_at,created_by,updated_by
+            FROM clients WHERE collaborator_id IS NOT NULL AND commission_type IS NOT NULL AND commission_value IS NOT NULL");
+        if ($backfilled > 0) $changes[] = 'client_collaborators.backfill:' . $backfilled;
+    } finally {
+        $release = $pdo->prepare('SELECT RELEASE_LOCK(?)');
+        $release->execute([$lockName]);
+    }
+    return $changes;
+}
 function client_finance_migration_state(PDO $pdo): array {
     $stmt = $pdo->query("SELECT table_name FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('client_financials','client_expenses','client_participants')");
     $tables = array_fill_keys(array_column($stmt->fetchAll(), 'table_name'), true);
@@ -385,6 +422,10 @@ function map_client(array $row): array {
     $client = entity_base($clientFields);
     $client['serviceSheetsCount'] = (int)$client['serviceSheetsCount'];
     $client['commissionValue'] = $client['commissionValue'] !== null ? (float)$client['commissionValue'] : null;
+    $client['collaborators'] = client_collaborator_assignments($client['id']);
+    if (!$client['collaborators'] && !empty($client['collaboratorId']) && !empty($client['commissionType'])) {
+        $client['collaborators'][] = ['collaboratorId'=>$client['collaboratorId'],'name'=>'Colaborator atribuit','role'=>null,'commissionType'=>$client['commissionType'],'commissionValue'=>(float)$client['commissionValue'],'sortOrder'=>1];
+    }
     if ($qrId) {
         $token = (string)$row['qr_token'];
         $client['qr'] = ['id' => $qrId, 'clientId' => $client['id'], 'propertyId' => $client['propertyId'], 'token' => $token, 'publicUrl' => public_base_url() . '/client-form.php?token=' . rawurlencode($token), 'status' => $row['qr_status'], 'generatedAt' => iso_date($row['qr_generated_at']), 'sentAt' => iso_date($row['qr_sent_at']), 'openedAt' => iso_date($row['qr_opened_at']), 'usedAt' => iso_date($row['qr_used_at']), 'expiresAt' => iso_date($row['qr_expires_at']), 'invalidatedAt' => iso_date($row['qr_invalidated_at']), 'generatedBy' => $row['qr_generated_by'], 'isActive' => true, 'createdAt' => iso_date($row['qr_generated_at']), 'updatedAt' => iso_date($row['qr_used_at'] ?: $row['qr_generated_at']), 'createdBy' => $row['qr_generated_by'], 'updatedBy' => $row['qr_generated_by']];
@@ -512,6 +553,45 @@ function validate_commission_settings(string $type, mixed $value): float {
     if (!is_numeric($value) || (float)$value < 0 || ($type !== 'FIXED' && (float)$value > 100)) fail('Valoarea comisionului nu este validă.', 422);
     return (float)$value;
 }
+function client_collaborator_assignments(string $clientId): array {
+    $sql = 'SELECT ' . uuid_sql('cc.collaborator_id') . ' collaborator_id,c.name,c.role,cc.commission_type,cc.commission_value,cc.sort_order FROM client_collaborators cc JOIN collaborators c ON c.id=cc.collaborator_id WHERE cc.client_id=? ORDER BY cc.sort_order,c.name';
+    $stmt = db()->prepare($sql);
+    $stmt->execute([uuid_bin($clientId)]);
+    $items = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $item = entity_base($row);
+        $item['commissionValue'] = (float)$item['commissionValue'];
+        $item['sortOrder'] = (int)$item['sortOrder'];
+        $item['role'] = $item['role'] ?: null;
+        $items[] = $item;
+    }
+    return $items;
+}
+function validated_client_collaborators(mixed $value, string $propertyId): array {
+    if (!is_array($value) || count($value) > 30) fail('Lista colaboratorilor este invalidă.',422);
+    $items = [];
+    $seen = [];
+    foreach (array_values($value) as $index => $raw) {
+        if (!is_array($raw)) fail('Atribuirea colaboratorului este invalidă.',422);
+        $collaboratorId = validated_uuid($raw['collaboratorId'] ?? null,'Colaboratorul');
+        if (isset($seen[$collaboratorId])) fail('Același colaborator nu poate fi atribuit de două ori.',422);
+        $seen[$collaboratorId] = true;
+        $collaborator = collaborator_for_property($collaboratorId,$propertyId);
+        $type = (string)($raw['commissionType'] ?? $collaborator['defaultCommissionType']);
+        $amount = validate_commission_settings($type,$raw['commissionValue'] ?? $collaborator['defaultCommissionValue']);
+        $items[] = ['collaboratorId'=>$collaboratorId,'name'=>$collaborator['name'],'role'=>$collaborator['role']??null,'commissionType'=>$type,'commissionValue'=>$amount,'sortOrder'=>$index+1];
+    }
+    return $items;
+}
+function collaborator_assignment_snapshot(array $assignments): array {
+    return array_map(fn($item)=>['collaboratorId'=>$item['collaboratorId'],'commissionType'=>$item['commissionType'],'commissionValue'=>(float)$item['commissionValue'],'sortOrder'=>(int)$item['sortOrder']],$assignments);
+}
+function replace_client_collaborators(PDO $pdo, string $clientId, array $assignments, array $user, string $now): void {
+    $pdo->prepare('DELETE FROM client_collaborators WHERE client_id=?')->execute([uuid_bin($clientId)]);
+    if (!$assignments) return;
+    $insert = $pdo->prepare('INSERT INTO client_collaborators (client_id,collaborator_id,commission_type,commission_value,sort_order,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?)');
+    foreach ($assignments as $item) $insert->execute([uuid_bin($clientId),uuid_bin($item['collaboratorId']),$item['commissionType'],$item['commissionValue'],$item['sortOrder'],$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);
+}
 function validated_client_status(mixed $value): string {
     if(!is_string($value)||!in_array($value,['ACTIVE','INACTIVE','NEW','REVIEW_REQUIRED','FINALIZED'],true))fail('Statusul clientului nu este valid.',422);
     return $value;
@@ -613,12 +693,11 @@ function financial_summary(array $client, array $financial, array $expenses): ar
     $remainingDue = round(max(0, $totalDue - $receivedAmount), 2);
     $additionalExpenses = round(array_sum(array_map(fn($expense)=>(float)$expense['amount'],$expenses)),2);
     $internalCosts = round((float)$financial['actualPartsCost'] + $additionalExpenses,2);
-    $commissionType = (string)($client['commissionType'] ?? '');
-    $commissionValue = max(0,(float)($client['commissionValue'] ?? 0));
-    if ($commissionType === 'PERCENT_TOTAL') $collaboratorCost = round($totalDue * $commissionValue / 100,2);
-    elseif ($commissionType === 'PERCENT_NET') $collaboratorCost = round(max(0,$totalDue-$internalCosts) * $commissionValue / 100,2);
-    elseif ($commissionType === 'FIXED') $collaboratorCost = round($commissionValue,2);
-    else $collaboratorCost = 0.0;
+    $assignments = $client['collaborators'] ?? [];
+    if (!$assignments && !empty($client['collaboratorId'])) $assignments = [['commissionType'=>$client['commissionType']??null,'commissionValue'=>$client['commissionValue']??0]];
+    $collaboratorCost = 0.0;
+    foreach ($assignments as $assignment) $collaboratorCost += commission_amount($totalDue,max(0,$totalDue-$internalCosts),(string)($assignment['commissionType']??''),(float)($assignment['commissionValue']??0));
+    $collaboratorCost = round($collaboratorCost,2);
     return [
         'subtotal'=>$subtotal,'discountAmount'=>$discountAmount,'totalDue'=>$totalDue,'receivedAmount'=>$receivedAmount,'remainingDue'=>$remainingDue,
         'additionalExpenses'=>$additionalExpenses,'internalCosts'=>$internalCosts,'collaboratorCost'=>$collaboratorCost,
@@ -654,13 +733,19 @@ function sync_client_financials_from_service_sheet(PDO $pdo, array $client, arra
     sync_service_sheet_financials_from_client($pdo,$client,$after,$expenses,$user);
     return ['changed'=>$changed,'before'=>$before,'after'=>$after,'expenses'=>$expenses];
 }
-function client_collaborator_finance(array $client, array $financial, array $summary): ?array {
-    $collaboratorId = (string)($client['collaboratorId'] ?? '');
+function client_collaborator_finance_for_assignment(array $client, array $financial, array $summary, array $assignment): ?array {
+    $collaboratorId = (string)($assignment['collaboratorId'] ?? '');
     if ($collaboratorId === '') return null;
-    $collaboratorStmt = db()->prepare('SELECT name,role FROM collaborators WHERE id=? LIMIT 1');
-    $collaboratorStmt->execute([uuid_bin($collaboratorId)]);
-    $collaborator = $collaboratorStmt->fetch();
-    if (!$collaborator) return null;
+    $name = (string)($assignment['name'] ?? '');
+    $role = $assignment['role'] ?? null;
+    if ($name === '') {
+        $collaboratorStmt = db()->prepare('SELECT name,role FROM collaborators WHERE id=? LIMIT 1');
+        $collaboratorStmt->execute([uuid_bin($collaboratorId)]);
+        $collaborator = $collaboratorStmt->fetch();
+        if (!$collaborator) return null;
+        $name = (string)$collaborator['name'];
+        $role = $collaborator['role'] ?: null;
+    }
     $totalsStmt = db()->prepare("SELECT COUNT(*) active_count,COALESCE(SUM(CASE WHEN status='PAID' AND paid_at IS NOT NULL THEN commission_value ELSE 0 END),0) paid,COALESCE(SUM(CASE WHEN status IN ('ESTIMATED','CALCULATED','APPROVED') OR (status='PAID' AND paid_at IS NULL) THEN commission_value ELSE 0 END),0) due,COALESCE(SUM(CASE WHEN status='PAID' AND paid_at IS NOT NULL THEN 1 ELSE 0 END),0) paid_count FROM commissions WHERE client_id=? AND collaborator_id=? AND is_active=1 AND status<>'CANCELLED'");
     $totalsStmt->execute([uuid_bin($client['id']),uuid_bin($collaboratorId)]);
     $totals = $totalsStmt->fetch();
@@ -668,21 +753,35 @@ function client_collaborator_finance(array $client, array $financial, array $sum
     $paid = round((float)($totals['paid'] ?? 0),2);
     $due = round((float)($totals['due'] ?? 0),2);
     $hasCommission = $count > 0;
-    $paidCount=(int)($totals['paid_count']??0);$projected=round((float)$summary['collaboratorCost'],2);
+    $paidCount=(int)($totals['paid_count']??0);
+    $projected=commission_amount((float)$summary['totalDue'],max(0,(float)$summary['totalDue']-(float)$summary['internalCosts']),(string)$assignment['commissionType'],(float)$assignment['commissionValue']);
     if (!$hasCommission) $due=!empty($financial['persisted'])?$projected:0.0;
-    elseif($paidCount===0&&(!empty($financial['persisted'])||($client['commissionType']??null)==='FIXED'))$due=$projected;
+    elseif($paidCount===0&&(!empty($financial['persisted'])||$assignment['commissionType']==='FIXED'))$due=$projected;
     return [
         'id'=>$collaboratorId,
-        'name'=>(string)$collaborator['name'],
-        'role'=>$collaborator['role']?:null,
-        'commissionType'=>$client['commissionType']??null,
-        'commissionValue'=>$client['commissionValue']!==null?(float)$client['commissionValue']:null,
+        'name'=>$name,
+        'role'=>$role,
+        'commissionType'=>$assignment['commissionType']??null,
+        'commissionValue'=>isset($assignment['commissionValue'])?(float)$assignment['commissionValue']:null,
         'amount'=>round($paid+$due,2),
         'paid'=>$paid,
         'due'=>$due,
         'status'=>$hasCommission && $paidCount===$count?'PAID':'UNPAID',
         'hasCommission'=>$hasCommission,
     ];
+}
+function client_collaborator_finances(array $client, array $financial, array $summary): array {
+    $assignments = $client['collaborators'] ?? [];
+    if (!$assignments && !empty($client['collaboratorId'])) $assignments = [['collaboratorId'=>$client['collaboratorId'],'commissionType'=>$client['commissionType'],'commissionValue'=>$client['commissionValue'],'name'=>'','role'=>null,'sortOrder'=>1]];
+    $items = [];
+    foreach ($assignments as $assignment) {
+        $item = client_collaborator_finance_for_assignment($client,$financial,$summary,$assignment);
+        if ($item !== null) $items[] = $item;
+    }
+    return $items;
+}
+function client_collaborator_finance(array $client, array $financial, array $summary): ?array {
+    return client_collaborator_finances($client,$financial,$summary)[0] ?? null;
 }
 function sync_client_commission(PDO $pdo, array $client, array $financial, array $expenses, array $user, bool $recreate): array {
     $sheetStmt = $pdo->prepare('SELECT ' . uuid_sql('id') . ' id FROM service_sheets WHERE client_id=? AND is_active=1 ORDER BY updated_at DESC,created_at DESC LIMIT 1 FOR UPDATE');
@@ -691,51 +790,54 @@ function sync_client_commission(PDO $pdo, array $client, array $financial, array
     $commissionStmt = $pdo->prepare('SELECT ' . uuid_sql('id') . ' id,' . uuid_sql('collaborator_id') . " collaborator_id,status,paid_at,total_value,direct_costs,net_value,type,rate_or_amount,commission_value FROM commissions WHERE client_id=? AND is_active=1 AND status<>'CANCELLED' ORDER BY created_at FOR UPDATE");
     $commissionStmt->execute([uuid_bin($client['id'])]);
     $existing = $commissionStmt->fetchAll();
-    $paid = array_values(array_filter($existing,fn($row)=>$row['status']==='PAID'&&!empty($row['paid_at'])));
-    if ($paid) return ['changed'=>false,'paid'=>true];
-
-    $collaboratorId = (string)($client['collaboratorId'] ?? '');
-    if ($serviceSheetId===null || $collaboratorId==='') {
-        $changed = (bool)$existing;
-        if ($existing) $pdo->prepare("UPDATE commissions SET status='CANCELLED',is_active=0,updated_at=?,updated_by=? WHERE client_id=? AND is_active=1 AND status<>'CANCELLED'")->execute([now_utc(),uuid_bin($user['id']),uuid_bin($client['id'])]);
+    $assignments = $client['collaborators'] ?? [];
+    if (!$assignments && !empty($client['collaboratorId'])) $assignments = [['collaboratorId'=>$client['collaboratorId'],'commissionType'=>$client['commissionType'],'commissionValue'=>$client['commissionValue']]];
+    if ($serviceSheetId===null || !$assignments) {
+        $cancellable = array_values(array_filter($existing,fn($row)=>!($row['status']==='PAID'&&!empty($row['paid_at']))));
+        $changed = (bool)$cancellable;
+        if ($cancellable) $pdo->prepare("UPDATE commissions SET status='CANCELLED',is_active=0,updated_at=?,updated_by=? WHERE client_id=? AND is_active=1 AND status<>'CANCELLED' AND NOT (status='PAID' AND paid_at IS NOT NULL)")->execute([now_utc(),uuid_bin($user['id']),uuid_bin($client['id'])]);
         $sheetUpdate=$pdo->prepare('UPDATE service_sheets SET collaborator_id=NULL,collaborator_commission=NULL,updated_at=?,updated_by=? WHERE client_id=? AND is_active=1 AND (collaborator_id IS NOT NULL OR collaborator_commission IS NOT NULL)');
         $sheetUpdate->execute([now_utc(),uuid_bin($user['id']),uuid_bin($client['id'])]);
-        return ['changed'=>$changed||$sheetUpdate->rowCount()>0,'paid'=>false];
+        return ['changed'=>$changed||$sheetUpdate->rowCount()>0,'paid'=>count($existing)>count($cancellable)];
     }
 
     $summary = financial_summary($client,$financial,$expenses);
     $totalValue = round((float)$summary['totalDue'],2);
     $directCosts = round((float)$summary['internalCosts'],2);
     $netValue = round(max(0,$totalValue-$directCosts),2);
-    $type = (string)$client['commissionType'];
-    $rateOrAmount = (float)$client['commissionValue'];
-    $amount = commission_amount($totalValue,$netValue,$type,$rateOrAmount);
     $now = now_utc();
-    $single = count($existing)===1?$existing[0]:null;
-    $canUpdate = !$recreate && $single!==null && $single['collaborator_id']===$collaboratorId;
-    if ($canUpdate) {
-        $changed = (float)$single['total_value']!==$totalValue || (float)$single['direct_costs']!==$directCosts || (float)$single['net_value']!==$netValue || $single['type']!==$type || (float)$single['rate_or_amount']!==$rateOrAmount || (float)$single['commission_value']!==$amount;
-        if ($changed) {
-            $update=$pdo->prepare("UPDATE commissions SET total_value=?,direct_costs=?,net_value=?,type=?,rate_or_amount=?,commission_value=?,status='APPROVED',paid_at=NULL,updated_at=?,updated_by=? WHERE id=?");
-            $update->execute([$totalValue,$directCosts,$netValue,$type,$rateOrAmount,$amount,$now,uuid_bin($user['id']),uuid_bin($single['id'])]);
+    $changed = false;
+    $totalAmount = 0.0;
+    $assignmentIds = array_column($assignments,'collaboratorId');
+    $cancel = $pdo->prepare("UPDATE commissions SET status='CANCELLED',is_active=0,updated_at=?,updated_by=? WHERE id=? AND NOT (status='PAID' AND paid_at IS NOT NULL)");
+    $update=$pdo->prepare("UPDATE commissions SET service_sheet_id=?,total_value=?,direct_costs=?,net_value=?,type=?,rate_or_amount=?,commission_value=?,status='APPROVED',paid_at=NULL,updated_at=?,updated_by=? WHERE id=?");
+    $insert=$pdo->prepare("INSERT INTO commissions (id,collaborator_id,client_id,service_sheet_id,property_id,total_value,direct_costs,net_value,type,rate_or_amount,commission_value,status,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,'APPROVED',1,?,?,?,?)");
+    foreach ($assignments as $assignment) {
+        $collaboratorId=(string)$assignment['collaboratorId'];$type=(string)$assignment['commissionType'];$rateOrAmount=(float)$assignment['commissionValue'];$amount=commission_amount($totalValue,$netValue,$type,$rateOrAmount);$totalAmount+=$amount;
+        $matches=array_values(array_filter($existing,fn($row)=>$row['collaborator_id']===$collaboratorId));
+        $paid=array_values(array_filter($matches,fn($row)=>$row['status']==='PAID'&&!empty($row['paid_at'])));
+        if($paid)continue;
+        $single=count($matches)===1?$matches[0]:null;$canUpdate=!$recreate&&$single!==null;
+        if($canUpdate){
+            $different=(float)$single['total_value']!==$totalValue||(float)$single['direct_costs']!==$directCosts||(float)$single['net_value']!==$netValue||$single['type']!==$type||(float)$single['rate_or_amount']!==$rateOrAmount||(float)$single['commission_value']!==$amount;
+            if($different){$update->execute([uuid_bin($serviceSheetId),$totalValue,$directCosts,$netValue,$type,$rateOrAmount,$amount,$now,uuid_bin($user['id']),uuid_bin($single['id'])]);$changed=true;}
+        }else{
+            foreach($matches as$match){$cancel->execute([$now,uuid_bin($user['id']),uuid_bin($match['id'])]);if($cancel->rowCount()>0)$changed=true;}
+            $insert->execute([uuid_bin(uuid_v4()),uuid_bin($collaboratorId),uuid_bin($client['id']),uuid_bin($serviceSheetId),uuid_bin($client['propertyId']),$totalValue,$directCosts,$netValue,$type,$rateOrAmount,$amount,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);$changed=true;
         }
-    } else {
-        if ($existing) $pdo->prepare("UPDATE commissions SET status='CANCELLED',is_active=0,updated_at=?,updated_by=? WHERE client_id=? AND is_active=1 AND status<>'CANCELLED'")->execute([$now,uuid_bin($user['id']),uuid_bin($client['id'])]);
-        $commissionId=uuid_v4();
-        $insert=$pdo->prepare("INSERT INTO commissions (id,collaborator_id,client_id,service_sheet_id,property_id,total_value,direct_costs,net_value,type,rate_or_amount,commission_value,status,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,'APPROVED',1,?,?,?,?)");
-        $insert->execute([uuid_bin($commissionId),uuid_bin($collaboratorId),uuid_bin($client['id']),uuid_bin($serviceSheetId),uuid_bin($client['propertyId']),$totalValue,$directCosts,$netValue,$type,$rateOrAmount,$amount,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);
-        $changed = true;
     }
+    foreach($existing as$row)if(!in_array($row['collaborator_id'],$assignmentIds,true)&&!($row['status']==='PAID'&&!empty($row['paid_at']))){$cancel->execute([$now,uuid_bin($user['id']),uuid_bin($row['id'])]);if($cancel->rowCount()>0)$changed=true;}
+    $primaryId=(string)$assignments[0]['collaboratorId'];$totalAmount=round($totalAmount,2);
     $sheetUpdate=$pdo->prepare('UPDATE service_sheets SET collaborator_id=?,collaborator_commission=?,updated_at=?,updated_by=? WHERE client_id=? AND is_active=1 AND NOT (collaborator_id <=> ? AND collaborator_commission <=> ?)');
-    $sheetUpdate->execute([uuid_bin($collaboratorId),$amount,$now,uuid_bin($user['id']),uuid_bin($client['id']),uuid_bin($collaboratorId),$amount]);
-    return ['changed'=>$changed||$sheetUpdate->rowCount()>0,'paid'=>false,'amount'=>$amount];
+    $sheetUpdate->execute([uuid_bin($primaryId),$totalAmount,$now,uuid_bin($user['id']),uuid_bin($client['id']),uuid_bin($primaryId),$totalAmount]);
+    return ['changed'=>$changed||$sheetUpdate->rowCount()>0,'paid'=>false,'amount'=>$totalAmount];
 }
 function client_financial_bundle(array $client): array {
     $financial = client_financial_record($client); $expenses = client_expenses($client['id']);
     $summary=financial_summary($client,$financial,$expenses);
-    $collaborator=client_collaborator_finance($client,$financial,$summary);
-    if($collaborator!==null){$summary['collaboratorCost']=$collaborator['amount'];$summary['gshopNet']=round((float)$summary['receivedAmount']-(float)$summary['internalCosts']-(float)$collaborator['paid'],2);}
-    return ['financials'=>$financial,'summary'=>$summary,'expenses'=>$expenses,'collaborator'=>$collaborator];
+    $collaborators=client_collaborator_finances($client,$financial,$summary);$collaborator=$collaborators[0]??null;
+    if($collaborators){$summary['collaboratorCost']=round(array_sum(array_column($collaborators,'amount')),2);$paid=round(array_sum(array_column($collaborators,'paid')),2);$summary['gshopNet']=round((float)$summary['receivedAmount']-(float)$summary['internalCosts']-$paid,2);}
+    return ['financials'=>$financial,'summary'=>$summary,'expenses'=>$expenses,'collaborator'=>$collaborator,'collaborators'=>$collaborators];
 }
 function validated_expense_description(mixed $value): string {
     if (!is_string($value)) fail('Descrierea cheltuielii este obligatorie.',422);
@@ -803,6 +905,12 @@ try {
         $changes = migrate_collaborator_presets(db());
         if ($changes) audit_log('SCHEMA_MIGRATION_APPLIED','settings','Migrare aplicată pentru colaboratorul presetat și comisioane','Database',null,null,null,['migration'=>'collaborator-presets-v1','changes'=>$changes],$user);
         respond(['migration'=>'collaborator-presets-v1','applied'=>(bool)$changes,'changes'=>$changes,'ready'=>true]);
+    }
+    if ($method === 'POST' && $path === '/admin/migrations/client-collaborators') {
+        $user = require_permission('settings.manage');
+        $changes = migrate_client_collaborators(db());
+        if ($changes) audit_log('SCHEMA_MIGRATION_APPLIED','settings','Migrare aplicată pentru colaboratorii multipli ai clienților','Database',null,null,null,['migration'=>'client-collaborators-v1','changes'=>$changes],$user);
+        respond(['migration'=>'client-collaborators-v1','applied'=>(bool)$changes,'changes'=>$changes,'ready'=>true]);
     }
     if ($method === 'POST' && $path === '/admin/migrations/client-finance') {
         $user = require_permission('settings.manage');
@@ -895,14 +1003,14 @@ try {
         $open=(int)$scalar("SELECT COUNT(*) FROM service_sheets WHERE property_id=? AND is_active=1 AND status IN ('NEW','WAITING','VERIFYING','IN_PROGRESS','WAITING_PARTS')",[$p]);$progress=(int)$scalar("SELECT COUNT(*) FROM service_sheets WHERE property_id=? AND is_active=1 AND status='IN_PROGRESS'",[$p]);$completed=(int)$scalar("SELECT COUNT(*) FROM service_sheets WHERE property_id=? AND is_active=1 AND status IN ('COMPLETED','DELIVERED')",[$p]);
         $users=(int)$scalar('SELECT COUNT(*) FROM user_properties up JOIN users u ON u.id=up.user_id WHERE up.property_id=? AND u.is_active=1',[$p]);$collabs=(int)$scalar('SELECT COUNT(*) FROM collaborator_properties cp JOIN collaborators c ON c.id=cp.collaborator_id WHERE cp.property_id=? AND c.is_active=1',[$p]);
         $qrGenerated=(int)$scalar("SELECT COUNT(*) FROM client_qr WHERE property_id=? AND is_active=1 AND status IN ('GENERATED','SENT')",[$p]);$qrUsed=(int)$scalar("SELECT COUNT(*) FROM client_qr WHERE property_id=? AND is_active=1 AND status='USED'",[$p]);
-        $financeSql="SELECT COALESCE(cf.currency_code,'RON') currency_code,COALESCE(cf.exchange_rate_to_ron,1) exchange_rate_to_ron,COALESCE(cf.work_price,0) work_price,COALESCE(cf.diagnostic_fee,0) diagnostic_fee,COALESCE(cf.advance_paid,0) advance_paid,COALESCE(cf.discount_percent,0) discount_percent,COALESCE(cf.actual_parts_cost,0) actual_parts_cost,COALESCE(cf.payment_status,'UNPAID') payment_status,c.commission_type,c.commission_value,COALESCE(ex.total_expenses,0) total_expenses,COALESCE(cm.paid_count,0) paid_count,COALESCE(cm.commission_total,0) commission_total,COALESCE(cm.paid_total,0) paid_total,COALESCE(cm.due_total,0) due_total FROM clients c LEFT JOIN client_financials cf ON cf.client_id=c.id LEFT JOIN (SELECT client_id,SUM(amount) total_expenses FROM client_expenses GROUP BY client_id) ex ON ex.client_id=c.id LEFT JOIN (SELECT client_id,SUM(CASE WHEN status='PAID' AND paid_at IS NOT NULL THEN 1 ELSE 0 END) paid_count,SUM(commission_value) commission_total,SUM(CASE WHEN status='PAID' AND paid_at IS NOT NULL THEN commission_value ELSE 0 END) paid_total,SUM(CASE WHEN status IN ('ESTIMATED','CALCULATED','APPROVED') OR (status='PAID' AND paid_at IS NULL) THEN commission_value ELSE 0 END) due_total FROM commissions WHERE is_active=1 AND status<>'CANCELLED' GROUP BY client_id) cm ON cm.client_id=c.id WHERE c.property_id=? AND c.is_active=1 AND (cf.client_id IS NOT NULL OR ex.client_id IS NOT NULL)";
+        $financeSql="SELECT ".uuid_sql('c.id')." client_id,COALESCE(cf.currency_code,'RON') currency_code,COALESCE(cf.exchange_rate_to_ron,1) exchange_rate_to_ron,COALESCE(cf.work_price,0) work_price,COALESCE(cf.diagnostic_fee,0) diagnostic_fee,COALESCE(cf.advance_paid,0) advance_paid,COALESCE(cf.discount_percent,0) discount_percent,COALESCE(cf.actual_parts_cost,0) actual_parts_cost,COALESCE(cf.payment_status,'UNPAID') payment_status,COALESCE(ex.total_expenses,0) total_expenses,COALESCE(cm.commission_count,0) commission_count,COALESCE(cm.paid_count,0) paid_count,COALESCE(cm.commission_total,0) commission_total,COALESCE(cm.paid_total,0) paid_total,COALESCE(cm.due_total,0) due_total FROM clients c LEFT JOIN client_financials cf ON cf.client_id=c.id LEFT JOIN (SELECT client_id,SUM(amount) total_expenses FROM client_expenses GROUP BY client_id) ex ON ex.client_id=c.id LEFT JOIN (SELECT client_id,COUNT(*) commission_count,SUM(CASE WHEN status='PAID' AND paid_at IS NOT NULL THEN 1 ELSE 0 END) paid_count,SUM(commission_value) commission_total,SUM(CASE WHEN status='PAID' AND paid_at IS NOT NULL THEN commission_value ELSE 0 END) paid_total,SUM(CASE WHEN status IN ('ESTIMATED','CALCULATED','APPROVED') OR (status='PAID' AND paid_at IS NULL) THEN commission_value ELSE 0 END) due_total FROM commissions WHERE is_active=1 AND status<>'CANCELLED' GROUP BY client_id) cm ON cm.client_id=c.id WHERE c.property_id=? AND c.is_active=1 AND (cf.client_id IS NOT NULL OR ex.client_id IS NOT NULL)";
         $financeStmt=$pdo->prepare($financeSql);$financeStmt->execute([$p]);$financeRevenueRon=0.0;$financeHoldRon=0.0;$financeNetRon=0.0;$financeWaiting=0;$financeCollaboratorPaidRon=0.0;$financeCollaboratorOnHoldRon=0.0;
         foreach($financeStmt->fetchAll()as$row){
             $rate=(float)$row['exchange_rate_to_ron'];$subtotal=round((float)$row['work_price']+(float)$row['diagnostic_fee'],2);$discountAmount=round($subtotal*(float)$row['discount_percent']/100,2);$total=round(max(0,$subtotal-$discountAmount),2);
             $received=$row['payment_status']==='PAID'?$total:round(min((float)$row['advance_paid'],$total),2);$remaining=round(max(0,$total-$received),2);$internal=round((float)$row['actual_parts_cost']+(float)$row['total_expenses'],2);
-            $commissionValue=max(0,(float)($row['commission_value']??0));$commissionType=(string)($row['commission_type']??'');
-            if((int)$row['paid_count']>0)$commission=round((float)$row['commission_total'],2);elseif($commissionType==='PERCENT_TOTAL')$commission=round($total*$commissionValue/100,2);elseif($commissionType==='PERCENT_NET')$commission=round(max(0,$total-$internal)*$commissionValue/100,2);elseif($commissionType==='FIXED')$commission=round($commissionValue,2);else$commission=0.0;
-            if((int)$row['paid_count']>0){$financeCollaboratorPaidRon+=round((float)$row['paid_total'],2)*$rate;$financeCollaboratorOnHoldRon+=round((float)$row['due_total'],2)*$rate;}else$financeCollaboratorOnHoldRon+=$commission*$rate;
+            $commission=round((float)$row['commission_total'],2);
+            if((int)$row['commission_count']===0){foreach(client_collaborator_assignments((string)$row['client_id'])as$assignment)$commission+=commission_amount($total,max(0,$total-$internal),(string)$assignment['commissionType'],(float)$assignment['commissionValue']);$commission=round($commission,2);}
+            if((int)$row['commission_count']>0){$financeCollaboratorPaidRon+=round((float)$row['paid_total'],2)*$rate;$financeCollaboratorOnHoldRon+=round((float)$row['due_total'],2)*$rate;}else$financeCollaboratorOnHoldRon+=$commission*$rate;
             $financeRevenueRon+=$received*$rate;$financeHoldRon+=$remaining*$rate;$financeNetRon+=round($received-$internal-(float)$row['paid_total'],2)*$rate;if($remaining>0.004)$financeWaiting++;
         }
         $legacyStmt=$pdo->prepare("SELECT COALESCE(SUM(CASE WHEN s.status IN ('COMPLETED','DELIVERED') THEN s.total_cost ELSE 0 END),0) total_revenue,COALESCE(SUM(CASE WHEN s.status IN ('NEW','WAITING','VERIFYING','IN_PROGRESS','WAITING_PARTS') THEN s.total_cost ELSE 0 END),0) revenue_on_hold,COALESCE(SUM(s.direct_costs),0) direct_costs,COUNT(DISTINCT CASE WHEN s.status IN ('NEW','WAITING','VERIFYING','IN_PROGRESS','WAITING_PARTS') THEN s.client_id END) clients_waiting FROM service_sheets s JOIN clients c ON c.id=s.client_id LEFT JOIN client_financials cf ON cf.client_id=c.id WHERE s.property_id=? AND c.is_active=1 AND cf.client_id IS NULL AND NOT EXISTS(SELECT 1 FROM client_expenses e WHERE e.client_id=c.id) AND s.is_active=1 AND s.status<>'CANCELLED'");$legacyStmt->execute([$p]);$legacy=$legacyStmt->fetch();
@@ -1019,17 +1127,23 @@ try {
         $user=require_permission('clients.create');$body=json_body();$propertyId=trim((string)($body['propertyId']??''));ensure_property($propertyId,$user);
         foreach(['firstName','lastName','phone']as$key)if(trim((string)($body[$key]??''))==='')fail('Câmpuri obligatorii lipsă.',422);
         $clientStatus=validated_client_status($body['status']??'NEW');
-        $hasExplicitCollaborator=array_key_exists('collaboratorId',$body);$collaboratorId=$hasExplicitCollaborator?trim((string)($body['collaboratorId']??'')):'';$commissionType=null;$commissionValue=null;
-        if(!$hasExplicitCollaborator){
+        $hasMultipleAssignments=array_key_exists('collaborators',$body);$assignments=$hasMultipleAssignments?validated_client_collaborators($body['collaborators'],$propertyId):[];
+        $hasExplicitCollaborator=$hasMultipleAssignments||array_key_exists('collaboratorId',$body);$collaboratorId='';$commissionType=null;$commissionValue=null;
+        if($hasMultipleAssignments&&$assignments){
+            $collaboratorId=$assignments[0]['collaboratorId'];$commissionType=$assignments[0]['commissionType'];$commissionValue=$assignments[0]['commissionValue'];
+        }elseif(!$hasExplicitCollaborator){
             $collaborator=preset_collaborator_for_property($propertyId);
-            if($collaborator!==null){$collaboratorId=$collaborator['id'];$commissionType=$collaborator['defaultCommissionType'];$commissionValue=validate_commission_settings($commissionType,$collaborator['defaultCommissionValue']);}
-        }elseif($collaboratorId!==''){
+            if($collaborator!==null){$collaboratorId=$collaborator['id'];$commissionType=$collaborator['defaultCommissionType'];$commissionValue=validate_commission_settings($commissionType,$collaborator['defaultCommissionValue']);$assignments=[['collaboratorId'=>$collaboratorId,'name'=>$collaborator['name'],'role'=>$collaborator['role']??null,'commissionType'=>$commissionType,'commissionValue'=>$commissionValue,'sortOrder'=>1]];}
+        }elseif(!$hasMultipleAssignments&&trim((string)($body['collaboratorId']??''))!==''){
+            $collaboratorId=trim((string)$body['collaboratorId']);
             $collaborator=collaborator_for_property($collaboratorId,$propertyId);$commissionType=(string)($body['commissionType']??$collaborator['defaultCommissionType']);$commissionValue=validate_commission_settings($commissionType,$body['commissionValue']??$collaborator['defaultCommissionValue']);
+            $assignments=[['collaboratorId'=>$collaboratorId,'name'=>$collaborator['name'],'role'=>$collaborator['role']??null,'commissionType'=>$commissionType,'commissionValue'=>$commissionValue,'sortOrder'=>1]];
         }
         $id=uuid_v4();$now=now_utc();$pdo=db();$pdo->beginTransaction();
         try{
             $stmt=$pdo->prepare('INSERT INTO clients (id,property_id,first_name,last_name,phone,secondary_phone,email,address,city,county,postal_code,notes,status,collaborator_id,commission_type,commission_value,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?)');
             $stmt->execute([uuid_bin($id),uuid_bin($propertyId),trim($body['firstName']),trim($body['lastName']),trim($body['phone']),$body['secondaryPhone']??null,$body['email']??null,$body['address']??null,$body['city']??null,$body['county']??null,$body['postalCode']??null,$body['notes']??null,$clientStatus,$collaboratorId!==''?uuid_bin($collaboratorId):null,$commissionType,$commissionValue,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);
+            replace_client_collaborators($pdo,$id,$assignments,$user,$now);
             $qr=create_client_qr($pdo,$id,$propertyId,$user['id'],$now);
             $pdo->commit();
         }catch(Throwable$e){$pdo->rollBack();throw$e;}
@@ -1038,6 +1152,8 @@ try {
     if ($method === 'PUT' && path_match('/clients/{id}', $path, $params)) {
         $user=require_permission('clients.update');$before=get_client($params['id']);ensure_property($before['propertyId'],$user);$body=json_body();
         if(array_key_exists('status',$body))$body['status']=validated_client_status($body['status']);
+        $multipleAssignmentsTouched=array_key_exists('collaborators',$body);$requestedAssignments=$multipleAssignmentsTouched?validated_client_collaborators($body['collaborators'],$before['propertyId']):[];
+        if($multipleAssignmentsTouched){$primary=$requestedAssignments[0]??null;$body['collaboratorId']=$primary['collaboratorId']??'';if($primary){$body['commissionType']=$primary['commissionType'];$body['commissionValue']=$primary['commissionValue'];}else{unset($body['commissionType'],$body['commissionValue']);}}
         $assignmentTouched=count(array_intersect(array_keys($body),['collaboratorId','commissionType','commissionValue']))>0;
         $removeCollaborator=array_key_exists('collaboratorId',$body)&&trim((string)($body['collaboratorId']??''))==='';
         if($removeCollaborator){unset($body['commissionType'],$body['commissionValue']);}
@@ -1071,15 +1187,17 @@ try {
         $nextCollaboratorId=array_key_exists('collaboratorId',$body)?(trim((string)($body['collaboratorId']??''))?:null):($before['collaboratorId']??null);
         $nextCommissionType=$nextCollaboratorId!==null?($body['commissionType']??$before['commissionType']??null):null;
         $nextCommissionValue=$nextCollaboratorId!==null?($body['commissionValue']??$before['commissionValue']??null):null;
-        $assignmentChanged=$assignmentTouched&&(($before['collaboratorId']??null)!==$nextCollaboratorId||($before['commissionType']??null)!==$nextCommissionType||(float)($before['commissionValue']??0)!==(float)($nextCommissionValue??0));
+        if(!$multipleAssignmentsTouched)$requestedAssignments=$nextCollaboratorId!==null?[['collaboratorId'=>$nextCollaboratorId,'commissionType'=>$nextCommissionType,'commissionValue'=>(float)$nextCommissionValue,'sortOrder'=>1]]:[];
+        $beforeAssignmentSnapshot=collaborator_assignment_snapshot($before['collaborators']??[]);$nextAssignmentSnapshot=collaborator_assignment_snapshot($requestedAssignments);
+        $assignmentChanged=$assignmentTouched&&$beforeAssignmentSnapshot!==$nextAssignmentSnapshot;
         $now=now_utc();$sets[]='updated_at=?';$args[]=$now;$sets[]='updated_by=?';$args[]=uuid_bin($user['id']);$args[]=uuid_bin($params['id']);$pdo=db();$pdo->beginTransaction();
         $clientLock=$pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE');$clientLock->execute([uuid_bin($params['id'])]);$lockedBefore=get_client($params['id']);
-        if($assignmentTouched&&(($lockedBefore['collaboratorId']??null)!==($before['collaboratorId']??null)||($lockedBefore['commissionType']??null)!==($before['commissionType']??null)||(float)($lockedBefore['commissionValue']??0)!==(float)($before['commissionValue']??0))){$pdo->rollBack();fail('Atribuirea colaboratorului a fost modificată între timp. Reîncarcă clientul.',409,['code'=>'CLIENT_COLLABORATOR_CHANGED']);}
+        if($assignmentTouched&&collaborator_assignment_snapshot($lockedBefore['collaborators']??[])!==$beforeAssignmentSnapshot){$pdo->rollBack();fail('Atribuirea colaboratorului a fost modificată între timp. Reîncarcă clientul.',409,['code'=>'CLIENT_COLLABORATOR_CHANGED']);}
         if($assignmentChanged){$paidStmt=$pdo->prepare("SELECT 1 FROM commissions WHERE client_id=? AND is_active=1 AND status='PAID' AND paid_at IS NOT NULL LIMIT 1");$paidStmt->execute([uuid_bin($params['id'])]);if($paidStmt->fetchColumn()){$pdo->rollBack();fail('Comisionul colaboratorului este achitat. Marchează-l neachitat înainte să schimbi sau să ștergi atribuirea.',409,['code'=>'COLLABORATOR_COMMISSION_PAID']);}}
-        $beforeFinancial=client_financial_record($before);$expenses=client_expenses($before['id']);$beforeCollaborator=client_collaborator_finance($before,$beforeFinancial,financial_summary($before,$beforeFinancial,$expenses));
-        try{$pdo->prepare('UPDATE clients SET '.implode(',',$sets).' WHERE id=?')->execute($args);$after=get_client($params['id']);if($assignmentChanged)sync_client_commission($pdo,$after,$beforeFinancial,$expenses,$user,true);$pdo->commit();}catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}
+        $beforeFinancial=client_financial_record($before);$expenses=client_expenses($before['id']);
+        try{$pdo->prepare('UPDATE clients SET '.implode(',',$sets).' WHERE id=?')->execute($args);if($assignmentTouched)replace_client_collaborators($pdo,$params['id'],$requestedAssignments,$user,$now);$after=get_client($params['id']);if($assignmentChanged)sync_client_commission($pdo,$after,$beforeFinancial,$expenses,$user,true);$pdo->commit();}catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}
         audit_log('CLIENT_UPDATED','clients','Client actualizat: '.$after['firstName'].' '.$after['lastName'],'Client',$params['id'],$after['propertyId'],client_audit_snapshot($before),client_audit_snapshot($after),$user);
-        if($assignmentChanged)audit_log('CLIENT_COLLABORATOR_SYNCED','commissions','Atribuirea și comisionul colaboratorului au fost sincronizate','Client',$after['id'],$after['propertyId'],$beforeCollaborator,client_financial_bundle($after)['collaborator'],$user);
+        if($assignmentChanged)audit_log('CLIENT_COLLABORATOR_SYNCED','commissions','Atribuirile și comisioanele colaboratorilor au fost sincronizate','Client',$after['id'],$after['propertyId'],$beforeAssignmentSnapshot,$nextAssignmentSnapshot,$user);
         respond(client_for_user($after,$user));
     }
     if ($method === 'DELETE' && path_match('/clients/{id}', $path, $params)) {
@@ -1325,13 +1443,13 @@ try {
 
     if ($method==='GET'&&$path==='/collaborator-finances') {
         $user=require_permission('collaborators.view');$propertyId=(string)($_GET['propertyId']??'');ensure_property($propertyId,$user);$p=uuid_bin($propertyId);
-        $pairs="SELECT property_id,collaborator_id,client_id FROM commissions WHERE is_active=1 AND status<>'CANCELLED' UNION SELECT property_id,collaborator_id,id client_id FROM clients WHERE is_active=1 AND collaborator_id IS NOT NULL";
+        $pairs="SELECT property_id,collaborator_id,client_id,MAX(commission_type) commission_type,MAX(commission_value) commission_value FROM (SELECT property_id,collaborator_id,client_id,NULL commission_type,NULL commission_value FROM commissions WHERE is_active=1 AND status<>'CANCELLED' UNION ALL SELECT cl.property_id,cc.collaborator_id,cl.id client_id,cc.commission_type,cc.commission_value FROM client_collaborators cc JOIN clients cl ON cl.id=cc.client_id WHERE cl.is_active=1) collaborator_pairs GROUP BY property_id,collaborator_id,client_id";
         $totals="SELECT property_id,collaborator_id,client_id,COUNT(*) commission_count,COUNT(DISTINCT service_sheet_id) service_sheets_count,COALESCE(SUM(CASE WHEN status='PAID' AND paid_at IS NOT NULL THEN commission_value ELSE 0 END),0) paid,COALESCE(SUM(CASE WHEN status IN ('ESTIMATED','CALCULATED','APPROVED') OR (status='PAID' AND paid_at IS NULL) THEN commission_value ELSE 0 END),0) due,COALESCE(SUM(CASE WHEN status='PAID' AND paid_at IS NOT NULL THEN 1 ELSE 0 END),0) paid_count,MAX(updated_at) last_activity_at FROM commissions WHERE is_active=1 AND status<>'CANCELLED' GROUP BY property_id,collaborator_id,client_id";
-        $sql='SELECT '.uuid_sql('co.id').' collaborator_id,co.name collaborator_name,co.role,'.uuid_sql('cl.id').' client_id,CONCAT(cl.first_name,\' \',cl.last_name) client_name,'.uuid_sql('cl.collaborator_id').' assigned_collaborator_id,cl.commission_type,cl.commission_value,(cf.client_id IS NOT NULL) finance_persisted,COALESCE(cf.exchange_rate_to_ron,1) exchange_rate_to_ron,COALESCE(cf.work_price,0) work_price,COALESCE(cf.diagnostic_fee,0) diagnostic_fee,COALESCE(cf.discount_percent,0) discount_percent,COALESCE(cf.actual_parts_cost,0) actual_parts_cost,COALESCE(ex.total_expenses,0) total_expenses,COALESCE(fin.commission_count,0) commission_count,COALESCE(fin.service_sheets_count,0) service_sheets_count,COALESCE(fin.paid,0) paid,COALESCE(fin.due,0) due,COALESCE(fin.paid_count,0) paid_count,COALESCE(fin.last_activity_at,cl.updated_at) last_activity_at FROM collaborator_properties cp JOIN collaborators co ON co.id=cp.collaborator_id JOIN ('.$pairs.') pair ON pair.collaborator_id=co.id AND pair.property_id=cp.property_id JOIN clients cl ON cl.id=pair.client_id AND cl.property_id=pair.property_id LEFT JOIN client_financials cf ON cf.client_id=cl.id LEFT JOIN (SELECT client_id,SUM(amount) total_expenses FROM client_expenses GROUP BY client_id) ex ON ex.client_id=cl.id LEFT JOIN ('.$totals.') fin ON fin.property_id=pair.property_id AND fin.collaborator_id=pair.collaborator_id AND fin.client_id=pair.client_id WHERE cp.property_id=? AND pair.property_id=? AND cl.is_active=1 ORDER BY co.name,cl.first_name,cl.last_name';
+        $sql='SELECT '.uuid_sql('co.id').' collaborator_id,co.name collaborator_name,co.role,'.uuid_sql('cl.id').' client_id,CONCAT(cl.first_name,\' \',cl.last_name) client_name,pair.commission_type,pair.commission_value,(cf.client_id IS NOT NULL) finance_persisted,COALESCE(cf.exchange_rate_to_ron,1) exchange_rate_to_ron,COALESCE(cf.work_price,0) work_price,COALESCE(cf.diagnostic_fee,0) diagnostic_fee,COALESCE(cf.discount_percent,0) discount_percent,COALESCE(cf.actual_parts_cost,0) actual_parts_cost,COALESCE(ex.total_expenses,0) total_expenses,COALESCE(fin.commission_count,0) commission_count,COALESCE(fin.service_sheets_count,0) service_sheets_count,COALESCE(fin.paid,0) paid,COALESCE(fin.due,0) due,COALESCE(fin.paid_count,0) paid_count,COALESCE(fin.last_activity_at,cl.updated_at) last_activity_at FROM collaborator_properties cp JOIN collaborators co ON co.id=cp.collaborator_id JOIN ('.$pairs.') pair ON pair.collaborator_id=co.id AND pair.property_id=cp.property_id JOIN clients cl ON cl.id=pair.client_id AND cl.property_id=pair.property_id LEFT JOIN client_financials cf ON cf.client_id=cl.id LEFT JOIN (SELECT client_id,SUM(amount) total_expenses FROM client_expenses GROUP BY client_id) ex ON ex.client_id=cl.id LEFT JOIN ('.$totals.') fin ON fin.property_id=pair.property_id AND fin.collaborator_id=pair.collaborator_id AND fin.client_id=pair.client_id WHERE cp.property_id=? AND pair.property_id=? AND cl.is_active=1 ORDER BY co.name,cl.first_name,cl.last_name';
         $stmt=db()->prepare($sql);$stmt->execute([$p,$p]);$groups=[];$paid=0.0;$due=0.0;
         foreach($stmt->fetchAll()as$row){
             $collaboratorId=(string)$row['collaborator_id'];$clientPaidCurrency=round((float)$row['paid'],2);$clientDueCurrency=round((float)$row['due'],2);
-            if(($row['assigned_collaborator_id']??null)===$collaboratorId&&(int)$row['paid_count']===0&&((bool)$row['finance_persisted']||(int)$row['commission_count']>0)){$subtotal=round((float)$row['work_price']+(float)$row['diagnostic_fee'],2);$totalValue=round(max(0,$subtotal-round($subtotal*(float)$row['discount_percent']/100,2)),2);$directCosts=round((float)$row['actual_parts_cost']+(float)$row['total_expenses'],2);$clientDueCurrency=commission_amount($totalValue,max(0,$totalValue-$directCosts),(string)$row['commission_type'],(float)$row['commission_value']);}
+            if((int)$row['paid_count']===0&&((bool)$row['finance_persisted']||(int)$row['commission_count']>0)&&!empty($row['commission_type'])){$subtotal=round((float)$row['work_price']+(float)$row['diagnostic_fee'],2);$totalValue=round(max(0,$subtotal-round($subtotal*(float)$row['discount_percent']/100,2)),2);$directCosts=round((float)$row['actual_parts_cost']+(float)$row['total_expenses'],2);$clientDueCurrency=commission_amount($totalValue,max(0,$totalValue-$directCosts),(string)$row['commission_type'],(float)$row['commission_value']);}
             $rate=max(0,(float)$row['exchange_rate_to_ron']);if($rate<=0)$rate=1.0;$clientPaid=round($clientPaidCurrency*$rate,2);$clientDue=round($clientDueCurrency*$rate,2);
             $clientTotal=round($clientPaid+$clientDue,2);
             if(!isset($groups[$collaboratorId]))$groups[$collaboratorId]=['collaboratorId'=>$collaboratorId,'collaboratorName'=>$row['collaborator_name'],'role'=>$row['role']?:null,'total'=>0.0,'paid'=>0.0,'due'=>0.0,'clientsCount'=>0,'clients'=>[]];
@@ -1353,13 +1471,13 @@ try {
             $pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE')->execute([uuid_bin($clientId)]);$client=get_client($clientId);
             $select=$pdo->prepare('SELECT '.uuid_sql('id').' id,status,commission_value,paid_at FROM commissions WHERE property_id=? AND collaborator_id=? AND client_id=? AND is_active=1 AND status<>\'CANCELLED\' FOR UPDATE');$selectArgs=[uuid_bin($propertyId),uuid_bin($collaboratorId),uuid_bin($clientId)];$select->execute($selectArgs);$before=$select->fetchAll();
             if($paid){
-                if(($client['collaboratorId']??null)===$collaboratorId)sync_client_commission($pdo,$client,client_financial_record($client),client_expenses($clientId),$user,false);
+                if(in_array($collaboratorId,array_column($client['collaborators']??[],'collaboratorId'),true))sync_client_commission($pdo,$client,client_financial_record($client),client_expenses($clientId),$user,false);
                 $select->execute($selectArgs);$current=$select->fetchAll();if(!$current)fail('Nu există o fișă activă cu un comision pentru acest colaborator și client.',404);
                 $update=$pdo->prepare("UPDATE commissions SET status='PAID',paid_at=COALESCE(paid_at,?),updated_at=?,updated_by=? WHERE property_id=? AND collaborator_id=? AND client_id=? AND is_active=1 AND status<>'CANCELLED' AND (status<>'PAID' OR paid_at IS NULL)");$update->execute([$now,$now,uuid_bin($user['id']),uuid_bin($propertyId),uuid_bin($collaboratorId),uuid_bin($clientId)]);
             }else{
                 if(!$before)fail('Nu există o fișă activă cu un comision pentru acest colaborator și client.',404);
                 $update=$pdo->prepare("UPDATE commissions SET status='APPROVED',paid_at=NULL,updated_at=?,updated_by=? WHERE property_id=? AND collaborator_id=? AND client_id=? AND is_active=1 AND status<>'CANCELLED' AND (status<>'APPROVED' OR paid_at IS NOT NULL)");$update->execute([$now,uuid_bin($user['id']),uuid_bin($propertyId),uuid_bin($collaboratorId),uuid_bin($clientId)]);
-                if(($client['collaboratorId']??null)===$collaboratorId)sync_client_commission($pdo,$client,client_financial_record($client),client_expenses($clientId),$user,false);
+                if(in_array($collaboratorId,array_column($client['collaborators']??[],'collaboratorId'),true))sync_client_commission($pdo,$client,client_financial_record($client),client_expenses($clientId),$user,false);
             }
             $select->execute($selectArgs);$after=$select->fetchAll();$pdo->commit();
         }catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}
@@ -1459,15 +1577,15 @@ try {
 
         $startSql=$periodStart->format('Y-m-d H:i:s');$endSql=$periodEnd->format('Y-m-d H:i:s');
         $periodClientsTotal=(int)$scalar('SELECT COUNT(*) FROM clients WHERE property_id=? AND is_active=1 AND created_at>=? AND created_at<?',[$p,$startSql,$endSql]);
-        $periodFinanceSql="SELECT COALESCE(cf.currency_code,'RON') currency_code,COALESCE(cf.exchange_rate_to_ron,1) exchange_rate_to_ron,COALESCE(cf.work_price,0) work_price,COALESCE(cf.diagnostic_fee,0) diagnostic_fee,COALESCE(cf.advance_paid,0) advance_paid,COALESCE(cf.discount_percent,0) discount_percent,COALESCE(cf.actual_parts_cost,0) actual_parts_cost,COALESCE(cf.payment_status,'UNPAID') payment_status,c.commission_type,c.commission_value,COALESCE(ex.total_expenses,0) total_expenses,COALESCE(cm.paid_count,0) paid_count,COALESCE(cm.commission_total,0) commission_total,COALESCE(cm.paid_total,0) paid_total,COALESCE(cm.due_total,0) due_total FROM clients c LEFT JOIN client_financials cf ON cf.client_id=c.id LEFT JOIN (SELECT client_id,SUM(amount) total_expenses FROM client_expenses GROUP BY client_id) ex ON ex.client_id=c.id LEFT JOIN (SELECT client_id,SUM(CASE WHEN status='PAID' AND paid_at IS NOT NULL THEN 1 ELSE 0 END) paid_count,SUM(commission_value) commission_total,SUM(CASE WHEN status='PAID' AND paid_at IS NOT NULL THEN commission_value ELSE 0 END) paid_total,SUM(CASE WHEN status IN ('ESTIMATED','CALCULATED','APPROVED') OR (status='PAID' AND paid_at IS NULL) THEN commission_value ELSE 0 END) due_total FROM commissions WHERE is_active=1 AND status<>'CANCELLED' GROUP BY client_id) cm ON cm.client_id=c.id WHERE c.property_id=? AND c.is_active=1 AND (cf.client_id IS NOT NULL OR ex.client_id IS NOT NULL) AND COALESCE(cf.updated_at,c.updated_at,c.created_at)>=? AND COALESCE(cf.updated_at,c.updated_at,c.created_at)<?";
+        $periodFinanceSql="SELECT ".uuid_sql('c.id')." client_id,COALESCE(cf.currency_code,'RON') currency_code,COALESCE(cf.exchange_rate_to_ron,1) exchange_rate_to_ron,COALESCE(cf.work_price,0) work_price,COALESCE(cf.diagnostic_fee,0) diagnostic_fee,COALESCE(cf.advance_paid,0) advance_paid,COALESCE(cf.discount_percent,0) discount_percent,COALESCE(cf.actual_parts_cost,0) actual_parts_cost,COALESCE(cf.payment_status,'UNPAID') payment_status,COALESCE(ex.total_expenses,0) total_expenses,COALESCE(cm.commission_count,0) commission_count,COALESCE(cm.paid_count,0) paid_count,COALESCE(cm.commission_total,0) commission_total,COALESCE(cm.paid_total,0) paid_total,COALESCE(cm.due_total,0) due_total FROM clients c LEFT JOIN client_financials cf ON cf.client_id=c.id LEFT JOIN (SELECT client_id,SUM(amount) total_expenses FROM client_expenses GROUP BY client_id) ex ON ex.client_id=c.id LEFT JOIN (SELECT client_id,COUNT(*) commission_count,SUM(CASE WHEN status='PAID' AND paid_at IS NOT NULL THEN 1 ELSE 0 END) paid_count,SUM(commission_value) commission_total,SUM(CASE WHEN status='PAID' AND paid_at IS NOT NULL THEN commission_value ELSE 0 END) paid_total,SUM(CASE WHEN status IN ('ESTIMATED','CALCULATED','APPROVED') OR (status='PAID' AND paid_at IS NULL) THEN commission_value ELSE 0 END) due_total FROM commissions WHERE is_active=1 AND status<>'CANCELLED' GROUP BY client_id) cm ON cm.client_id=c.id WHERE c.property_id=? AND c.is_active=1 AND (cf.client_id IS NOT NULL OR ex.client_id IS NOT NULL) AND COALESCE(cf.updated_at,c.updated_at,c.created_at)>=? AND COALESCE(cf.updated_at,c.updated_at,c.created_at)<?";
         $periodFinanceStmt=$pdo->prepare($periodFinanceSql);$periodFinanceStmt->execute([$p,$startSql,$endSql]);
         $periodRevenueRon=0.0;$periodHoldRon=0.0;$periodNetRon=0.0;$periodWaiting=0;$periodCollaboratorPaidRon=0.0;$periodCollaboratorOnHoldRon=0.0;
         foreach($periodFinanceStmt->fetchAll()as$row){
             $rate=(float)$row['exchange_rate_to_ron'];$subtotal=round((float)$row['work_price']+(float)$row['diagnostic_fee'],2);$discountAmount=round($subtotal*(float)$row['discount_percent']/100,2);$total=round(max(0,$subtotal-$discountAmount),2);
             $received=$row['payment_status']==='PAID'?$total:round(min((float)$row['advance_paid'],$total),2);$remaining=round(max(0,$total-$received),2);$internal=round((float)$row['actual_parts_cost']+(float)$row['total_expenses'],2);
-            $commissionValue=max(0,(float)($row['commission_value']??0));$commissionType=(string)($row['commission_type']??'');
-            if((int)$row['paid_count']>0)$commission=round((float)$row['commission_total'],2);elseif($commissionType==='PERCENT_TOTAL')$commission=round($total*$commissionValue/100,2);elseif($commissionType==='PERCENT_NET')$commission=round(max(0,$total-$internal)*$commissionValue/100,2);elseif($commissionType==='FIXED')$commission=round($commissionValue,2);else$commission=0.0;
-            if((int)$row['paid_count']>0){$periodCollaboratorPaidRon+=round((float)$row['paid_total'],2)*$rate;$periodCollaboratorOnHoldRon+=round((float)$row['due_total'],2)*$rate;}else$periodCollaboratorOnHoldRon+=$commission*$rate;
+            $commission=round((float)$row['commission_total'],2);
+            if((int)$row['commission_count']===0){foreach(client_collaborator_assignments((string)$row['client_id'])as$assignment)$commission+=commission_amount($total,max(0,$total-$internal),(string)$assignment['commissionType'],(float)$assignment['commissionValue']);$commission=round($commission,2);}
+            if((int)$row['commission_count']>0){$periodCollaboratorPaidRon+=round((float)$row['paid_total'],2)*$rate;$periodCollaboratorOnHoldRon+=round((float)$row['due_total'],2)*$rate;}else$periodCollaboratorOnHoldRon+=$commission*$rate;
             $periodRevenueRon+=$received*$rate;$periodHoldRon+=$remaining*$rate;$periodNetRon+=round($received-$internal-(float)$row['paid_total'],2)*$rate;if($remaining>0.004)$periodWaiting++;
         }
         $periodLegacyStmt=$pdo->prepare("SELECT COALESCE(SUM(CASE WHEN s.status IN ('COMPLETED','DELIVERED') THEN s.total_cost ELSE 0 END),0) total_revenue,COALESCE(SUM(CASE WHEN s.status IN ('NEW','WAITING','VERIFYING','IN_PROGRESS','WAITING_PARTS') THEN s.total_cost ELSE 0 END),0) revenue_on_hold,COALESCE(SUM(s.direct_costs),0) direct_costs,COUNT(DISTINCT CASE WHEN s.status IN ('NEW','WAITING','VERIFYING','IN_PROGRESS','WAITING_PARTS') THEN s.client_id END) clients_waiting FROM service_sheets s JOIN clients c ON c.id=s.client_id LEFT JOIN client_financials cf ON cf.client_id=c.id WHERE s.property_id=? AND c.is_active=1 AND cf.client_id IS NULL AND NOT EXISTS(SELECT 1 FROM client_expenses e WHERE e.client_id=c.id) AND s.is_active=1 AND s.status<>'CANCELLED' AND s.created_at>=? AND s.created_at<?");$periodLegacyStmt->execute([$p,$startSql,$endSql]);$periodLegacy=$periodLegacyStmt->fetch();

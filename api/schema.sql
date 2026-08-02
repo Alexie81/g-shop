@@ -139,6 +139,23 @@ CREATE TABLE IF NOT EXISTS clients (
   CONSTRAINT fk_client_collaborator FOREIGN KEY (collaborator_id) REFERENCES collaborators(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS client_collaborators (
+  client_id BINARY(16) NOT NULL,
+  collaborator_id BINARY(16) NOT NULL,
+  commission_type ENUM('PERCENT_NET','PERCENT_TOTAL','FIXED') NOT NULL,
+  commission_value DECIMAL(10,2) UNSIGNED NOT NULL DEFAULT 0,
+  sort_order SMALLINT UNSIGNED NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  created_by BINARY(16) NOT NULL,
+  updated_by BINARY(16) NOT NULL,
+  PRIMARY KEY (client_id,collaborator_id),
+  INDEX idx_client_collaborators_order (client_id,sort_order),
+  INDEX idx_client_collaborators_collaborator (collaborator_id,client_id),
+  CONSTRAINT fk_client_collaborator_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+  CONSTRAINT fk_client_collaborator_collaborator FOREIGN KEY (collaborator_id) REFERENCES collaborators(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS client_financials (
   client_id BINARY(16) PRIMARY KEY,
   currency_code CHAR(3) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL DEFAULT 'RON',

@@ -137,6 +137,7 @@ export interface Client extends BaseEntity {
   collaboratorId?: UUID;
   commissionType?: CommissionType;
   commissionValue?: number;
+  collaborators: ClientCollaboratorAssignment[];
   qr?: ClientQR;
   serviceSheetsCount: number;
   lastActivityAt?: ISODate;
@@ -202,6 +203,16 @@ export interface ClientFinancialOverview {
   summary: ClientFinancialSummary;
   expenses: ClientExpense[];
   collaborator: ClientFinancialCollaborator | null;
+  collaborators: ClientFinancialCollaborator[];
+}
+
+export interface ClientCollaboratorAssignment {
+  collaboratorId: UUID;
+  name: string;
+  role?: string;
+  commissionType: CommissionType;
+  commissionValue: number;
+  sortOrder: number;
 }
 
 export interface ClientFinancialCollaborator {
