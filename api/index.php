@@ -625,6 +625,35 @@ function financial_summary(array $client, array $financial, array $expenses): ar
         'gshopNet'=>round($receivedAmount-$internalCosts,2),
     ];
 }
+function sync_service_sheet_financials_from_client(PDO $pdo, array $client, array $financial, array $expenses, array $user): bool {
+    $summary=financial_summary($client,$financial,$expenses);
+    $parts=round(max(0,(float)$financial['displayedPartsCost']),2);
+    $labor=round(max(0,(float)$financial['displayedLaborCost']),2);
+    $total=round($parts+$labor,2);
+    $direct=round(max(0,(float)$summary['internalCosts']),2);
+    $net=round(max(0,$total-$direct),2);
+    $now=now_utc();
+    $stmt=$pdo->prepare('UPDATE service_sheets SET parts_cost=?,labor_cost=?,total_cost=?,direct_costs=?,net_value=?,updated_at=?,updated_by=? WHERE client_id=? AND is_active=1 AND NOT (parts_cost <=> ? AND labor_cost <=> ? AND total_cost <=> ? AND direct_costs <=> ? AND net_value <=> ?)');
+    $stmt->execute([$parts,$labor,$total,$direct,$net,$now,uuid_bin($user['id']),uuid_bin($client['id']),$parts,$labor,$total,$direct,$net]);
+    return $stmt->rowCount()>0;
+}
+function sync_client_financials_from_service_sheet(PDO $pdo, array $client, array $sheet, array $user): array {
+    $before=client_financial_record($client);
+    $expenses=client_expenses($client['id']);
+    $additionalExpenses=round(array_sum(array_map(fn($expense)=>(float)$expense['amount'],$expenses)),2);
+    $parts=round(max(0,(float)$sheet['partsCost']),2);
+    $labor=round(max(0,(float)$sheet['laborCost']),2);
+    $actualParts=round(max(0,(float)$sheet['directCosts']-$additionalExpenses),2);
+    $changed=abs((float)$before['displayedPartsCost']-$parts)>0.00001||abs((float)$before['displayedLaborCost']-$labor)>0.00001||abs((float)$before['actualPartsCost']-$actualParts)>0.00001;
+    if($changed){
+        $now=now_utc();ensure_client_financial_shell($pdo,$client,$user,$now);
+        $stmt=$pdo->prepare('UPDATE client_financials SET displayed_parts_cost=?,displayed_labor_cost=?,actual_parts_cost=?,updated_at=?,updated_by=? WHERE client_id=?');
+        $stmt->execute([$parts,$labor,$actualParts,$now,uuid_bin($user['id']),uuid_bin($client['id'])]);
+    }
+    $after=client_financial_record($client);
+    sync_service_sheet_financials_from_client($pdo,$client,$after,$expenses,$user);
+    return ['changed'=>$changed,'before'=>$before,'after'=>$after,'expenses'=>$expenses];
+}
 function client_collaborator_finance(array $client, array $financial, array $summary): ?array {
     $collaboratorId = (string)($client['collaboratorId'] ?? '');
     if ($collaboratorId === '') return null;
@@ -914,12 +943,13 @@ try {
         if(!financial_has_data($next)&&$expenseCount===0){
             $syncResult=sync_client_commission($pdo,$client,$next,[],$user,false);
             if($before['persisted'])$pdo->prepare('DELETE FROM client_financials WHERE client_id=?')->execute([uuid_bin($client['id'])]);
+            sync_service_sheet_financials_from_client($pdo,$client,$next,[],$user);
             $pdo->commit();
             if($before['persisted'])audit_log('CLIENT_FINANCIALS_CLEARED','financials','Datele financiare ale clientului au fost golite','Client',$client['id'],$client['propertyId'],$beforeSnapshot,null,$user);
             if($syncResult['changed'])audit_log('CLIENT_COMMISSION_RECALCULATED','commissions','Comisionul colaboratorului a fost recalculat din finanțele clientului','Client',$client['id'],$client['propertyId'],null,client_financial_bundle($client)['collaborator'],$user);
             respond(client_financial_bundle($client));
         }
-        if($before['persisted']&&$beforeSnapshot===$nextSnapshot){$expenses=client_expenses($client['id']);$beforeCollaborator=client_collaborator_finance($client,$before,financial_summary($client,$before,$expenses));$syncResult=sync_client_commission($pdo,$client,$before,$expenses,$user,false);$pdo->commit();if($syncResult['changed'])audit_log('CLIENT_COMMISSION_RECALCULATED','commissions','Comisionul colaboratorului a fost recalculat din finanțele clientului','Client',$client['id'],$client['propertyId'],$beforeCollaborator,client_financial_bundle($client)['collaborator'],$user);respond(client_financial_bundle($client));}
+        if($before['persisted']&&$beforeSnapshot===$nextSnapshot){$expenses=client_expenses($client['id']);$beforeCollaborator=client_collaborator_finance($client,$before,financial_summary($client,$before,$expenses));sync_service_sheet_financials_from_client($pdo,$client,$before,$expenses,$user);$syncResult=sync_client_commission($pdo,$client,$before,$expenses,$user,false);$pdo->commit();if($syncResult['changed'])audit_log('CLIENT_COMMISSION_RECALCULATED','commissions','Comisionul colaboratorului a fost recalculat din finanțele clientului','Client',$client['id'],$client['propertyId'],$beforeCollaborator,client_financial_bundle($client)['collaborator'],$user);respond(client_financial_bundle($client));}
         $now=now_utc();
         if($before['persisted']){
             $stmt=$pdo->prepare('UPDATE client_financials SET currency_code=?,exchange_rate_to_ron=?,work_price=?,diagnostic_fee=?,advance_paid=?,discount_percent=?,actual_parts_cost=?,displayed_parts_cost=?,displayed_labor_cost=?,payment_status=?,updated_at=?,updated_by=? WHERE client_id=?');
@@ -928,7 +958,7 @@ try {
             $stmt=$pdo->prepare('INSERT INTO client_financials (client_id,currency_code,exchange_rate_to_ron,work_price,diagnostic_fee,advance_paid,discount_percent,actual_parts_cost,displayed_parts_cost,displayed_labor_cost,payment_status,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
             $stmt->execute([uuid_bin($client['id']),$next['currencyCode'],$next['exchangeRateToRon'],$next['workPrice'],$next['diagnosticFee'],$next['advancePaid'],$next['discountPercent'],$next['actualPartsCost'],$next['displayedPartsCost'],$next['displayedLaborCost'],$next['paymentStatus'],$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);
         }
-        $after=client_financial_record($client);$expenses=client_expenses($client['id']);$beforeCollaborator=client_collaborator_finance($client,$before,financial_summary($client,$before,$expenses));$syncResult=sync_client_commission($pdo,$client,$after,$expenses,$user,false);$pdo->commit();
+        $after=client_financial_record($client);$expenses=client_expenses($client['id']);$beforeCollaborator=client_collaborator_finance($client,$before,financial_summary($client,$before,$expenses));sync_service_sheet_financials_from_client($pdo,$client,$after,$expenses,$user);$syncResult=sync_client_commission($pdo,$client,$after,$expenses,$user,false);$pdo->commit();
         $afterSnapshot=financial_mutable_snapshot($after);audit_log($before['persisted']?'CLIENT_FINANCIALS_UPDATED':'CLIENT_FINANCIALS_CREATED','financials','Datele financiare ale clientului au fost salvate','Client',$client['id'],$client['propertyId'],$before['persisted']?$beforeSnapshot:null,$afterSnapshot,$user);
         if($syncResult['changed'])audit_log('CLIENT_COMMISSION_RECALCULATED','commissions','Comisionul colaboratorului a fost recalculat din finanțele clientului','Client',$client['id'],$client['propertyId'],$beforeCollaborator,client_financial_bundle($client)['collaborator'],$user);
         respond(client_financial_bundle($client));
@@ -943,7 +973,7 @@ try {
             $pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE')->execute([uuid_bin($client['id'])]);$client=get_client($client['id']);
             $beforeFinancial=client_financial_record($client);$beforeExpenses=client_expenses($client['id']);$beforeCollaborator=client_collaborator_finance($client,$beforeFinancial,financial_summary($client,$beforeFinancial,$beforeExpenses));
             ensure_client_financial_shell($pdo,$client,$user,$now);$pdo->prepare('INSERT INTO client_expenses (id,client_id,description,amount,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?)')->execute([uuid_bin($id),uuid_bin($client['id']),$description,$amount,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);
-            $syncResult=sync_client_commission($pdo,$client,client_financial_record($client),client_expenses($client['id']),$user,false);$pdo->commit();
+            $currentFinancial=client_financial_record($client);$currentExpenses=client_expenses($client['id']);sync_service_sheet_financials_from_client($pdo,$client,$currentFinancial,$currentExpenses,$user);$syncResult=sync_client_commission($pdo,$client,$currentFinancial,$currentExpenses,$user,false);$pdo->commit();
         }catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}
         $expense=get_client_expense($client['id'],$id);audit_log('CLIENT_EXPENSE_CREATED','financials','Cheltuială adăugată clientului','Client',$client['id'],$client['propertyId'],null,expense_audit_snapshot($expense),$user);
         if($syncResult['changed'])audit_log('CLIENT_COMMISSION_RECALCULATED','commissions','Comisionul colaboratorului a fost recalculat după modificarea cheltuielilor','Client',$client['id'],$client['propertyId'],$beforeCollaborator,client_financial_bundle($client)['collaborator'],$user);
@@ -956,7 +986,7 @@ try {
             $description=array_key_exists('description',$body)?validated_expense_description($body['description']):$before['description'];$amount=array_key_exists('amount',$body)?validated_amount($body['amount'],'Valoarea cheltuielii',9999999999.99,false):(float)$before['amount'];$beforeSnapshot=expense_audit_snapshot($before);$nextSnapshot=['id'=>$expenseId,'description'=>$description,'amount'=>$amount];$expenseChanged=$beforeSnapshot!==$nextSnapshot;
             $beforeFinancial=client_financial_record($client);$beforeExpenses=client_expenses($client['id']);$beforeCollaborator=client_collaborator_finance($client,$beforeFinancial,financial_summary($client,$beforeFinancial,$beforeExpenses));
             if($expenseChanged)$pdo->prepare('UPDATE client_expenses SET description=?,amount=?,updated_at=?,updated_by=? WHERE id=? AND client_id=?')->execute([$description,$amount,now_utc(),uuid_bin($user['id']),uuid_bin($expenseId),uuid_bin($client['id'])]);
-            $after=get_client_expense($client['id'],$expenseId);$syncResult=sync_client_commission($pdo,$client,client_financial_record($client),client_expenses($client['id']),$user,false);$pdo->commit();
+            $after=get_client_expense($client['id'],$expenseId);$currentFinancial=client_financial_record($client);$currentExpenses=client_expenses($client['id']);sync_service_sheet_financials_from_client($pdo,$client,$currentFinancial,$currentExpenses,$user);$syncResult=sync_client_commission($pdo,$client,$currentFinancial,$currentExpenses,$user,false);$pdo->commit();
         }catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}
         if($expenseChanged)audit_log('CLIENT_EXPENSE_UPDATED','financials','Cheltuială actualizată pentru client','Client',$client['id'],$client['propertyId'],$beforeSnapshot,expense_audit_snapshot($after),$user);
         if($syncResult['changed'])audit_log('CLIENT_COMMISSION_RECALCULATED','commissions','Comisionul colaboratorului a fost recalculat după modificarea cheltuielilor','Client',$client['id'],$client['propertyId'],$beforeCollaborator,client_financial_bundle($client)['collaborator'],$user);
@@ -969,7 +999,7 @@ try {
             $beforeFinancial=client_financial_record($client);$beforeExpenses=client_expenses($client['id']);$beforeCollaborator=client_collaborator_finance($client,$beforeFinancial,financial_summary($client,$beforeFinancial,$beforeExpenses));
             $pdo->prepare('DELETE FROM client_expenses WHERE id=? AND client_id=?')->execute([uuid_bin($expenseId),uuid_bin($client['id'])]);$remaining=$pdo->prepare('SELECT COUNT(*) FROM client_expenses WHERE client_id=?');$remaining->execute([uuid_bin($client['id'])]);
             if((int)$remaining->fetchColumn()===0){$financial=client_financial_record($client);if($financial['persisted']&&!financial_has_data($financial))$pdo->prepare('DELETE FROM client_financials WHERE client_id=?')->execute([uuid_bin($client['id'])]);}
-            $syncResult=sync_client_commission($pdo,$client,client_financial_record($client),client_expenses($client['id']),$user,false);$pdo->commit();
+            $currentFinancial=client_financial_record($client);$currentExpenses=client_expenses($client['id']);sync_service_sheet_financials_from_client($pdo,$client,$currentFinancial,$currentExpenses,$user);$syncResult=sync_client_commission($pdo,$client,$currentFinancial,$currentExpenses,$user,false);$pdo->commit();
         }catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}
         audit_log('CLIENT_EXPENSE_DELETED','financials','Cheltuială ștearsă de la client','Client',$client['id'],$client['propertyId'],expense_audit_snapshot($before),null,$user);
         if($syncResult['changed'])audit_log('CLIENT_COMMISSION_RECALCULATED','commissions','Comisionul colaboratorului a fost recalculat după modificarea cheltuielilor','Client',$client['id'],$client['propertyId'],$beforeCollaborator,client_financial_bundle($client)['collaborator'],$user);
@@ -1167,7 +1197,7 @@ try {
         if($client['propertyId']!==$propertyId)fail('Clientul nu aparține proprietății selectate.',422);
         $partsCost=max(0,(float)($body['partsCost']??0));$laborCost=max(0,(float)($body['laborCost']??0));$totalCost=max(0,(float)($body['totalCost']??($partsCost+$laborCost)));$directCosts=max(0,(float)($body['directCosts']??0));$netValue=max(0,$totalCost-$directCosts);
         if(!empty($client['collaboratorId']))collaborator_for_property((string)$client['collaboratorId'],$propertyId);
-        $id=uuid_v4();$now=now_utc();$pdo=db();$pdo->beginTransaction();$commissionCreated=false;
+        $id=uuid_v4();$now=now_utc();$pdo=db();$pdo->beginTransaction();$commissionCreated=false;$financeSync=null;
         try{
             $clientLock=$pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE');$clientLock->execute([uuid_bin($clientId)]);
             $client=get_client($clientId);$financial=client_financial_record($client);$expenses=client_expenses($clientId);$financeSummary=financial_summary($client,$financial,$expenses);$collaboratorId=!empty($client['collaboratorId'])?(string)$client['collaboratorId']:null;$commissionValue=$collaboratorId!==null?(float)$financeSummary['collaboratorCost']:null;
@@ -1177,10 +1207,12 @@ try {
             $stmt=$pdo->prepare("INSERT INTO service_sheets (id,property_id,client_id,number,equipment,brand,model,serial_number,accessories,reported_issue,technical_assessment,work_performed,parts_used,parts_cost,labor_cost,total_cost,direct_costs,net_value,technician_id,collaborator_id,collaborator_commission,internal_notes,received_at,estimated_at,status,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'NEW',1,?,?,?,?)");
             $stmt->execute([uuid_bin($id),uuid_bin($propertyId),uuid_bin($clientId),$number,$body['equipment'],$body['brand']??null,$body['model']??null,$body['serialNumber']??null,$body['accessories']??null,$body['reportedIssue'],$body['technicalAssessment']??null,$body['workPerformed']??null,$body['partsUsed']??null,$partsCost,$laborCost,$totalCost,$directCosts,$netValue,!empty($body['technicianId'])?uuid_bin($body['technicianId']):null,$collaboratorId?uuid_bin($collaboratorId):null,$commissionValue,$body['internalNotes']??null,!empty($body['receivedAt'])?gmdate('Y-m-d H:i:s',strtotime((string)$body['receivedAt'])):$now,!empty($body['estimatedAt'])?gmdate('Y-m-d H:i:s',strtotime((string)$body['estimatedAt'])):null,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);
             $pdo->prepare("INSERT INTO service_sheet_status_history (id,service_sheet_id,old_status,new_status,changed_by,created_at) VALUES (?,?,NULL,'NEW',?,?)")->execute([uuid_bin(uuid_v4()),uuid_bin($id),uuid_bin($user['id']),$now]);
+            $createdSheet=get_sheet($id);$financeSync=sync_client_financials_from_service_sheet($pdo,$client,$createdSheet,$user);$financial=$financeSync['after'];$expenses=$financeSync['expenses'];
             $syncResult=sync_client_commission($pdo,$client,$financial,$expenses,$user,false);$commissionCreated=!empty($syncResult['changed'])&&$collaboratorId!==null;
             $pdo->commit();
         }catch(Throwable$e){$pdo->rollBack();throw$e;}
         audit_log('SERVICE_SHEET_CREATED','service_sheets','Fișă creată: '.$number,'ServiceSheet',$id,$propertyId,null,$body,$user);
+        if(!empty($financeSync['changed']))audit_log('CLIENT_FINANCIALS_SYNCED_FROM_SHEET','financials','Costurile clientului au fost sincronizate din fișa '.$number,'Client',$clientId,$propertyId,financial_mutable_snapshot($financeSync['before']),financial_mutable_snapshot($financeSync['after']),$user);
         if($commissionCreated)audit_log('COMMISSION_CREATED','commissions','Comision aprobat automat pentru fișa '.$number,'Client',$clientId,$propertyId,null,client_financial_bundle($client)['collaborator'],$user);
         respond(get_sheet($id),201);
     }
@@ -1199,13 +1231,14 @@ try {
             $clientLock=$pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE');$clientLock->execute([uuid_bin($before['clientId'])]);
             $pdo->prepare('UPDATE service_sheets SET '.implode(',',$sets).' WHERE id=?')->execute($args);
             if(isset($body['status'])&&$body['status']!==$before['status'])$pdo->prepare('INSERT INTO service_sheet_status_history (id,service_sheet_id,old_status,new_status,changed_by,created_at) VALUES (?,?,?,?,?,?)')->execute([uuid_bin(uuid_v4()),uuid_bin($params['id']),$before['status'],$body['status'],uuid_bin($user['id']),$now]);
-            $after=get_sheet($params['id']);$recalculated=0;
+            $after=get_sheet($params['id']);$recalculated=0;$financeSync=null;
             if($financeChanged){
-                $client=get_client($before['clientId']);$syncResult=sync_client_commission($pdo,$client,client_financial_record($client),client_expenses($client['id']),$user,false);$recalculated=!empty($syncResult['changed'])?1:0;
+                $client=get_client($before['clientId']);$financeSync=sync_client_financials_from_service_sheet($pdo,$client,$after,$user);$syncResult=sync_client_commission($pdo,$client,$financeSync['after'],$financeSync['expenses'],$user,false);$recalculated=!empty($syncResult['changed'])?1:0;
             }
             $pdo->commit();
         }catch(Throwable$e){$pdo->rollBack();throw$e;}
         $after=get_sheet($params['id']);audit_log('SERVICE_SHEET_UPDATED','service_sheets','Fișă actualizată: '.$after['number'],'ServiceSheet',$params['id'],$after['propertyId'],$before,$after,$user);
+        if($financeChanged&&!empty($financeSync['changed']))audit_log('CLIENT_FINANCIALS_SYNCED_FROM_SHEET','financials','Costurile clientului au fost sincronizate din fișa '.$after['number'],'Client',$after['clientId'],$after['propertyId'],financial_mutable_snapshot($financeSync['before']),financial_mutable_snapshot($financeSync['after']),$user);
         if($financeChanged&&$recalculated>0)audit_log('COMMISSION_RECALCULATED','commissions','Comision recalculat pentru fișa '.$after['number'],'ServiceSheet',$params['id'],$after['propertyId'],['totalCost'=>$before['totalCost'],'directCosts'=>$before['directCosts'],'netValue'=>$before['netValue'],'collaboratorCommission'=>$before['collaboratorCommission']],['totalCost'=>$after['totalCost'],'directCosts'=>$after['directCosts'],'netValue'=>$after['netValue'],'collaboratorCommission'=>$after['collaboratorCommission']],$user);
         respond($after);
     }

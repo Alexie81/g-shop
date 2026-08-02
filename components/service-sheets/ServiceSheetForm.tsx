@@ -29,7 +29,7 @@ type Form = {
   partsUsed: string;
   partsCost: string;
   laborCost: string;
-  directCosts: string;
+  actualPartsCost: string;
   estimatedAt: string;
   internalNotes: string;
 };
@@ -48,7 +48,7 @@ const blank: Form = {
   partsUsed: '',
   partsCost: '0',
   laborCost: '0',
-  directCosts: '0',
+  actualPartsCost: '0',
   estimatedAt: '',
   internalNotes: '',
 };
@@ -67,7 +67,7 @@ function formFromSheet(sheet: ServiceSheet): Form {
     partsUsed: sheet.partsUsed ?? '',
     partsCost: String(sheet.partsCost ?? 0),
     laborCost: String(sheet.laborCost ?? 0),
-    directCosts: String(sheet.directCosts ?? 0),
+    actualPartsCost: '0',
     estimatedAt: sheet.estimatedAt?.slice(0, 10) ?? '',
     internalNotes: sheet.internalNotes ?? '',
   };
@@ -95,7 +95,7 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
       ...current,
       partsCost: String(overview.financials.displayedPartsCost ?? 0),
       laborCost: String(overview.financials.displayedLaborCost ?? 0),
-      directCosts: String(overview.summary.internalCosts ?? 0),
+      actualPartsCost: String(overview.financials.actualPartsCost ?? 0),
     });
     setFinanceSourceClientId(selectedClientId);
   }, []);
@@ -149,7 +149,7 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
     clientRepository.getFinancials(selectedClientId).then((overview) => {
       if (cancelled) return;
       setFinanceOverview(overview);
-      if (!sheet) applyClientFinance(overview, selectedClientId);
+      applyClientFinance(overview, selectedClientId);
     }).catch((error) => {
       if (!cancelled) showToast(error instanceof Error ? error.message : 'Finanțele clientului nu au putut fi încărcate.', 'error');
     }).finally(() => {
@@ -170,7 +170,7 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
         clientId: value,
         partsCost: '0',
         laborCost: '0',
-        directCosts: '0',
+        actualPartsCost: '0',
       }));
       setClient(clients.find((item) => item.id === value) ?? null);
       setCurrencyCode('RON');
@@ -184,7 +184,9 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
 
   const parts = Number(form.partsCost.replace(',', '.')) || 0;
   const labor = Number(form.laborCost.replace(',', '.')) || 0;
-  const direct = Number(form.directCosts.replace(',', '.')) || 0;
+  const actualParts = Number(form.actualPartsCost.replace(',', '.')) || 0;
+  const additionalExpenses = financeOverview?.summary.additionalExpenses ?? 0;
+  const direct = actualParts + additionalExpenses;
   const total = parts + labor;
   const net = calculateNet(total, direct);
 
@@ -251,7 +253,7 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
         {clients.map((item) => <Button key={item.id} compact variant={form.clientId === item.id ? 'primary' : 'outline'} label={item.firstName + ' ' + item.lastName} onPress={() => update('clientId', item.id)} />)}
       </View>}
       {prefilling ? null : sheet ? <AppText variant="caption" muted>Clientul asociat și istoricul fișei rămân neschimbate.</AppText> : clientId === form.clientId ? <AppText variant="caption" style={{ color: '#14A83B' }}>Datele disponibile din formularul QR au fost precompletate.</AppText> : null}
-      {sheet ? null : financePrefilling ? <AppText variant="caption" muted>Se încarcă valorile financiare ale clientului…</AppText> : financeSourceClientId === form.clientId ? <AppText variant="caption" style={styles.financeHint}>Costurile și moneda au fost preluate din finanțele clientului.</AppText> : null}
+      {financePrefilling ? <AppText variant="caption" muted>Se încarcă valorile financiare ale clientului…</AppText> : financeSourceClientId === form.clientId ? <AppText variant="caption" style={styles.financeHint}>Costurile și moneda sunt sincronizate automat cu finanțele clientului.</AppText> : null}
     </Card>
 
     {canLoadFinancials && form.clientId ? <ClientFinanceOverviewCard
@@ -259,13 +261,7 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
       loading={financePrefilling}
       showInternal
       title="Finanțele clientului în această fișă"
-      subtitle="Preț, plăți și valorile propuse pentru fișa de service"
-      actionLabel={sheet ? 'Preia valorile actuale în fișă' : 'Reaplică valorile în fișă'}
-      actionIcon="download-outline"
-      onAction={financeOverview ? () => {
-        applyClientFinance(financeOverview, form.clientId);
-        showToast('Valorile financiare ale clientului au fost preluate în fișă.', 'success');
-      } : undefined}
+      subtitle="Preț, plăți și costuri sincronizate automat"
     /> : null}
 
     <Card style={styles.section}>
@@ -290,16 +286,18 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
     </Card>
 
     <Card style={styles.section}>
-      <AppText variant="heading">Valori afișate în fișa de service</AppText>
-      <AppText variant="caption" muted>Piesele și manopera sunt vizibile în fișă. Valorile interne rămân disponibile numai utilizatorilor cu acces financiar.</AppText>
+      <AppText variant="heading">Costuri și defalcare</AppText>
+      <AppText variant="caption" muted>Valorile sunt preluate automat din client și sunt sincronizate în ambele sensuri la salvare.</AppText>
       <View style={styles.row}>
+        {canLoadFinancials ? <View style={styles.field}><Input label={`Cost efectiv piese · intern (${currencyCode})`} keyboardType="decimal-pad" value={form.actualPartsCost} onChangeText={(value) => update('actualPartsCost', value)} /></View> : null}
         <View style={styles.field}><Input label={`Piese afișate (${currencyCode})`} keyboardType="decimal-pad" value={form.partsCost} onChangeText={(value) => update('partsCost', value)} /></View>
         <View style={styles.field}><Input label={`Manoperă afișată (${currencyCode})`} keyboardType="decimal-pad" value={form.laborCost} onChangeText={(value) => update('laborCost', value)} /></View>
-        {canLoadFinancials ? <View style={styles.field}><Input label={`Cheltuieli efective totale · intern (${currencyCode})`} keyboardType="decimal-pad" value={form.directCosts} onChangeText={(value) => update('directCosts', value)} /></View> : null}
       </View>
-      <View style={styles.summary}>
-        <View><AppText variant="caption" muted>Total afișat ({currencyCode})</AppText><AppText variant="title">{formatFinanceMoney(total, currencyCode)}</AppText></View>
-        {canLoadFinancials ? <View><AppText variant="caption" muted>Valoare netă internă ({currencyCode})</AppText><AppText variant="title" style={{ color: '#14A83B' }}>{formatFinanceMoney(net, currencyCode)}</AppText></View> : null}
+      {canLoadFinancials ? <View style={styles.expensesBlock}><View style={styles.expensesHeader}><AppText variant="label">Cheltuieli suplimentare</AppText><AppText variant="label">{formatFinanceMoney(additionalExpenses, currencyCode)}</AppText></View>{financeOverview?.expenses.length ? financeOverview.expenses.map((expense) => <View key={expense.id} style={styles.expenseRow}><AppText variant="caption" style={styles.expenseName}>{expense.description}</AppText><AppText variant="caption" muted>{formatFinanceMoney(expense.amount, currencyCode)}</AppText></View>) : <AppText variant="caption" muted>Nicio cheltuială suplimentară.</AppText>}</View> : null}
+      <View style={styles.calculationTotal}>
+        <AppText variant="heading">Calcul total</AppText>
+        <View style={styles.totalLine}><AppText variant="caption" muted>Total afișat</AppText><AppText variant="label">{formatFinanceMoney(total, currencyCode)}</AppText></View>
+        {canLoadFinancials ? <><View style={styles.totalLine}><AppText variant="caption" muted>Costuri interne totale</AppText><AppText variant="label">{formatFinanceMoney(direct, currencyCode)}</AppText></View><View style={styles.totalLine}><AppText variant="label">Valoare netă</AppText><AppText variant="title" style={{ color: '#14A83B' }}>{formatFinanceMoney(net, currencyCode)}</AppText></View></> : null}
       </View>
     </Card>
 
@@ -322,5 +320,10 @@ const styles = StyleSheet.create({
   clientSummary: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.md },
   clientCopy: { minWidth: 180, flex: 1, gap: 2 },
   financeHint: { color: '#14A83B', fontWeight: '700' },
-  summary: { flexDirection: 'row', justifyContent: 'space-around', gap: spacing.xxl, paddingVertical: spacing.md },
+  expensesBlock: { gap: spacing.sm, paddingTop: spacing.md },
+  expensesHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md },
+  expenseRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md },
+  expenseName: { flex: 1 },
+  calculationTotal: { gap: spacing.sm, paddingTop: spacing.lg },
+  totalLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md },
 });

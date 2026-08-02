@@ -236,6 +236,18 @@ export function ClientFinanceSection({
       <View style={[styles.expenseTotal, { borderTopColor: colors.border }]}><AppText variant="label" muted>Total cheltuieli</AppText><AppText variant="heading" style={{ color: palette.warning }}>{money(calculations.additionalExpenses)}</AppText></View>
     </Card>
 
+    <Card style={[styles.formCard, mobile && styles.cardMobile]} elevated>
+      <SectionTitle icon="calculator-outline" color={colors.primary} title="Calcul total" subtitle="Rezultatul final după completarea tuturor valorilor" />
+      <View style={[styles.calculationStrip, { backgroundColor: colors.surfaceMuted }]}>
+        <CalculationLine label="Total client" value={money(calculations.totalDue)} />
+        <CalculationLine label="Încasat" value={money(calculations.receivedAmount)} />
+        <CalculationLine label="Costuri interne totale" value={`− ${money(calculations.internalCosts)}`} muted />
+        <CalculationLine label="Comision colaborator achitat" value={`− ${money(calculations.collaboratorPaid)}`} muted />
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+        <CalculationLine label="G-Shop Net" value={money(calculations.gshopNet)} accent />
+      </View>
+    </Card>
+
     {actionError ? <View style={[styles.error, { backgroundColor: `${palette.danger}12`, borderColor: `${palette.danger}40` }]}><Ionicons name="alert-circle-outline" size={20} color={palette.danger} /><AppText variant="caption" style={{ color: palette.danger, flex: 1 }}>{actionError}</AppText></View> : null}
     {onSave ? <Button
       label="Salvează datele financiare"
