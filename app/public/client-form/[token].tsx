@@ -1,9 +1,4 @@
 import { AppText } from '@/components/ui/AppText';
-import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
-import { Screen } from '@/components/ui/Screen';
-import { ErrorState, LoadingState } from '@/components/ui/States';
-import { useAppTheme } from '@/contexts/ThemeContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { apiRequest } from '@/services/api';
 import { palette, radius, spacing } from '@/theme/tokens';
@@ -11,12 +6,15 @@ import { ServiceSheetStatus } from '@/types';
 import { formatDate } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
-import { ComponentProps } from 'react';
-import { Image, StyleSheet, View } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { ComponentProps, useEffect, useRef } from 'react';
+import { ActivityIndicator, Animated, Image, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 type PublicRepairStatus = {
   propertyName: string;
+  contact?: { phone?: string | null; email?: string | null };
   client: { name: string; firstName: string; status: string; updatedAt?: string };
   repair: null | {
     number: string;
@@ -33,178 +31,147 @@ type PublicRepairStatus = {
 };
 
 const STATUS: Record<ServiceSheetStatus, { label: string; description: string; icon: IconName; color: string; soft: string }> = {
-  NEW: { label: 'Fișă creată', description: 'Fișa a fost creată și urmează verificarea.', icon: 'document-text-outline', color: palette.electric, soft: palette.electricLight },
-  WAITING: { label: 'În așteptare', description: 'Echipamentul așteaptă preluarea de către echipa service.', icon: 'time-outline', color: palette.warning, soft: palette.warningSoft },
-  VERIFYING: { label: 'În verificare', description: 'Echipamentul este verificat pentru stabilirea diagnosticului.', icon: 'search-outline', color: palette.purple, soft: '#F2EAFF' },
-  IN_PROGRESS: { label: 'În lucru', description: 'Echipa lucrează în acest moment la reparație.', icon: 'construct-outline', color: palette.electric, soft: palette.electricLight },
-  WAITING_PARTS: { label: 'Așteptăm piesele', description: 'Reparația este în curs și așteaptă piesele necesare.', icon: 'cube-outline', color: palette.warning, soft: palette.warningSoft },
-  COMPLETED: { label: 'Reparație finalizată', description: 'Lucrarea este finalizată. Service-ul te va contacta pentru predare.', icon: 'checkmark-circle-outline', color: palette.success, soft: palette.successSoft },
-  DELIVERED: { label: 'Echipament predat', description: 'Echipamentul reparat a fost predat clientului.', icon: 'shield-checkmark-outline', color: palette.success, soft: palette.successSoft },
-  CANCELLED: { label: 'Reparație anulată', description: 'Lucrarea a fost anulată. Contactează service-ul pentru detalii.', icon: 'close-circle-outline', color: palette.danger, soft: palette.dangerSoft },
+  NEW: { label: 'Fișă creată', description: 'Am înregistrat echipamentul și fișa ta de service.', icon: 'document-text-outline', color: palette.electric, soft: '#EDF4FF' },
+  WAITING: { label: 'În așteptare', description: 'Echipamentul așteaptă preluarea de către echipa tehnică.', icon: 'time-outline', color: palette.warning, soft: '#FFF6E5' },
+  VERIFYING: { label: 'În verificare', description: 'Echipa verifică echipamentul și stabilește pașii următori.', icon: 'search-outline', color: palette.purple, soft: '#F4EDFF' },
+  IN_PROGRESS: { label: 'În lucru', description: 'Reparația este în desfășurare. Echipa lucrează la echipamentul tău.', icon: 'construct-outline', color: palette.electric, soft: '#EDF4FF' },
+  WAITING_PARTS: { label: 'Așteptăm piesele', description: 'Intervenția este pregătită și așteptăm piesele necesare.', icon: 'cube-outline', color: palette.warning, soft: '#FFF6E5' },
+  COMPLETED: { label: 'Reparație finalizată', description: 'Echipamentul este pregătit pentru predare.', icon: 'checkmark-circle-outline', color: palette.success, soft: '#EAF9EF' },
+  DELIVERED: { label: 'Echipament predat', description: 'Echipamentul a fost predat, iar lucrarea este încheiată.', icon: 'shield-checkmark-outline', color: palette.success, soft: '#EAF9EF' },
+  CANCELLED: { label: 'Reparație anulată', description: 'Lucrarea a fost anulată. Contactează service-ul pentru detalii.', icon: 'close-circle-outline', color: palette.danger, soft: '#FFF0F2' },
 };
 
-const STEPS = ['Înregistrat', 'Verificare', 'În lucru', 'Finalizat', 'Predat'];
-const STEP_BY_STATUS: Record<ServiceSheetStatus, number> = {
-  NEW: 0,
-  WAITING: 0,
-  VERIFYING: 1,
-  IN_PROGRESS: 2,
-  WAITING_PARTS: 2,
-  COMPLETED: 3,
-  DELIVERED: 4,
-  CANCELLED: -1,
-};
+const STEPS = [
+  { title: 'Înregistrare', description: 'Fișa și echipamentul sunt înregistrate în service.' },
+  { title: 'Diagnosticare', description: 'Echipa verifică echipamentul și stabilește intervenția.' },
+  { title: 'Reparație', description: 'Echipa efectuează lucrarea necesară asupra echipamentului.' },
+  { title: 'Așteptăm piesele', description: 'Dacă este necesar, așteptăm sosirea pieselor pentru a continua lucrarea.' },
+  { title: 'Finalizare', description: 'Reparația este verificată și pregătită pentru predare.' },
+  { title: 'Predare', description: 'Echipamentul este predat clientului și lucrarea se încheie.' },
+];
+
+const STEP_BY_STATUS: Record<ServiceSheetStatus, number> = { NEW: 0, WAITING: 0, VERIFYING: 1, IN_PROGRESS: 2, WAITING_PARTS: 3, COMPLETED: 4, DELIVERED: 5, CANCELLED: -1 };
 
 export default function PublicRepairTracking() {
   const { token } = useLocalSearchParams<{ token: string }>();
-  const { colors, isDark } = useAppTheme();
+  const reveal = useRef(new Animated.Value(0)).current;
   const info = useAsyncData(
     () => apiRequest<PublicRepairStatus>(`/public/client-form/${encodeURIComponent(token ?? '')}`, { authenticated: false }),
     [token],
   );
 
-  if (info.loading) return <Screen style={styles.page}><Brand /><LoadingState rows={4} /></Screen>;
-  if (info.error || !info.data) return <Screen style={styles.page}><Brand /><ErrorState message={info.error?.message ?? 'Linkul nu este disponibil.'} /><Button label="Încearcă din nou" icon="refresh-outline" onPress={() => void info.reload()} /></Screen>;
+  useEffect(() => {
+    if (!info.data) return;
+    reveal.setValue(0);
+    Animated.timing(reveal, { toValue: 1, duration: 440, useNativeDriver: true }).start();
+  }, [info.data, reveal]);
 
-  const { client, propertyName, repair } = info.data;
-  const status = repair ? STATUS[repair.status] : null;
+  if (info.loading) return <PublicState loading title="Se încarcă statusul" description="Preluăm cele mai noi informații direct din service." />;
+  if (info.error || !info.data) return <PublicState title="Link indisponibil" description={info.error?.message ?? 'Statusul nu a putut fi încărcat.'} onRetry={() => void info.reload()} />;
+
+  const { client, propertyName, repair, contact } = info.data;
+  const status = repair ? STATUS[repair.status] : { label: 'Client înregistrat', description: 'Fișa de service se pregătește. Revino în curând pentru actualizări.', icon: 'person-add-outline' as IconName, color: palette.electric, soft: '#EDF4FF' };
   const equipment = repair ? [repair.brand, repair.model, repair.equipment].filter(Boolean).join(' · ') : '';
+  const translateY = reveal.interpolate({ inputRange: [0, 1], outputRange: [14, 0] });
+  const phone = contact?.phone?.trim() ?? '';
+  const email = contact?.email?.trim() ?? '';
 
-  return (
-    <Screen refreshing={info.refreshing} onRefresh={() => void info.reload(true)} style={styles.page}>
+  return <SafeAreaView edges={['top', 'left', 'right']} style={styles.safe}>
+    <StatusBar style="dark" backgroundColor="#F5F7FB" />
+    <ScrollView contentContainerStyle={styles.page} refreshControl={<RefreshControl refreshing={info.refreshing} onRefresh={() => void info.reload(true)} tintColor={palette.electric} />}>
       <Brand propertyName={propertyName} />
+      <Animated.View style={[styles.content, { opacity: reveal, transform: [{ translateY }] }]}>
+        <View style={[styles.summary, { borderTopColor: status.color }]}>
+          <View style={styles.summaryTop}><View style={[styles.statusIcon, { backgroundColor: status.soft }]}><Ionicons name={status.icon} size={27} color={status.color} /></View><View style={styles.summaryCopy}><AppText variant="caption" style={[styles.eyebrow, { color: status.color }]}>STATUSUL REPARAȚIEI</AppText><AppText variant="display" style={styles.summaryTitle}>{status.label}</AppText><AppText style={styles.summaryDescription}>{status.description}</AppText><View style={[styles.livePill, { backgroundColor: status.soft }]}><View style={[styles.liveDot, { backgroundColor: status.color }]} /><AppText variant="caption" style={{ color: status.color, fontWeight: '900' }}>{repair?.status === 'DELIVERED' ? 'Proces încheiat' : 'Actualizat în timp real'}</AppText></View></View></View>
+          <View style={styles.summaryBottom}><View style={styles.clientMini}><View style={styles.avatar}><AppText variant="caption" style={styles.avatarText}>{initials(client.name)}</AppText></View><View style={styles.clientCopy}><AppText variant="label" numberOfLines={1}>{client.name}</AppText><AppText variant="caption" style={styles.muted}>{repair ? `Fișa ${repair.number}` : 'Fișă în curs de creare'}</AppText></View></View><View style={styles.updated}><AppText variant="caption" style={styles.updatedTitle}>Ultima actualizare</AppText><AppText variant="caption" style={styles.muted}>{formatDate(repair?.updatedAt ?? client.updatedAt, true)}</AppText></View></View>
+        </View>
 
-      <View style={[styles.privateNotice, { backgroundColor: isDark ? '#12243E' : '#EEF4FF', borderColor: colors.border }]}>
-        <Ionicons name="lock-closed-outline" size={17} color={colors.primary} />
-        <AppText variant="caption" style={styles.noticeText}>Link privat. Nu îl distribui altor persoane.</AppText>
-      </View>
+        {phone ? <QuickContact phone={phone} /> : null}
 
-      <View style={[styles.hero, { backgroundColor: status?.color ?? colors.primary }]}>
-        <View style={styles.heroTop}>
-          <View style={styles.heroCopy}>
-            <AppText variant="caption" style={styles.heroEyebrow}>STATUSUL REPARAȚIEI</AppText>
-            <AppText variant="display" style={styles.heroTitle}>{status?.label ?? 'Client înregistrat'}</AppText>
-            <AppText style={styles.heroDescription}>{status?.description ?? 'Fișa de service se pregătește. Revino în curând pentru actualizări.'}</AppText>
+        {repair ? <>
+          <View style={styles.card}>
+            <SectionTitle icon="git-branch-outline" title="Parcursul reparației" description="Etapa curentă și ce urmează în continuare" />
+            {repair.status === 'CANCELLED' ? <View style={styles.cancelled}><Ionicons name="alert-circle-outline" size={22} color={palette.danger} /><AppText style={styles.cancelledText}>Lucrarea a fost anulată. Contactează unitatea service pentru mai multe detalii.</AppText></View> : <VerticalTimeline current={STEP_BY_STATUS[repair.status]} currentLabel={status.label} color={status.color} soft={status.soft} />}
           </View>
-          <View style={styles.heroIcon}>
-            <Ionicons name={status?.icon ?? 'person-add-outline'} size={34} color="#FFFFFF" />
+
+          <View style={styles.card}>
+            <SectionTitle icon="desktop-outline" title="Echipamentul tău" description="Detaliile lucrării curente" />
+            <View style={styles.equipmentBox}><AppText variant="label">{equipment || 'Echipament înregistrat'}</AppText>{repair.reportedIssue ? <AppText style={styles.equipmentIssue}>{repair.reportedIssue}</AppText> : null}</View>
+            <View style={styles.metaGrid}><Meta label="PRIMIT ÎN SERVICE" value={formatDate(repair.receivedAt)} /><Meta label="TERMEN ESTIMAT" value={repair.estimatedAt ? formatDate(repair.estimatedAt) : 'În curs de stabilire'} /><Meta label="FINALIZAT" value={repair.completedAt ? formatDate(repair.completedAt) : '—'} /></View>
           </View>
-        </View>
-        <View style={styles.updatedRow}>
-          <Ionicons name="sync-outline" size={15} color="#DCE8FF" />
-          <AppText variant="caption" style={styles.updatedText}>Actualizat {formatDate(repair?.updatedAt ?? client.updatedAt, true)}</AppText>
-        </View>
-      </View>
+        </> : null}
 
-      <Card style={styles.clientCard}>
-        <View style={[styles.avatar, { backgroundColor: colors.primarySoft }]}>
-          <Ionicons name="person-outline" size={23} color={colors.primary} />
-        </View>
-        <View style={styles.clientCopy}>
-          <AppText variant="caption" muted>CLIENT</AppText>
-          <AppText variant="heading">{client.name}</AppText>
-          {repair ? <AppText variant="caption" muted>Fișa {repair.number}</AppText> : null}
-        </View>
-      </Card>
-
-      {repair ? (
-        <>
-          <Card style={styles.section}>
-            <View style={styles.sectionTitle}>
-              <View style={[styles.sectionIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="hardware-chip-outline" size={21} color={colors.primary} /></View>
-              <View style={styles.sectionCopy}><AppText variant="heading">Echipamentul tău</AppText><AppText variant="caption" muted>Informațiile lucrării curente</AppText></View>
-            </View>
-            <View style={[styles.infoBox, { backgroundColor: colors.surfaceMuted }]}>
-              <AppText variant="label">{equipment || 'Echipament înregistrat'}</AppText>
-              {repair.reportedIssue ? <AppText muted>{repair.reportedIssue}</AppText> : null}
-            </View>
-          </Card>
-
-          <Card style={styles.section}>
-            <View style={styles.sectionTitle}>
-              <View style={[styles.sectionIcon, { backgroundColor: status?.soft }]}><Ionicons name="git-branch-outline" size={21} color={status?.color} /></View>
-              <View style={styles.sectionCopy}><AppText variant="heading">Progresul reparației</AppText><AppText variant="caption" muted>Etapele sunt actualizate de service</AppText></View>
-            </View>
-            {repair.status === 'CANCELLED' ? (
-              <View style={[styles.cancelled, { backgroundColor: isDark ? '#351722' : palette.dangerSoft }]}>
-                <Ionicons name="alert-circle-outline" size={21} color={palette.danger} />
-                <AppText style={styles.cancelledText}>Lucrarea este anulată. Pentru detalii, contactează unitatea service.</AppText>
-              </View>
-            ) : <Timeline current={STEP_BY_STATUS[repair.status]} />}
-          </Card>
-
-          <Card style={styles.datesCard}>
-            <DateItem icon="calendar-outline" label="Primit în service" value={repair.receivedAt} />
-            {repair.estimatedAt ? <DateItem icon="flag-outline" label="Termen estimat" value={repair.estimatedAt} /> : null}
-            {repair.completedAt ? <DateItem icon="checkmark-done-outline" label="Finalizat" value={repair.completedAt} /> : null}
-          </Card>
-        </>
-      ) : null}
-
-      <Button label="Actualizează statusul" icon="refresh-outline" variant="secondary" loading={info.refreshing} onPress={() => void info.reload(true)} />
-      <AppText variant="caption" muted style={styles.footer}>Datele sunt afișate direct din sistemul G-Shop al unității service.</AppText>
-    </Screen>
-  );
+        {phone || email ? <ContactCard propertyName={propertyName} phone={phone} email={email} /> : null}
+        <Pressable accessibilityRole="button" onPress={() => void info.reload(true)} style={({ pressed }) => [styles.refresh, pressed && styles.pressed]}><Ionicons name="refresh-outline" size={19} color={palette.electric} /><AppText variant="label" style={styles.refreshText}>{info.refreshing ? 'Se actualizează…' : 'Actualizează statusul'}</AppText></Pressable>
+        <AppText variant="caption" style={styles.footer}>Date actualizate direct din sistemul G-Shop al unității service.{`\n`}Acest link este privat și destinat exclusiv clientului.</AppText>
+      </Animated.View>
+    </ScrollView>
+  </SafeAreaView>;
 }
 
 function Brand({ propertyName }: { propertyName?: string }) {
-  return <View style={styles.brand}><Image source={require('@/logo/logo.png')} style={styles.logo} /><View style={styles.brandCopy}><AppText variant="title">G-Shop</AppText><AppText variant="caption" muted numberOfLines={1}>{propertyName ?? 'Urmărire reparație'}</AppText></View></View>;
+  return <View style={styles.topbar}><View style={styles.brand}><View style={styles.logoFrame}><View style={styles.logoCrop}><Image source={require('@/logo/logo.png')} resizeMode="cover" style={styles.logo} /></View></View><View style={styles.brandCopy}><AppText variant="heading">G-Shop</AppText><AppText variant="caption" style={styles.muted} numberOfLines={1}>{propertyName ?? 'Urmărire reparație'}</AppText></View></View><View style={styles.secure}><Ionicons name="lock-closed-outline" size={14} color={palette.electric} /><AppText variant="caption" style={styles.secureText}>Link privat</AppText></View></View>;
 }
 
-function Timeline({ current }: { current: number }) {
-  const { colors } = useAppTheme();
+function SectionTitle({ icon, title, description }: { icon: IconName; title: string; description: string }) {
+  return <View style={styles.sectionTitle}><View style={styles.sectionIcon}><Ionicons name={icon} size={21} color={palette.electric} /></View><View style={styles.sectionCopy}><AppText variant="heading">{title}</AppText><AppText variant="caption" style={styles.muted}>{description}</AppText></View></View>;
+}
+
+function VerticalTimeline({ current, currentLabel, color, soft }: { current: number; currentLabel: string; color: string; soft: string }) {
+  const entries = useRef(STEPS.map(() => new Animated.Value(0))).current;
+  const pulse = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    entries.forEach((entry) => entry.setValue(0));
+    const entrance = Animated.stagger(85, entries.map((entry) => Animated.spring(entry, { toValue: 1, damping: 18, stiffness: 180, mass: 0.75, useNativeDriver: true })));
+    const heartbeat = Animated.loop(Animated.sequence([Animated.timing(pulse, { toValue: 1, duration: 850, useNativeDriver: true }), Animated.timing(pulse, { toValue: 0, duration: 850, useNativeDriver: true })]));
+    entrance.start();
+    heartbeat.start();
+    return () => { entrance.stop(); heartbeat.stop(); };
+  }, [current, entries, pulse]);
+  const activeScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.09] });
   return <View style={styles.timeline}>{STEPS.map((step, index) => {
-    const reached = index <= current;
-    return <View key={step} style={styles.step}>
-      <View style={styles.stepRail}>
-        <View style={[styles.stepDot, { backgroundColor: reached ? colors.primary : colors.surfaceMuted, borderColor: reached ? colors.primary : colors.border }]}>{reached ? <Ionicons name="checkmark" size={13} color="#fff" /> : null}</View>
-        {index < STEPS.length - 1 ? <View style={[styles.stepLine, { backgroundColor: index < current ? colors.primary : colors.border }]} /> : null}
-      </View>
-      <AppText variant="caption" style={[styles.stepLabel, { color: reached ? colors.text : colors.textMuted }]}>{step}</AppText>
-    </View>;
+    const done = index < current;
+    const active = index === current;
+    const entryStyle = { opacity: entries[index], transform: [{ translateY: entries[index].interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] };
+    return <Animated.View key={step.title} style={[styles.timelineStep, entryStyle]}><View style={styles.marker}>{active ? <Animated.View style={[styles.dot, { backgroundColor: '#fff', borderColor: color, shadowColor: color, transform: [{ scale: activeScale }] }]}><AppText variant="caption" style={{ color, fontWeight: '900' }}>{index + 1}</AppText></Animated.View> : <View style={[styles.dot, done && styles.dotDone]}>{done ? <Ionicons name="checkmark" size={15} color="#fff" /> : <AppText variant="caption" style={{ color: '#91A0B4', fontWeight: '900' }}>{index + 1}</AppText>}</View>}{index < STEPS.length - 1 ? <View style={[styles.line, done && styles.lineDone, active && { backgroundColor: soft }]} /> : null}</View><View style={[styles.stepContent, active && { backgroundColor: soft, borderColor: `${color}35` }, index > current && styles.future]}><View style={styles.stepTop}><AppText variant="label" style={active ? { color } : undefined}>{step.title}</AppText><View style={[styles.stepBadge, done && styles.doneBadge, active && { backgroundColor: color }]}><AppText variant="caption" style={[styles.stepBadgeText, done && styles.doneBadgeText, active && styles.activeBadgeText]}>{done ? 'Finalizat' : active ? currentLabel : 'Urmează'}</AppText></View></View><AppText variant="caption" style={styles.stepDescription}>{step.description}</AppText></View></Animated.View>;
   })}</View>;
 }
 
-function DateItem({ icon, label, value }: { icon: IconName; label: string; value?: string }) {
-  const { colors } = useAppTheme();
-  return <View style={styles.dateItem}><View style={[styles.dateIcon, { backgroundColor: colors.surfaceMuted }]}><Ionicons name={icon} size={19} color={colors.primary} /></View><View style={styles.dateCopy}><AppText variant="caption" muted>{label}</AppText><AppText variant="label">{formatDate(value)}</AppText></View></View>;
+function Meta({ label, value }: { label: string; value: string }) {
+  return <View style={styles.meta}><AppText variant="caption" style={styles.metaLabel}>{label}</AppText><AppText variant="caption" style={styles.metaValue}>{value}</AppText></View>;
 }
 
+function ContactCard({ propertyName, phone, email }: { propertyName: string; phone: string; email: string }) {
+  const call = () => phone && Linking.openURL(`tel:${phone.replace(/[^\d+]/g, '')}`);
+  const whatsapp = () => {
+    const normalized = normalizeWhatsApp(phone);
+    if (normalized) void Linking.openURL(`https://wa.me/${normalized}?text=${encodeURIComponent('Bună ziua! Vă contactez în legătură cu statusul reparației mele.')}`);
+  };
+  return <View style={styles.contact}><SectionTitle icon="call-outline" title="Ai nevoie de ajutor?" description={`Intră rapid în legătură cu echipa ${propertyName}.`} /><View style={styles.contactActions}>{phone ? <Pressable accessibilityRole="button" onPress={() => void call()} style={({ pressed }) => [styles.callButton, pressed && styles.pressed]}><Ionicons name="call-outline" size={20} color="#fff" /><AppText variant="label" style={styles.callText}>Sună G-Shop acum</AppText></Pressable> : null}{phone ? <Pressable accessibilityRole="button" onPress={whatsapp} style={({ pressed }) => [styles.whatsappButton, pressed && styles.pressed]}><Ionicons name="logo-whatsapp" size={20} color="#129748" /><AppText variant="label" style={styles.whatsappText}>WhatsApp</AppText></Pressable> : null}{email ? <Pressable accessibilityRole="button" onPress={() => void Linking.openURL(`mailto:${email}?subject=${encodeURIComponent('Întrebare despre statusul reparației')}`)} style={({ pressed }) => [styles.emailButton, pressed && styles.pressed]}><Ionicons name="mail-outline" size={19} color="#315170" /><AppText variant="label" style={styles.emailText}>Trimite un email</AppText></Pressable> : null}</View></View>;
+}
+
+function QuickContact({ phone }: { phone: string }) {
+  const tel = phone.replace(/[^\d+]/g, '');
+  const whatsapp = normalizeWhatsApp(phone);
+  return <View style={styles.quickContact}><Pressable accessibilityRole="button" onPress={() => void Linking.openURL(`tel:${tel}`)} style={({ pressed }) => [styles.quickCall, pressed && styles.pressed]}><Ionicons name="call-outline" size={19} color="#fff" /><AppText variant="label" style={styles.callText}>Sună acum</AppText></Pressable><Pressable accessibilityRole="button" onPress={() => void Linking.openURL(`https://wa.me/${whatsapp}?text=${encodeURIComponent('Bună ziua! Vă contactez în legătură cu statusul reparației mele.')}`)} style={({ pressed }) => [styles.quickWhatsApp, pressed && styles.pressed]}><Ionicons name="logo-whatsapp" size={20} color="#fff" /><AppText variant="label" style={styles.callText}>WhatsApp</AppText></Pressable></View>;
+}
+
+function PublicState({ loading = false, title, description, onRetry }: { loading?: boolean; title: string; description: string; onRetry?: () => void }) {
+  return <SafeAreaView style={styles.safe}><StatusBar style="dark" backgroundColor="#F5F7FB" /><View style={styles.statePage}><Brand /><View style={styles.stateCard}><View style={styles.stateIcon}>{loading ? <ActivityIndicator color={palette.electric} /> : <Ionicons name="cloud-offline-outline" size={30} color={palette.electric} />}</View><AppText variant="title" style={styles.center}>{title}</AppText><AppText style={[styles.muted, styles.center]}>{description}</AppText>{onRetry ? <Pressable onPress={onRetry} style={styles.refresh}><Ionicons name="refresh-outline" size={19} color={palette.electric} /><AppText variant="label" style={styles.refreshText}>Încearcă din nou</AppText></Pressable> : null}</View></View></SafeAreaView>;
+}
+
+function initials(name: string) { return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'GS'; }
+function normalizeWhatsApp(value: string) { let digits = value.replace(/\D/g, ''); if (digits.startsWith('00')) digits = digits.slice(2); if (digits.startsWith('0')) digits = `40${digits.slice(1)}`; return digits; }
+
 const styles = StyleSheet.create({
-  page: { width: '100%', maxWidth: 720, gap: spacing.md, paddingHorizontal: spacing.md },
-  brand: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: spacing.md, marginVertical: spacing.sm, maxWidth: '100%' },
-  brandCopy: { flexShrink: 1 },
-  logo: { width: 48, height: 48, borderRadius: 14 },
-  privateNotice: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing.md },
-  noticeText: { flexShrink: 1 },
-  hero: { borderRadius: radius.xl, padding: spacing.xl, gap: spacing.xl, overflow: 'hidden' },
-  heroTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
-  heroCopy: { flex: 1, gap: spacing.sm },
-  heroEyebrow: { color: '#DCE8FF', fontWeight: '800', letterSpacing: 1.1 },
-  heroTitle: { color: '#FFFFFF', fontSize: 28, lineHeight: 34 },
-  heroDescription: { color: '#F2F6FF' },
-  heroIcon: { width: 64, height: 64, borderRadius: 20, backgroundColor: '#FFFFFF20', alignItems: 'center', justifyContent: 'center' },
-  updatedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  updatedText: { color: '#DCE8FF' },
-  clientCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  avatar: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  clientCopy: { flex: 1, gap: 1 },
-  section: { gap: spacing.lg },
-  sectionTitle: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  sectionIcon: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  sectionCopy: { flex: 1 },
-  infoBox: { borderRadius: radius.md, padding: spacing.lg, gap: spacing.sm },
-  timeline: { flexDirection: 'row', alignItems: 'flex-start', paddingTop: spacing.sm },
-  step: { flex: 1, alignItems: 'center' },
-  stepRail: { width: '100%', alignItems: 'center', position: 'relative' },
-  stepDot: { width: 25, height: 25, borderRadius: 13, borderWidth: 2, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
-  stepLine: { position: 'absolute', left: '50%', top: 11, width: '100%', height: 3 },
-  stepLabel: { marginTop: spacing.sm, textAlign: 'center', fontSize: 10, lineHeight: 14 },
-  cancelled: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, borderRadius: radius.md, padding: spacing.lg },
-  cancelledText: { flex: 1 },
-  datesCard: { gap: spacing.md },
-  dateItem: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  dateIcon: { width: 42, height: 42, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
-  dateCopy: { flex: 1 },
-  footer: { textAlign: 'center', paddingHorizontal: spacing.xl, marginTop: spacing.xs },
+  safe: { flex: 1, backgroundColor: '#F5F7FB' }, page: { width: '100%', maxWidth: 640, alignSelf: 'center', padding: spacing.md, paddingBottom: 44 }, content: { gap: spacing.md },
+  topbar: { minHeight: 66, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingHorizontal: spacing.xs, paddingBottom: spacing.md }, brand: { minWidth: 0, flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, brandCopy: { minWidth: 0, flex: 1 }, logoFrame: { width: 48, height: 48, borderRadius: 16, backgroundColor: '#fff', borderWidth: 1, borderColor: '#DDE6F3', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', shadowColor: '#17305A', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 }, logoCrop: { width: 42, height: 42, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }, logo: { width: 42, height: 42, transform: [{ scale: 2.04 }] }, secure: { height: 34, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm, borderRadius: radius.pill, borderWidth: 1, borderColor: '#DCE6F5', backgroundColor: '#fff' }, secureText: { color: '#52617A', fontWeight: '800' }, muted: { color: '#67758D' },
+  summary: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#E3E9F2', borderTopWidth: 4, borderRadius: radius.xl, padding: spacing.xl, shadowColor: '#182E54', shadowOpacity: 0.08, shadowRadius: 24, shadowOffset: { width: 0, height: 12 }, elevation: 4 }, summaryTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }, statusIcon: { width: 56, height: 56, flexShrink: 0, borderRadius: 19, alignItems: 'center', justifyContent: 'center' }, summaryCopy: { minWidth: 0, flex: 1 }, eyebrow: { fontWeight: '900', letterSpacing: 1, marginBottom: spacing.xs }, summaryTitle: { color: '#071534', fontSize: 27, lineHeight: 32, marginBottom: spacing.sm }, summaryDescription: { color: '#67758D', fontSize: 13, lineHeight: 20 }, livePill: { minHeight: 31, alignSelf: 'flex-start', marginTop: spacing.md, borderRadius: radius.pill, paddingHorizontal: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, liveDot: { width: 7, height: 7, borderRadius: 4 }, summaryBottom: { marginTop: spacing.lg, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: '#E3E9F2', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm }, clientMini: { minWidth: 0, flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, avatar: { width: 39, height: 39, borderRadius: 14, backgroundColor: palette.electric, alignItems: 'center', justifyContent: 'center' }, avatarText: { color: '#fff', fontWeight: '900' }, clientCopy: { minWidth: 0, flex: 1 }, updated: { alignItems: 'flex-end' }, updatedTitle: { color: '#071534', fontWeight: '800' },
+  card: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#E3E9F2', borderRadius: radius.xl, padding: spacing.xl, shadowColor: '#182E54', shadowOpacity: 0.06, shadowRadius: 20, shadowOffset: { width: 0, height: 10 }, elevation: 3 }, sectionTitle: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg }, sectionIcon: { width: 44, height: 44, borderRadius: 15, backgroundColor: '#EDF4FF', alignItems: 'center', justifyContent: 'center' }, sectionCopy: { minWidth: 0, flex: 1 },
+  timeline: {}, timelineStep: { minHeight: 92, flexDirection: 'row', gap: spacing.sm }, marker: { width: 40, alignItems: 'center' }, dot: { width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: '#E3E9F2', backgroundColor: '#F3F6FA', alignItems: 'center', justifyContent: 'center', zIndex: 2, shadowOpacity: 0.18, shadowRadius: 8 }, dotDone: { backgroundColor: palette.success, borderColor: palette.success }, line: { position: 'absolute', top: 30, bottom: -2, width: 2, backgroundColor: '#E3E9F2' }, lineDone: { backgroundColor: palette.success }, stepContent: { minWidth: 0, flex: 1, marginBottom: spacing.sm, padding: spacing.sm, paddingTop: spacing.xs, borderWidth: 1, borderColor: 'transparent', borderRadius: radius.lg }, future: { opacity: 0.62 }, stepTop: { minHeight: 27, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm }, stepBadge: { minHeight: 25, borderRadius: radius.pill, paddingHorizontal: spacing.sm, backgroundColor: '#F1F4F8', alignItems: 'center', justifyContent: 'center' }, stepBadgeText: { color: '#8694A8', fontSize: 9, fontWeight: '900', textTransform: 'uppercase' }, doneBadge: { backgroundColor: '#EAF9EF' }, doneBadgeText: { color: palette.success }, activeBadgeText: { color: '#fff' }, stepDescription: { color: '#67758D', lineHeight: 17, marginTop: spacing.xs }, cancelled: { flexDirection: 'row', gap: spacing.sm, borderRadius: radius.md, padding: spacing.md, backgroundColor: '#FFF0F2' }, cancelledText: { minWidth: 0, flex: 1, color: '#071534' },
+  equipmentBox: { borderWidth: 1, borderColor: '#E3E9F2', backgroundColor: '#F8FAFD', borderRadius: radius.lg, padding: spacing.lg, gap: spacing.sm }, equipmentIssue: { color: '#67758D', lineHeight: 20 }, metaGrid: { marginTop: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, meta: { minWidth: 125, flex: 1, minHeight: 66, borderRadius: radius.md, backgroundColor: '#F5F7FB', padding: spacing.sm }, metaLabel: { color: '#7B8799', fontSize: 9, fontWeight: '800', marginBottom: spacing.xs }, metaValue: { color: '#071534', fontWeight: '900' },
+  contact: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#DCE7F7', borderRadius: radius.xl, padding: spacing.xl, shadowColor: '#182E54', shadowOpacity: 0.06, shadowRadius: 20, shadowOffset: { width: 0, height: 10 }, elevation: 3 }, contactActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, callButton: { minHeight: 52, minWidth: 190, flexGrow: 1.35, borderRadius: radius.lg, backgroundColor: palette.electric, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.md }, callText: { color: '#fff' }, whatsappButton: { minHeight: 52, minWidth: 130, flexGrow: 1, borderRadius: radius.lg, backgroundColor: '#EAFBF1', borderWidth: 1, borderColor: '#CCEFDA', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.md }, whatsappText: { color: '#129748' }, emailButton: { minHeight: 50, width: '100%', borderRadius: radius.lg, backgroundColor: '#F0F4FA', borderWidth: 1, borderColor: '#E3E9F2', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm }, emailText: { color: '#315170' },
+  quickContact: { padding: 5, borderWidth: 1, borderColor: '#E3E9F2', borderRadius: 20, backgroundColor: '#fff', flexDirection: 'row', gap: spacing.sm, shadowColor: '#182E54', shadowOpacity: 0.06, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 2 }, quickCall: { minWidth: 0, flex: 1, minHeight: 50, borderRadius: radius.lg, backgroundColor: palette.electric, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm }, quickWhatsApp: { minWidth: 0, flex: 1, minHeight: 50, borderRadius: radius.lg, backgroundColor: '#18B75B', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  refresh: { minHeight: 51, borderRadius: radius.lg, borderWidth: 1, borderColor: '#D8E5FA', backgroundColor: '#EEF4FF', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.md }, refreshText: { color: palette.electric }, pressed: { opacity: 0.78, transform: [{ scale: 0.985 }] }, footer: { color: '#8794A7', textAlign: 'center', lineHeight: 16, paddingHorizontal: spacing.lg, marginTop: spacing.xs },
+  statePage: { flex: 1, width: '100%', maxWidth: 640, alignSelf: 'center', padding: spacing.md }, stateCard: { minHeight: 330, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E3E9F2', borderRadius: radius.xl, padding: spacing.xxl, alignItems: 'center', justifyContent: 'center', gap: spacing.lg }, stateIcon: { width: 68, height: 68, borderRadius: 23, backgroundColor: '#EDF4FF', alignItems: 'center', justifyContent: 'center' }, center: { textAlign: 'center' },
 });

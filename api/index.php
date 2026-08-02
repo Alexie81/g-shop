@@ -1106,7 +1106,7 @@ try {
         $token=$params['token'];
         $stmt=db()->prepare(
             'SELECT '.uuid_sql('q.id').' id,'.uuid_sql('q.client_id').' client_id,'.uuid_sql('q.property_id').' property_id,' .
-            'c.first_name,c.last_name,c.status client_status,c.updated_at client_updated_at,p.name property_name ' .
+            'c.first_name,c.last_name,c.status client_status,c.updated_at client_updated_at,p.name property_name,p.domain property_domain ' .
             'FROM client_qr q JOIN clients c ON c.id=q.client_id JOIN properties p ON p.id=q.property_id ' .
             'WHERE q.token=? AND q.is_active=1 AND c.is_active=1 LIMIT 1'
         );
@@ -1124,9 +1124,17 @@ try {
         );
         $sheetStmt->execute([uuid_bin($qr['client_id']),uuid_bin($qr['property_id'])]);
         $sheet=$sheetStmt->fetch();
+        $company=company_details_record($qr['property_id']);
+        $contactPhone=$company['phone'];$contactEmail=$company['email'];
+        if(!$contactPhone&&strtolower((string)$qr['property_domain'])==='reparatiicalculatoare-bucuresti.ro')$contactPhone='+40735046534';
+        if(!$contactEmail&&strtolower((string)$qr['property_domain'])==='reparatiicalculatoare-bucuresti.ro')$contactEmail='contact@reparatiicalculatoare-bucuresti.ro';
 
         respond([
             'propertyName'=>$qr['property_name'],
+            'contact'=>[
+                'phone'=>$contactPhone?:null,
+                'email'=>$contactEmail?:null,
+            ],
             'client'=>[
                 'name'=>trim($qr['first_name'].' '.$qr['last_name']),
                 'firstName'=>$qr['first_name'],
