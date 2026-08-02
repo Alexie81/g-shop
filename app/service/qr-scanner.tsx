@@ -15,7 +15,7 @@ import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Animated, Easing, Platform, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 export default function QRScannerScreen() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -26,6 +26,7 @@ export default function QRScannerScreen() {
   const { showToast } = useToast();
   const { width } = useWindowDimensions();
   const mobile = width < 620;
+  const [heroHeight, setHeroHeight] = useState(132);
   const scanProgress = useRef(new Animated.Value(0)).current;
   const cameraWidth = Math.min(width - (mobile ? 32 : 64), 720);
   const guideSize = cameraWidth * (mobile ? 0.74 : 0.56);
@@ -85,33 +86,42 @@ export default function QRScannerScreen() {
 
   const scanTranslate = scanProgress.interpolate({ inputRange: [0, 1], outputRange: [10, Math.max(12, guideSize - 14)] });
 
-  return <Screen header={<AppHeader title="Scanare" />} style={styles.screenContent}>
-    <View style={styles.page}>
-      <LinearGradient colors={isDark ? ['#0B3280', '#075CFF'] : ['#123D9D', '#1477FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, mobile && styles.heroMobile]}>
-        <View style={styles.heroGlowLarge} />
-        <View style={styles.heroGlowSmall} />
-        <View style={styles.heroIcon}><Ionicons name="qr-code-outline" size={30} color="#fff" /></View>
-        <View style={styles.heroCopy}><View style={styles.eyebrow}><View style={styles.liveDot} /><AppText variant="caption" style={styles.eyebrowText}>CAMERĂ PREGĂTITĂ</AppText></View><AppText variant="title" style={styles.heroTitle}>Scanează codul clientului</AppText><AppText variant="caption" style={styles.heroSubtitle}>Încadrează codul în chenar. Profilul clientului se deschide automat.</AppText></View>
-      </LinearGradient>
-
-      <View style={[styles.cameraShell, { backgroundColor: colors.surface, borderColor: colors.border, shadowColor: colors.shadow }]}>
-        <View style={[styles.cameraWrap, { aspectRatio: mobile ? 0.78 : 1.48 }]}>
-          <CameraView style={StyleSheet.absoluteFill} facing="back" barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onBarcodeScanned={scanned ? undefined : (result) => void handleScan(result)}>
-            <LinearGradient colors={['rgba(2,8,20,0.28)', 'rgba(2,8,20,0.03)', 'rgba(2,8,20,0.64)']} style={styles.cameraOverlay}>
-              <View style={styles.cameraStatus}><View style={[styles.statusDot, busy && styles.statusDotBusy]} /><AppText variant="caption" style={styles.statusText}>{busy ? 'Se validează codul…' : 'Scanare activă'}</AppText></View>
-              <View style={[styles.guide, { width: mobile ? '74%' : '56%' }]}>
-                <Corner position="tl" /><Corner position="tr" /><Corner position="bl" /><Corner position="br" />
-                <View style={styles.guideCenter}><Ionicons name="qr-code-outline" size={30} color="rgba(255,255,255,0.48)" /></View>
-                {!scanned ? <Animated.View style={[styles.scanLine, { transform: [{ translateY: scanTranslate }] }]}><View style={styles.scanLineGlow} /></Animated.View> : null}
-              </View>
-              <View style={styles.cameraLabel}><Ionicons name={busy ? 'sync-outline' : 'scan-outline'} size={20} color="#fff" /><View><AppText variant="label" style={styles.cameraLabelTitle}>{busy ? 'Verificăm codul' : 'Ține telefonul nemișcat'}</AppText><AppText variant="caption" style={styles.cameraLabelCaption}>{busy ? 'Durează doar o clipă' : 'Detectarea este automată'}</AppText></View></View>
-            </LinearGradient>
-          </CameraView>
-        </View>
+  return <Screen header={<AppHeader title="Scanare" />} scroll={false} bottomInset={false} style={styles.screenContent}>
+    <View style={styles.root}>
+      <View style={[styles.heroLayer, mobile && styles.heroLayerMobile]}>
+        <LinearGradient onLayout={(event) => { const nextHeight = event.nativeEvent.layout.height; if (Math.abs(nextHeight - heroHeight) > 1) setHeroHeight(nextHeight); }} colors={isDark ? ['#0B3280', '#075CFF'] : ['#123D9D', '#1477FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, mobile && styles.heroMobile]}>
+          <View style={styles.heroGlowLarge} />
+          <View style={styles.heroGlowSmall} />
+          <View style={styles.heroIcon}><Ionicons name="qr-code-outline" size={30} color="#fff" /></View>
+          <View style={styles.heroCopy}><View style={styles.eyebrow}><View style={styles.liveDot} /><AppText variant="caption" style={styles.eyebrowText}>CAMERĂ PREGĂTITĂ</AppText></View><AppText variant="title" style={styles.heroTitle}>Scanează codul clientului</AppText><AppText variant="caption" style={styles.heroSubtitle}>Încadrează codul în chenar. Profilul clientului se deschide automat.</AppText></View>
+        </LinearGradient>
       </View>
 
-      <View style={[styles.tip, { backgroundColor: colors.surface, borderColor: colors.border }]}><View style={[styles.tipIcon, { backgroundColor: isDark ? '#123A2C' : palette.successSoft }]}><Ionicons name="shield-checkmark-outline" size={22} color={palette.success} /></View><View style={styles.tipCopy}><AppText variant="label">Scanare sigură</AppText><AppText variant="caption" muted>Codul este validat online și deschide direct clientul asociat.</AppText></View></View>
-      {scanned && !busy ? <Button variant="outline" label="Scanează din nou" icon="refresh" onPress={() => setScanned(false)} style={styles.retryButton} /> : null}
+      <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, { paddingTop: heroHeight + spacing.xs }]} showsVerticalScrollIndicator={false}>
+        <View style={[styles.sheet, mobile && styles.sheetMobile, { backgroundColor: colors.background, shadowColor: colors.shadow }]}>
+          <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+          <View style={styles.page}>
+            <View style={[styles.cameraShell, { backgroundColor: colors.surface, borderColor: colors.border, shadowColor: colors.shadow }]}>
+              <View style={[styles.cameraWrap, { aspectRatio: mobile ? 0.78 : 1.48 }]}>
+                <CameraView style={StyleSheet.absoluteFill} facing="back" barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onBarcodeScanned={scanned ? undefined : (result) => void handleScan(result)}>
+                  <LinearGradient colors={['rgba(2,8,20,0.28)', 'rgba(2,8,20,0.03)', 'rgba(2,8,20,0.64)']} style={styles.cameraOverlay}>
+                    <View style={styles.cameraStatus}><View style={[styles.statusDot, busy && styles.statusDotBusy]} /><AppText variant="caption" style={styles.statusText}>{busy ? 'Se validează codul…' : 'Scanare activă'}</AppText></View>
+                    <View style={[styles.guide, { width: mobile ? '74%' : '56%' }]}>
+                      <Corner position="tl" /><Corner position="tr" /><Corner position="bl" /><Corner position="br" />
+                      <View style={styles.guideCenter}><Ionicons name="qr-code-outline" size={30} color="rgba(255,255,255,0.48)" /></View>
+                      {!scanned ? <Animated.View style={[styles.scanLine, { transform: [{ translateY: scanTranslate }] }]}><View style={styles.scanLineGlow} /></Animated.View> : null}
+                    </View>
+                    <View style={styles.cameraLabel}><Ionicons name={busy ? 'sync-outline' : 'scan-outline'} size={20} color="#fff" /><View><AppText variant="label" style={styles.cameraLabelTitle}>{busy ? 'Verificăm codul' : 'Ține telefonul nemișcat'}</AppText><AppText variant="caption" style={styles.cameraLabelCaption}>{busy ? 'Durează doar o clipă' : 'Detectarea este automată'}</AppText></View></View>
+                  </LinearGradient>
+                </CameraView>
+              </View>
+            </View>
+
+            <View style={[styles.tip, { backgroundColor: colors.surface, borderColor: colors.border }]}><View style={[styles.tipIcon, { backgroundColor: isDark ? '#123A2C' : palette.successSoft }]}><Ionicons name="shield-checkmark-outline" size={22} color={palette.success} /></View><View style={styles.tipCopy}><AppText variant="label">Scanare sigură</AppText><AppText variant="caption" muted>Codul este validat online și deschide direct clientul asociat.</AppText></View></View>
+            {scanned && !busy ? <Button variant="outline" label="Scanează din nou" icon="refresh" onPress={() => setScanned(false)} style={styles.retryButton} /> : null}
+          </View>
+        </View>
+      </ScrollView>
     </View>
   </Screen>;
 }
@@ -124,9 +134,17 @@ function Corner({ position }: { position: 'tl' | 'tr' | 'bl' | 'br' }) {
 }
 
 const styles = StyleSheet.create({
-  screenContent: { paddingTop: spacing.lg },
+  screenContent: { flex: 1, padding: 0, paddingBottom: 0 },
+  root: { flex: 1, overflow: 'hidden' },
+  heroLayer: { position: 'absolute', top: spacing.lg, left: spacing.lg, right: spacing.lg, alignItems: 'center' },
+  heroLayerMobile: { top: spacing.md, left: spacing.md, right: spacing.md },
+  scroll: { flex: 1, zIndex: 1 },
+  scrollContent: { flexGrow: 1 },
+  sheet: { minHeight: 720, borderTopLeftRadius: 32, borderTopRightRadius: 32, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: 112, shadowOpacity: 0.18, shadowRadius: 24, shadowOffset: { width: 0, height: -8 }, elevation: 12 },
+  sheetMobile: { paddingHorizontal: spacing.md },
+  sheetHandle: { width: 44, height: 5, borderRadius: radius.pill, alignSelf: 'center', marginBottom: spacing.lg },
   page: { width: '100%', maxWidth: 720, alignSelf: 'center', gap: spacing.lg },
-  hero: { minHeight: 132, borderRadius: radius.xl, padding: spacing.xl, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
+  hero: { width: '100%', maxWidth: 720, minHeight: 132, borderRadius: radius.xl, padding: spacing.xl, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
   heroMobile: { minHeight: 124, padding: spacing.lg },
   heroGlowLarge: { position: 'absolute', width: 220, height: 220, borderRadius: 110, right: -62, top: -116, backgroundColor: '#FFFFFF12' },
   heroGlowSmall: { position: 'absolute', width: 92, height: 92, borderRadius: 46, right: 58, bottom: -54, backgroundColor: '#FFFFFF0C' },
