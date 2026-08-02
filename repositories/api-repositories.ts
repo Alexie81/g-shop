@@ -1,5 +1,5 @@
 import { apiRequest } from '@/services/api';
-import { AuthRepository, AuditRepository, ClientRepository, CollaboratorRepository, DashboardRepository, PropertyRepository, ServiceSheetRepository, UserRepository, WhatsAppMessageRepository } from '@/repositories/interfaces';
+import { AppUpdateRepository, AuthRepository, AuditRepository, ClientRepository, CollaboratorRepository, CompanyDetailsRepository, DashboardRepository, PropertyRepository, ServiceSheetRepository, UserRepository, WhatsAppMessageRepository } from '@/repositories/interfaces';
 
 export const authRepository: AuthRepository = {
   login: (username, password, device) => apiRequest('/auth/login', { method: 'POST', authenticated: false, body: JSON.stringify({ username, password, device }) }),
@@ -9,7 +9,17 @@ export const authRepository: AuthRepository = {
   updateProfile: (firstName, lastName) => apiRequest('/auth/profile', { method: 'PUT', body: JSON.stringify({ firstName, lastName }) }),
 };
 
-export const propertyRepository: PropertyRepository = { list: () => apiRequest('/properties') };
+export const propertyRepository: PropertyRepository = {
+  list: () => apiRequest('/properties'),
+  updateName: (id, name) => apiRequest(`/properties/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
+};
+export const companyDetailsRepository: CompanyDetailsRepository = {
+  get: (propertyId) => apiRequest(`/company-details?propertyId=${propertyId}`),
+  update: (propertyId, input) => apiRequest(`/company-details/${propertyId}`, { method: 'PUT', body: JSON.stringify(input) }),
+  saveStamp: (propertyId, stamp) => apiRequest(`/company-details/${propertyId}/stamp`, { method: 'POST', body: JSON.stringify({ stamp }) }),
+  removeStamp: (propertyId) => apiRequest(`/company-details/${propertyId}/stamp`, { method: 'DELETE' }),
+};
+export const appUpdateRepository: AppUpdateRepository = { get: () => apiRequest('/app-update', { authenticated: false }) };
 export const dashboardRepository: DashboardRepository = { get: (propertyId) => apiRequest(`/dashboard?propertyId=${propertyId}`) };
 export const clientRepository: ClientRepository = {
   list: (propertyId, query = '', qrStatus = '') => apiRequest(`/clients?propertyId=${propertyId}&query=${encodeURIComponent(query)}&qrStatus=${encodeURIComponent(qrStatus)}`),
@@ -51,7 +61,10 @@ export const userRepository: UserRepository = {
   resetPassword: (id, password) => apiRequest(`/users/${id}/password`, { method: 'PUT', body: JSON.stringify({ password }) }),
   updatePermissions: (id, permissions, propertyIds) => apiRequest(`/users/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ permissions, ...(propertyIds ? { propertyIds } : {}) }) }),
 };
-export const auditRepository: AuditRepository = { list: (propertyId) => apiRequest(`/audit-logs${propertyId ? `?propertyId=${propertyId}` : ''}`) };
+export const auditRepository: AuditRepository = {
+  list: (propertyId) => apiRequest(`/audit-logs${propertyId ? `?propertyId=${propertyId}` : ''}`),
+  remove: (propertyId, ids) => apiRequest(`/audit-logs?propertyId=${propertyId}`, { method: 'DELETE', body: JSON.stringify({ ids }) }),
+};
 export const whatsAppMessageRepository: WhatsAppMessageRepository = {
   list: (propertyId) => apiRequest(`/whatsapp-messages?propertyId=${propertyId}`),
   create: (input) => apiRequest('/whatsapp-messages', { method: 'POST', body: JSON.stringify(input) }),

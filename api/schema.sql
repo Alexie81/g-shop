@@ -43,6 +43,32 @@ CREATE TABLE IF NOT EXISTS user_properties (
   CONSTRAINT fk_up_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS property_company_details (
+  property_id BINARY(16) PRIMARY KEY,
+  legal_name VARCHAR(160) NULL,
+  tax_id VARCHAR(24) NULL,
+  trade_register_number VARCHAR(40) NULL,
+  vat_payer TINYINT(1) NOT NULL DEFAULT 0,
+  address VARCHAR(220) NULL,
+  city VARCHAR(80) NULL,
+  county VARCHAR(80) NULL,
+  postal_code VARCHAR(16) NULL,
+  country VARCHAR(60) NOT NULL DEFAULT 'România',
+  phone VARCHAR(30) NULL,
+  email VARCHAR(140) NULL,
+  website VARCHAR(160) NULL,
+  bank_name VARCHAR(100) NULL,
+  iban VARCHAR(40) NULL,
+  representative_name VARCHAR(120) NULL,
+  representative_role VARCHAR(80) NULL,
+  stamp_path VARCHAR(255) NULL,
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  created_by BINARY(16) NULL,
+  updated_by BINARY(16) NULL,
+  CONSTRAINT fk_company_details_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS refresh_sessions (
   id BINARY(16) PRIMARY KEY,
   user_id BINARY(16) NOT NULL,

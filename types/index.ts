@@ -52,6 +52,38 @@ export interface Property extends BaseEntity {
   enabledModules: string[];
 }
 
+export interface CompanyDetails {
+  propertyId: UUID;
+  legalName: string;
+  taxId: string;
+  tradeRegisterNumber: string;
+  vatPayer: boolean;
+  address: string;
+  city: string;
+  county: string;
+  postalCode: string;
+  country: string;
+  phone: string;
+  email: string;
+  website: string;
+  bankName: string;
+  iban: string;
+  representativeName: string;
+  representativeRole: string;
+  stampUrl?: string | null;
+  createdAt?: ISODate | null;
+  updatedAt?: ISODate | null;
+}
+
+export interface AppUpdateInfo {
+  platform: 'android';
+  latestVersion: string;
+  downloadUrl: string;
+  releaseNotes: string[];
+  publishedAt?: string;
+  mandatory: boolean;
+}
+
 export interface User extends BaseEntity {
   username: string;
   firstName: string;

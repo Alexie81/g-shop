@@ -236,6 +236,33 @@ function migrate_client_finance(PDO $pdo): array {
     }
     return $changes;
 }
+function resequence_whatsapp_messages(PDO $pdo, string $propertyId, string $userId, ?string $movingId = null, ?int $targetPosition = null): int {
+    $stmt = $pdo->prepare('SELECT '.uuid_sql('id').' id,sort_order FROM whatsapp_messages WHERE property_id=? AND user_id=? AND is_active=1 ORDER BY sort_order,title,created_at,id');
+    $stmt->execute([uuid_bin($propertyId),uuid_bin($userId)]);
+    $rows = $stmt->fetchAll();
+    if ($movingId !== null) {
+        $moving = null;
+        $remaining = [];
+        foreach ($rows as $row) {
+            if ($row['id'] === $movingId) $moving = $row;
+            else $remaining[] = $row;
+        }
+        if ($moving !== null) {
+            $position = max(1,min(count($remaining)+1,$targetPosition ?? count($remaining)+1));
+            array_splice($remaining,$position-1,0,[$moving]);
+            $rows = $remaining;
+        }
+    }
+    $update = $pdo->prepare('UPDATE whatsapp_messages SET sort_order=? WHERE id=?');
+    $changed = 0;
+    foreach ($rows as $index => $row) {
+        $position = $index + 1;
+        if ((int)$row['sort_order'] === $position) continue;
+        $update->execute([$position,uuid_bin($row['id'])]);
+        $changed++;
+    }
+    return $changed;
+}
 function migrate_whatsapp_messages(PDO $pdo): array {
     $lockName = 'gshop_whatsapp_messages_v1';
     $lock = $pdo->prepare('SELECT GET_LOCK(?,10)');
@@ -265,15 +292,19 @@ function migrate_whatsapp_messages(PDO $pdo): array {
 
             $owners = $pdo->query("SELECT " . uuid_sql('up.property_id') . " property_id," . uuid_sql('up.user_id') . " user_id FROM user_properties up JOIN properties p ON p.id=up.property_id JOIN users u ON u.id=up.user_id WHERE p.type='SERVICE' AND p.is_active=1 AND u.is_active=1")->fetchAll();
             $defaults = [
-                ['Actualizare reparație', 'Bună ziua, {prenume}! Vă contactăm din partea {proprietate} cu o actualizare privind reparația dumneavoastră.', 10],
-                ['Reparație finalizată', 'Bună ziua, {prenume}! Reparația dumneavoastră este finalizată și poate fi ridicată. Vă mulțumim, {proprietate}!', 20],
-                ['Link status reparație', 'Bună ziua, {prenume}! Puteți urmări statusul reparației aici: {link_status}', 30],
+                ['Actualizare reparație', 'Bună ziua, {prenume}! Vă contactăm din partea {proprietate} cu o actualizare privind reparația dumneavoastră.', 1],
+                ['Reparație finalizată', 'Bună ziua, {prenume}! Reparația dumneavoastră este finalizată și poate fi ridicată. Vă mulțumim, {proprietate}!', 2],
+                ['Link status reparație', 'Bună ziua, {prenume}! Puteți urmări statusul reparației aici: {link_status}', 3],
             ];
             $insert = $pdo->prepare('INSERT INTO whatsapp_messages (id,property_id,user_id,title,message,sort_order,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,1,?,?,?,?)');
             $now = now_utc();
             foreach ($owners as $owner) foreach ($defaults as $default) $insert->execute([uuid_bin(uuid_v4()),uuid_bin($owner['property_id']),uuid_bin($owner['user_id']),$default[0],$default[1],$default[2],$now,$now,uuid_bin($owner['user_id']),uuid_bin($owner['user_id'])]);
             if ($owners) $changes[] = 'whatsapp_messages.defaults';
         }
+        $owners = $pdo->query("SELECT DISTINCT " . uuid_sql('property_id') . " property_id," . uuid_sql('user_id') . " user_id FROM whatsapp_messages WHERE is_active=1")->fetchAll();
+        $normalized = 0;
+        foreach ($owners as $owner) $normalized += resequence_whatsapp_messages($pdo,$owner['property_id'],$owner['user_id']);
+        if ($normalized > 0) $changes[] = 'whatsapp_messages.order';
     } finally {
         $release = $pdo->prepare('SELECT RELEASE_LOCK(?)');
         $release->execute([$lockName]);
@@ -290,6 +321,59 @@ function validated_whatsapp_message_text(mixed $value, string $label, int $minim
 function whatsapp_message_record(string $id): array {
     $stmt=db()->prepare('SELECT '.uuid_sql('id').' id,'.uuid_sql('property_id').' property_id,'.uuid_sql('user_id').' user_id,title,message,sort_order,is_active,created_at,updated_at,'.uuid_sql('created_by').' created_by,'.uuid_sql('updated_by').' updated_by FROM whatsapp_messages WHERE id=? LIMIT 1');
     $stmt->execute([uuid_bin($id)]);$row=$stmt->fetch();if(!$row)fail('Mesajul WhatsApp nu există.',404);$item=entity_base($row);$item['sortOrder']=(int)$item['sortOrder'];return$item;
+}
+function property_record(string $id): array {
+    $stmt=db()->prepare('SELECT '.uuid_sql('id').' id,name,domain,type,enabled_modules,is_active,created_at,updated_at,'.uuid_sql('created_by').' created_by,'.uuid_sql('updated_by').' updated_by FROM properties WHERE id=? AND is_active=1 LIMIT 1');
+    $stmt->execute([uuid_bin($id)]);$row=$stmt->fetch();if(!$row)fail('Proprietatea nu există.',404);$item=entity_base($row);$item['enabledModules']=json_decode((string)$row['enabled_modules'],true)?:[];return$item;
+}
+function ensure_company_details_table(PDO $pdo): void {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS property_company_details (
+        property_id BINARY(16) PRIMARY KEY,
+        legal_name VARCHAR(160) NULL,
+        tax_id VARCHAR(24) NULL,
+        trade_register_number VARCHAR(40) NULL,
+        vat_payer TINYINT(1) NOT NULL DEFAULT 0,
+        address VARCHAR(220) NULL,
+        city VARCHAR(80) NULL,
+        county VARCHAR(80) NULL,
+        postal_code VARCHAR(16) NULL,
+        country VARCHAR(60) NOT NULL DEFAULT 'România',
+        phone VARCHAR(30) NULL,
+        email VARCHAR(140) NULL,
+        website VARCHAR(160) NULL,
+        bank_name VARCHAR(100) NULL,
+        iban VARCHAR(40) NULL,
+        representative_name VARCHAR(120) NULL,
+        representative_role VARCHAR(80) NULL,
+        stamp_path VARCHAR(255) NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        created_by BINARY(16) NULL,
+        updated_by BINARY(16) NULL,
+        CONSTRAINT fk_company_details_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+}
+function company_detail_text(mixed $value, string $label, int $maximum, bool $required = false): ?string {
+    if ($value === null || $value === '') {
+        if ($required) fail($label . ' este obligatoriu.', 422);
+        return null;
+    }
+    if (!is_string($value)) fail($label . ' nu este valid.', 422);
+    $text = preg_replace('/\s+/u', ' ', trim($value));
+    $length = $text === null ? false : (function_exists('mb_strlen') ? mb_strlen($text, 'UTF-8') : strlen($text));
+    if ($text === null || $length === false || ($required && $length < 2) || $length > $maximum || preg_match('/[\x00-\x1F\x7F]/u', $text)) fail($label . ' nu este valid.', 422);
+    return $text === '' ? null : $text;
+}
+function company_details_record(string $propertyId): array {
+    ensure_company_details_table(db());
+    $stmt=db()->prepare('SELECT '.uuid_sql('property_id').' property_id,legal_name,tax_id,trade_register_number,vat_payer,address,city,county,postal_code,country,phone,email,website,bank_name,iban,representative_name,representative_role,stamp_path,created_at,updated_at,'.uuid_sql('created_by').' created_by,'.uuid_sql('updated_by').' updated_by FROM property_company_details WHERE property_id=? LIMIT 1');
+    $stmt->execute([uuid_bin($propertyId)]);$row=$stmt->fetch();
+    if(!$row)return['propertyId'=>$propertyId,'legalName'=>'','taxId'=>'','tradeRegisterNumber'=>'','vatPayer'=>false,'address'=>'','city'=>'','county'=>'','postalCode'=>'','country'=>'România','phone'=>'','email'=>'','website'=>'','bankName'=>'','iban'=>'','representativeName'=>'','representativeRole'=>'','stampUrl'=>null,'createdAt'=>null,'updatedAt'=>null,'createdBy'=>null,'updatedBy'=>null];
+    $item=entity_base($row);$item['vatPayer']=(bool)$item['vatPayer'];foreach(['legalName','taxId','tradeRegisterNumber','address','city','county','postalCode','country','phone','email','website','bankName','iban','representativeName','representativeRole']as$key)$item[$key]=(string)($item[$key]??'');$item['stampUrl']=$item['stampPath']?public_base_url().'/'.ltrim((string)$item['stampPath'],'/').'?v='.rawurlencode((string)$item['updatedAt']):null;unset($item['stampPath']);return$item;
+}
+function company_details_snapshot(array $details): array {
+    unset($details['stampUrl'],$details['createdAt'],$details['updatedAt'],$details['createdBy'],$details['updatedBy']);
+    return $details;
 }
 function client_select(): string {
     return 'SELECT ' . uuid_sql('c.id') . ' id,' . uuid_sql('c.property_id') . ' property_id,c.first_name,c.last_name,c.phone,c.secondary_phone,c.email,c.address,c.city,c.county,c.postal_code,c.notes,c.status,' . uuid_sql('c.collaborator_id') . ' collaborator_id,c.commission_type,c.commission_value,c.is_active,c.created_at,c.updated_at,' . uuid_sql('c.created_by') . ' created_by,' . uuid_sql('c.updated_by') . ' updated_by,(SELECT COUNT(*) FROM service_sheets ss WHERE ss.client_id=c.id AND ss.is_active=1) service_sheets_count,c.updated_at last_activity_at,' . uuid_sql('q.id') . ' qr_id,' . uuid_sql('q.token') . ' qr_token,q.status qr_status,q.generated_at qr_generated_at,q.sent_at qr_sent_at,q.opened_at qr_opened_at,q.used_at qr_used_at,q.expires_at qr_expires_at,q.invalidated_at qr_invalidated_at,' . uuid_sql('q.generated_by') . ' qr_generated_by FROM clients c LEFT JOIN client_qr q ON q.client_id=c.id AND q.is_active=1';
@@ -642,6 +726,10 @@ $params = [];
 
 try {
     if ($method === 'GET' && $path === '/') respond(['name' => 'G-Shop API', 'status' => 'online', 'version' => '1.0.0', 'time' => gmdate('c')]);
+    if ($method === 'GET' && $path === '/app-update') {
+        $notes = array_values(array_filter(array_map('trim', explode('|', env_value('APP_ANDROID_RELEASE_NOTES', 'Prima versiune stabilă G-Shop')))));
+        respond(['platform'=>'android','latestVersion'=>env_value('APP_ANDROID_VERSION','1.0.0'),'downloadUrl'=>env_value('APP_ANDROID_DOWNLOAD_URL',''),'releaseNotes'=>$notes,'publishedAt'=>env_value('APP_ANDROID_PUBLISHED_AT',''),'mandatory'=>env_value('APP_ANDROID_MANDATORY','0')==='1']);
+    }
 
     if ($method === 'POST' && $path === '/auth/login') {
         $body = json_body(); $username = trim((string)($body['username'] ?? '')); $password = (string)($body['password'] ?? '');
@@ -705,6 +793,42 @@ try {
         $args=[]; if ($user['role'] !== 'ADMIN') { $sql .= ' JOIN user_properties up ON up.property_id=p.id WHERE up.user_id=?'; $args[] = uuid_bin($user['id']); } else $sql .= ' WHERE 1=1';
         $sql .= ' AND p.is_active=1 ORDER BY p.type,p.name'; $stmt=db()->prepare($sql);$stmt->execute($args);$rows=[];foreach($stmt->fetchAll() as $row){$item=entity_base($row);$item['enabledModules']=json_decode((string)$row['enabled_modules'],true)?:[];unset($item['enabledModules'][0]);$item['enabledModules']=json_decode((string)$row['enabled_modules'],true)?:[];$rows[]=$item;}respond($rows);
     }
+    if ($method === 'PUT' && path_match('/properties/{id}',$path,$params)) {
+        $user=require_permission('settings.manage');if($user['role']!=='ADMIN')fail('Doar administratorul poate modifica numele proprietății.',403);
+        $propertyId=validated_uuid($params['id'],'Proprietatea');ensure_property($propertyId,$user);$before=property_record($propertyId);$body=json_body();
+        $name=validated_whatsapp_message_text($body['name']??null,'Numele proprietății',2,120);
+        if($name===$before['name'])respond($before);
+        db()->prepare('UPDATE properties SET name=?,updated_at=?,updated_by=? WHERE id=?')->execute([$name,now_utc(),uuid_bin($user['id']),uuid_bin($propertyId)]);
+        $after=property_record($propertyId);audit_log('PROPERTY_NAME_UPDATED','settings','Numele proprietății a fost actualizat','Property',$propertyId,$propertyId,['name'=>$before['name']],['name'=>$after['name']],$user);respond($after);
+    }
+
+    if ($method === 'GET' && $path === '/company-details') {
+        $user=require_permission('settings.manage');if($user['role']!=='ADMIN')fail('Doar administratorul poate vedea datele firmei.',403);
+        $propertyId=validated_uuid((string)($_GET['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);property_record($propertyId);respond(company_details_record($propertyId));
+    }
+    if ($method === 'PUT' && path_match('/company-details/{id}',$path,$params)) {
+        $user=require_permission('settings.manage');if($user['role']!=='ADMIN')fail('Doar administratorul poate modifica datele firmei.',403);
+        $propertyId=validated_uuid($params['id'],'Proprietatea');ensure_property($propertyId,$user);property_record($propertyId);$body=json_body();$before=company_details_record($propertyId);
+        $legalName=company_detail_text($body['legalName']??null,'Denumirea juridică',160,true);$taxId=company_detail_text($body['taxId']??null,'CUI / CIF',24);$tradeRegister=company_detail_text($body['tradeRegisterNumber']??null,'Numărul Registrului Comerțului',40);
+        $address=company_detail_text($body['address']??null,'Adresa',220);$city=company_detail_text($body['city']??null,'Localitatea',80);$county=company_detail_text($body['county']??null,'Județul',80);$postalCode=company_detail_text($body['postalCode']??null,'Codul poștal',16);$country=company_detail_text($body['country']??'România','Țara',60)??'România';
+        $phone=company_detail_text($body['phone']??null,'Telefonul',30);$email=company_detail_text($body['email']??null,'Emailul',140);if($email!==null&&!filter_var($email,FILTER_VALIDATE_EMAIL))fail('Adresa de email nu este validă.',422);$website=company_detail_text($body['website']??null,'Website-ul',160);
+        $bankName=company_detail_text($body['bankName']??null,'Banca',100);$iban=company_detail_text($body['iban']??null,'IBAN-ul',40);if($iban!==null){$iban=strtoupper(str_replace(' ','',$iban));if(!preg_match('/^[A-Z]{2}[A-Z0-9]{13,38}$/',$iban))fail('IBAN-ul nu este valid.',422);}
+        $representativeName=company_detail_text($body['representativeName']??null,'Reprezentantul legal',120);$representativeRole=company_detail_text($body['representativeRole']??null,'Funcția reprezentantului',80);$vatPayer=(bool)($body['vatPayer']??false);$now=now_utc();ensure_company_details_table(db());
+        db()->prepare('INSERT INTO property_company_details (property_id,legal_name,tax_id,trade_register_number,vat_payer,address,city,county,postal_code,country,phone,email,website,bank_name,iban,representative_name,representative_role,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE legal_name=VALUES(legal_name),tax_id=VALUES(tax_id),trade_register_number=VALUES(trade_register_number),vat_payer=VALUES(vat_payer),address=VALUES(address),city=VALUES(city),county=VALUES(county),postal_code=VALUES(postal_code),country=VALUES(country),phone=VALUES(phone),email=VALUES(email),website=VALUES(website),bank_name=VALUES(bank_name),iban=VALUES(iban),representative_name=VALUES(representative_name),representative_role=VALUES(representative_role),updated_at=VALUES(updated_at),updated_by=VALUES(updated_by)')->execute([uuid_bin($propertyId),$legalName,$taxId,$tradeRegister,$vatPayer?1:0,$address,$city,$county,$postalCode,$country,$phone,$email,$website,$bankName,$iban,$representativeName,$representativeRole,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);
+        $after=company_details_record($propertyId);audit_log('COMPANY_DETAILS_UPDATED','settings','Datele firmei au fost actualizate','Property',$propertyId,$propertyId,company_details_snapshot($before),company_details_snapshot($after),$user);respond($after);
+    }
+    if ($method === 'POST' && path_match('/company-details/{id}/stamp',$path,$params)) {
+        $user=require_permission('settings.manage');if($user['role']!=='ADMIN')fail('Doar administratorul poate modifica ștampila.',403);
+        $propertyId=validated_uuid($params['id'],'Proprietatea');ensure_property($propertyId,$user);property_record($propertyId);$before=company_details_record($propertyId);$data=(string)(json_body()['stamp']??'');
+        if(!preg_match('#^data:image/(png|jpeg|webp);base64,(.+)$#',$data,$match))fail('Formatul ștampilei nu este valid.',422);$binary=base64_decode($match[2],true);if($binary===false||strlen($binary)<100||strlen($binary)>2500000)fail('Imaginea ștampilei este invalidă sau prea mare.',422);
+        $extensions=['png'=>'png','jpeg'=>'jpg','webp'=>'webp'];$extension=$extensions[$match[1]];$directory=__DIR__.'/uploads/stamps';if(!is_dir($directory)&&!mkdir($directory,0755,true)&&!is_dir($directory))throw new RuntimeException('Directorul pentru ștampile nu poate fi creat.');
+        foreach(glob($directory.'/'.$propertyId.'.*')?:[]as$oldFile)if(is_file($oldFile))@unlink($oldFile);$filename=$propertyId.'.'.$extension;if(file_put_contents($directory.'/'.$filename,$binary,LOCK_EX)===false)throw new RuntimeException('Ștampila nu poate fi salvată.');$pathValue='uploads/stamps/'.$filename;$now=now_utc();ensure_company_details_table(db());
+        db()->prepare("INSERT INTO property_company_details (property_id,country,stamp_path,created_at,updated_at,created_by,updated_by) VALUES (?,'România',?,?,?,?,?) ON DUPLICATE KEY UPDATE stamp_path=VALUES(stamp_path),updated_at=VALUES(updated_at),updated_by=VALUES(updated_by)")->execute([uuid_bin($propertyId),$pathValue,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);$after=company_details_record($propertyId);audit_log('COMPANY_STAMP_UPDATED','settings','Ștampila firmei a fost actualizată','Property',$propertyId,$propertyId,['hasStamp'=>!empty($before['stampUrl'])],['hasStamp'=>true],$user);respond($after);
+    }
+    if ($method === 'DELETE' && path_match('/company-details/{id}/stamp',$path,$params)) {
+        $user=require_permission('settings.manage');if($user['role']!=='ADMIN')fail('Doar administratorul poate elimina ștampila.',403);$propertyId=validated_uuid($params['id'],'Proprietatea');ensure_property($propertyId,$user);$before=company_details_record($propertyId);
+        $directory=__DIR__.'/uploads/stamps';foreach(glob($directory.'/'.$propertyId.'.*')?:[]as$oldFile)if(is_file($oldFile))@unlink($oldFile);db()->prepare('UPDATE property_company_details SET stamp_path=NULL,updated_at=?,updated_by=? WHERE property_id=?')->execute([now_utc(),uuid_bin($user['id']),uuid_bin($propertyId)]);$after=company_details_record($propertyId);audit_log('COMPANY_STAMP_DELETED','settings','Ștampila firmei a fost eliminată','Property',$propertyId,$propertyId,['hasStamp'=>!empty($before['stampUrl'])],['hasStamp'=>false],$user);respond($after);
+    }
 
     if ($method === 'GET' && $path === '/whatsapp-messages') {
         $user=require_permission('clients.view');$propertyId=validated_uuid((string)($_GET['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);
@@ -713,8 +837,9 @@ try {
     }
     if ($method === 'POST' && $path === '/whatsapp-messages') {
         $user=require_permission('clients.view');$body=json_body();$propertyId=validated_uuid((string)($body['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);
-        $title=validated_whatsapp_message_text($body['title']??null,'Titlul',2,80);$message=validated_whatsapp_message_text($body['message']??null,'Mesajul',1,1000);$sortOrder=min(999,max(0,(int)($body['sortOrder']??0)));$id=uuid_v4();$now=now_utc();
-        db()->prepare('INSERT INTO whatsapp_messages (id,property_id,user_id,title,message,sort_order,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,1,?,?,?,?)')->execute([uuid_bin($id),uuid_bin($propertyId),uuid_bin($user['id']),$title,$message,$sortOrder,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);
+        $title=validated_whatsapp_message_text($body['title']??null,'Titlul',2,80);$message=validated_whatsapp_message_text($body['message']??null,'Mesajul',1,1000);$id=uuid_v4();$now=now_utc();$pdo=db();
+        $count=$pdo->prepare('SELECT COUNT(*) FROM whatsapp_messages WHERE property_id=? AND user_id=? AND is_active=1');$count->execute([uuid_bin($propertyId),uuid_bin($user['id'])]);$total=(int)$count->fetchColumn();$sortOrder=max(1,min($total+1,(int)($body['sortOrder']??($total+1))));
+        $pdo->beginTransaction();try{$pdo->prepare('INSERT INTO whatsapp_messages (id,property_id,user_id,title,message,sort_order,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,1,?,?,?,?)')->execute([uuid_bin($id),uuid_bin($propertyId),uuid_bin($user['id']),$title,$message,$sortOrder,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);resequence_whatsapp_messages($pdo,$propertyId,$user['id'],$id,$sortOrder);$pdo->commit();}catch(Throwable $error){if($pdo->inTransaction())$pdo->rollBack();throw$error;}
         $after=whatsapp_message_record($id);audit_log('WHATSAPP_MESSAGE_CREATED','whatsapp_messages','Mesaj WhatsApp creat: '.$title,'WhatsAppMessage',$id,$propertyId,null,$after,$user);respond($after,201);
     }
     if ($method === 'POST' && path_match('/whatsapp-messages/{id}/use',$path,$params)) {
@@ -724,13 +849,14 @@ try {
     if ($method === 'PUT' && path_match('/whatsapp-messages/{id}',$path,$params)) {
         $user=require_permission('clients.view');$before=whatsapp_message_record(validated_uuid($params['id'],'Mesajul'));ensure_property($before['propertyId'],$user);if($before['userId']!==$user['id'])fail('Poți modifica doar mesajele contului tău.',403);$body=json_body();
         if(!empty($body['propertyId'])&&$body['propertyId']!==$before['propertyId'])fail('Mesajul aparține altei proprietăți.',422);
-        $title=validated_whatsapp_message_text($body['title']??$before['title'],'Titlul',2,80);$message=validated_whatsapp_message_text($body['message']??$before['message'],'Mesajul',1,1000);$sortOrder=array_key_exists('sortOrder',$body)?min(999,max(0,(int)$body['sortOrder'])):$before['sortOrder'];$now=now_utc();
-        db()->prepare('UPDATE whatsapp_messages SET title=?,message=?,sort_order=?,updated_at=?,updated_by=? WHERE id=?')->execute([$title,$message,$sortOrder,$now,uuid_bin($user['id']),uuid_bin($before['id'])]);
+        $title=validated_whatsapp_message_text($body['title']??$before['title'],'Titlul',2,80);$message=validated_whatsapp_message_text($body['message']??$before['message'],'Mesajul',1,1000);$sortOrder=max(1,(int)($body['sortOrder']??$before['sortOrder']));$now=now_utc();$pdo=db();
+        $pdo->beginTransaction();try{$pdo->prepare('UPDATE whatsapp_messages SET title=?,message=?,updated_at=?,updated_by=? WHERE id=?')->execute([$title,$message,$now,uuid_bin($user['id']),uuid_bin($before['id'])]);resequence_whatsapp_messages($pdo,$before['propertyId'],$user['id'],$before['id'],$sortOrder);$pdo->commit();}catch(Throwable $error){if($pdo->inTransaction())$pdo->rollBack();throw$error;}
         $after=whatsapp_message_record($before['id']);audit_log('WHATSAPP_MESSAGE_UPDATED','whatsapp_messages','Mesaj WhatsApp actualizat: '.$title,'WhatsAppMessage',$before['id'],$before['propertyId'],$before,$after,$user);respond($after);
     }
     if ($method === 'DELETE' && path_match('/whatsapp-messages/{id}',$path,$params)) {
         $user=require_permission('clients.view');$before=whatsapp_message_record(validated_uuid($params['id'],'Mesajul'));ensure_property($before['propertyId'],$user);if($before['userId']!==$user['id'])fail('Poți șterge doar mesajele contului tău.',403);
-        db()->prepare('DELETE FROM whatsapp_messages WHERE id=?')->execute([uuid_bin($before['id'])]);audit_log('WHATSAPP_MESSAGE_DELETED','whatsapp_messages','Mesaj WhatsApp șters: '.$before['title'],'WhatsAppMessage',$before['id'],$before['propertyId'],$before,['deleted'=>true],$user);respond(['deleted'=>true]);
+        $pdo=db();$pdo->beginTransaction();try{$pdo->prepare('DELETE FROM whatsapp_messages WHERE id=?')->execute([uuid_bin($before['id'])]);resequence_whatsapp_messages($pdo,$before['propertyId'],$user['id']);$pdo->commit();}catch(Throwable $error){if($pdo->inTransaction())$pdo->rollBack();throw$error;}
+        audit_log('WHATSAPP_MESSAGE_DELETED','whatsapp_messages','Mesaj WhatsApp șters: '.$before['title'],'WhatsAppMessage',$before['id'],$before['propertyId'],$before,['deleted'=>true],$user);respond(['deleted'=>true]);
     }
 
     if ($method === 'GET' && $path === '/dashboard') {
@@ -1226,6 +1352,16 @@ try {
     if ($method==='DELETE'&&path_match('/users/{id}',$path,$params)) { $admin=require_permission('users.manage');if($params['id']===$admin['id'])fail('Nu îți poți dezactiva propriul cont.',422);$target=user_record($params['id']);db()->prepare('UPDATE users SET is_active=0,updated_at=?,updated_by=? WHERE id=?')->execute([now_utc(),uuid_bin($admin['id']),uuid_bin($params['id'])]);db()->prepare('UPDATE refresh_sessions SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL')->execute([now_utc(),uuid_bin($params['id'])]);audit_log('USER_DEACTIVATED','users','Utilizator dezactivat: @'.$target['username'],'User',$target['id'],$target['propertyIds'][0]??null,$target,['isActive'=>false],$admin);respond(['deleted'=>true]); }
 
     if ($method==='GET'&&$path==='/audit-logs') { $user=require_permission('audit.view');$propertyId=(string)($_GET['propertyId']??'');if($propertyId)ensure_property($propertyId,$user);$where=[];$args=[];if($propertyId){$where[]='a.property_id=?';$args[]=uuid_bin($propertyId);}if(!empty($_GET['entityId'])){$where[]='a.entity_id=?';$args[]=uuid_bin((string)$_GET['entityId']);}$sql='SELECT '.uuid_sql('a.id').' id,'.uuid_sql('a.user_id').' user_id,CONCAT(u.first_name,\' \',u.last_name) user_name,'.uuid_sql('a.property_id').' property_id,a.action,a.module,a.entity_type,'.uuid_sql('a.entity_id').' entity_id,a.summary,a.before_data,a.after_data,a.ip_address,a.device,a.created_at FROM audit_logs a LEFT JOIN users u ON u.id=a.user_id'.($where?' WHERE '.implode(' AND ',$where):'').' ORDER BY a.created_at DESC LIMIT 200';$stmt=db()->prepare($sql);$stmt->execute($args);$data=[];foreach($stmt->fetchAll()as$row){$ip=$row['ip_address'];unset($row['ip_address']);$item=entity_base($row);$item['before']=$row['before_data']?json_decode($row['before_data'],true):null;$item['after']=$row['after_data']?json_decode($row['after_data'],true):null;unset($item['beforeData'],$item['afterData']);$item['ipAddress']=$ip?inet_ntop($ip):null;$item['updatedAt']=$item['createdAt'];$item['createdBy']=$item['userId']??'00000000-0000-4000-8000-000000000001';$item['updatedBy']=$item['createdBy'];$item['isActive']=true;$data[]=$item;}respond(['data'=>$data,'page'=>1,'pageSize'=>200,'total'=>count($data),'totalPages'=>1]); }
+    if ($method==='DELETE'&&$path==='/audit-logs') {
+        $user=require_permission('audit.view');if($user['role']!=='ADMIN')fail('Doar administratorul poate goli jurnalul de audit.',403);
+        $propertyId=validated_uuid((string)($_GET['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);$pdo=db();$body=json_body();$ids=$body['ids']??null;
+        if($ids!==null&&!is_array($ids))fail('Selecția jurnalului este invalidă.',422);
+        $validatedIds=[];foreach(($ids??[])as$id)$validatedIds[]=validated_uuid($id,'Înregistrarea de audit');if(count($validatedIds)>200)fail('Poți șterge maximum 200 de înregistrări simultan.',422);
+        if($validatedIds){$placeholders=implode(',',array_fill(0,count($validatedIds),'?'));$args=[uuid_bin($propertyId),...array_map('uuid_bin',$validatedIds)];$delete=$pdo->prepare("DELETE FROM audit_logs WHERE property_id=? AND id IN ($placeholders)");$delete->execute($args);$deleted=$delete->rowCount();$scope='înregistrările selectate';}
+        else{$delete=$pdo->prepare('DELETE FROM audit_logs WHERE property_id=?');$delete->execute([uuid_bin($propertyId)]);$deleted=$delete->rowCount();$scope='întregul jurnal';}
+        audit_log('AUDIT_LOG_CLEARED','audit','Administratorul a șters '.$scope,'Property',$propertyId,$propertyId,['deletedEntries'=>$deleted,'scope'=>$scope],['retainedSecurityEntry'=>true],$user);
+        respond(['deleted'=>$deleted]);
+    }
 
     if ($method==='GET'&&$path==='/reports') {
         $user=require_permission('reports.view');

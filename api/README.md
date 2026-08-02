@@ -41,10 +41,15 @@ ORDER BY data_length + index_length DESC;
 - `PUT /auth/profile` — actualizează exclusiv prenumele și numele utilizatorului autentificat; body: `{ "firstName": "Alex", "lastName": "Ionescu" }`
 - `POST /auth/forgot-password`
 - `POST /auth/change-password`
+- `GET /app-update` — metadatele publice ale ultimei versiuni Android și linkul oficial de descărcare
 
 ### Proprietăți și dashboard
 
 - `GET /properties`
+- `PUT /properties/{id}` — administratorul modifică numai numele vizibil al proprietății; domeniul rămâne neschimbat
+- `GET /company-details?propertyId={uuid}` — profilul juridic compact al firmei pentru proprietatea activă
+- `PUT /company-details/{propertyId}` — salvează datele juridice, sediul, contactul, banca și reprezentantul legal
+- `POST|DELETE /company-details/{propertyId}/stamp` — salvează sau elimină ștampila ca fișier; imaginea nu este stocată în MySQL
 - `GET /dashboard?propertyId={uuid}`
 - `POST /admin/migrations/collaborator-presets` — migrare administrativă idempotentă pentru instalările existente; necesită `settings.manage`
 - `POST /admin/migrations/client-finance` — creează idempotent structurile compacte pentru finanțe, cheltuieli și participanți și adaugă statusul client `FINALIZED`; necesită `settings.manage`
@@ -84,11 +89,11 @@ Valorile calculate nu sunt stocate. API-ul folosește următoarele formule în m
 - `additionalExpenses = suma cheltuielilor`;
 - `internalCosts = actualPartsCost + additionalExpenses`;
 - comisionul colaboratorului se calculează din atribuirea curentă a clientului: procent din total, procent din `max(totalDue - internalCosts, 0)` sau sumă fixă;
-- `gshopNet = receivedAmount - internalCosts - collaboratorCost`.
+- `gshopNet = receivedAmount - internalCosts - collaboratorPaid`; comisionul încă neachitat rămâne separat la „de achitat” și nu scade netul realizat.
 
 `displayedPartsCost` și `displayedLaborCost` sunt doar defalcări pentru afișare și precompletarea fișei de service; nu se adună din nou în total. Fiecare cheltuială conține doar `description` și `amount`, în moneda unică a clientului, pentru a evita repetarea cursului în fiecare rând. Prima cheltuială creează atomic rândul financiar implicit, iar acesta este păstrat cât timp există cheltuieli.
 
-Dashboard-ul convertește valorile noi în RON cu `exchangeRateToRon`. Pentru fiecare client, `totalRevenue` primește `receivedAmount` (`totalDue` dacă plata este `PAID`, altfel `min(advancePaid, totalDue)`), `revenueOnHold` primește `totalDue - receivedAmount`, iar netul realizat este `receivedAmount - internalCosts - collaboratorCost`. Astfel avansul intră imediat în încasări și în G-Shop Net, dar restul neachitat nu umflă netul; trecerea statusului la `PAID` mută restul din on hold în încasări și în net. Reducerea este aplicată înaintea tuturor acestor calcule, iar costurile și comisionul sunt scăzute o singură dată. Aceeași formulă de net realizat este returnată în `summary.gshopNet` din profilul clientului și în dashboard.
+Dashboard-ul convertește valorile noi în RON cu `exchangeRateToRon`. Pentru fiecare client, `totalRevenue` primește `receivedAmount` (`totalDue` dacă plata este `PAID`, altfel `min(advancePaid, totalDue)`), `revenueOnHold` primește `totalDue - receivedAmount`, iar netul realizat este `receivedAmount - internalCosts - collaboratorPaid`. Astfel avansul intră imediat în încasări și în G-Shop Net, restul neachitat nu umflă netul, iar comisionul încă de achitat rămâne separat până este marcat achitat. Reducerea este aplicată înaintea tuturor acestor calcule, iar costurile și comisionul achitat sunt scăzute o singură dată. Aceeași formulă de net realizat este returnată în `summary.gshopNet` din profilul clientului și în dashboard.
 
 Pentru clienții legacy fără `client_financials` și fără cheltuieli, fișele `COMPLETED`/`DELIVERED` sunt tratate ca încasate, iar fișele deschise sunt tratate ca on hold. Costurile directe și comisioanele legacy active sunt scăzute din netul realizat, fără dublarea clienților care au trecut la finanțele noi.
 

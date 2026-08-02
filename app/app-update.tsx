@@ -1,0 +1,82 @@
+import { AppHeader } from '@/components/layout/AppHeader';
+import { AppText } from '@/components/ui/AppText';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Screen } from '@/components/ui/Screen';
+import { ErrorState, LoadingState } from '@/components/ui/States';
+import { useAppTheme } from '@/contexts/ThemeContext';
+import { useToast } from '@/contexts/ToastContext';
+import { useAsyncData } from '@/hooks/useAsyncData';
+import { appUpdateRepository } from '@/repositories/api-repositories';
+import { palette, radius, spacing } from '@/theme/tokens';
+import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
+import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
+import { Linking, Platform, StyleSheet, View } from 'react-native';
+
+function compareVersions(a: string, b: string) {
+  const left = a.split('.').map((value) => Number(value) || 0);
+  const right = b.split('.').map((value) => Number(value) || 0);
+  for (let index = 0; index < Math.max(left.length, right.length); index++) {
+    if ((left[index] ?? 0) !== (right[index] ?? 0)) return (left[index] ?? 0) - (right[index] ?? 0);
+  }
+  return 0;
+}
+
+export default function AppUpdateScreen() {
+  const { colors } = useAppTheme();
+  const { showToast } = useToast();
+  const state = useAsyncData(() => appUpdateRepository.get(), []);
+  const currentVersion = Constants.expoConfig?.version ?? '1.0.0';
+  const latest = state.data?.latestVersion ?? currentVersion;
+  const updateAvailable = compareVersions(currentVersion, latest) < 0;
+  const inExpoGo = Constants.executionEnvironment === 'storeClient';
+
+  const download = async () => {
+    const url = state.data?.downloadUrl?.trim();
+    if (!url) return showToast('Linkul pentru versiunea Android nu a fost publicat încă.', 'info');
+    try { await Linking.openURL(url); } catch { showToast('Pagina de descărcare nu a putut fi deschisă.', 'error'); }
+  };
+
+  return <Screen header={<AppHeader title="Actualizare aplicație" back onBack={() => router.replace('/service/more')} />} refreshing={state.refreshing} onRefresh={() => void state.reload(true)}>
+    <View style={styles.stack}>
+      <LinearGradient colors={updateAvailable ? ['#5B21B6', '#075CFF'] : ['#075CFF', '#08A7C7']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+        <View pointerEvents="none" style={styles.orb} />
+        <View style={styles.appIcon}><Ionicons name="cloud-download-outline" size={38} color="#FFFFFF" /></View>
+        <View style={styles.heroCopy}><AppText variant="caption" style={styles.eyebrow}>G-SHOP PENTRU ANDROID</AppText><AppText variant="title" style={styles.heroTitle}>{updateAvailable ? 'Este disponibilă o versiune nouă' : 'Aplicația este actualizată'}</AppText><AppText style={styles.heroSubtitle}>{updateAvailable ? `Poți trece acum de la versiunea ${currentVersion} la ${latest}.` : `Folosești versiunea ${currentVersion}, cea mai nouă versiune publicată.`}</AppText></View>
+      </LinearGradient>
+
+      {state.loading ? <LoadingState rows={4} /> : state.error ? <ErrorState message={state.error.message} onRetry={() => void state.reload()} /> : <>
+        <Card style={styles.versionCard} elevated>
+          <View style={[styles.statusIcon, { backgroundColor: updateAvailable ? `${palette.warning}18` : `${palette.success}18` }]}><Ionicons name={updateAvailable ? 'arrow-up-circle-outline' : 'checkmark-circle-outline'} size={29} color={updateAvailable ? palette.warning : palette.success} /></View>
+          <View style={styles.versionCopy}><AppText variant="heading">Versiuni</AppText><View style={styles.versionRows}><Version label="Instalată" value={currentVersion} /><Ionicons name="arrow-forward" size={18} color={colors.textMuted} /><Version label="Disponibilă" value={latest} accent={updateAvailable} /></View></View>
+          <View style={[styles.statusBadge, { backgroundColor: updateAvailable ? `${palette.warning}16` : `${palette.success}16` }]}><AppText variant="caption" style={{ color: updateAvailable ? palette.warning : palette.success, fontWeight: '800' }}>{updateAvailable ? 'UPDATE' : 'LA ZI'}</AppText></View>
+        </Card>
+
+        {inExpoGo ? <View style={[styles.expoNotice, { backgroundColor: colors.primarySoft, borderColor: `${colors.primary}50` }]}><View style={[styles.noticeIcon, { backgroundColor: colors.primary }]}><Ionicons name="flask-outline" size={20} color="#FFFFFF" /></View><View style={styles.noticeCopy}><AppText variant="label">Rulezi proiectul în Expo Go</AppText><AppText variant="caption" muted>Butonul de actualizare este destinat aplicației Android instalate. Pentru dezvoltare, proiectul se actualizează prin serverul Expo.</AppText></View></View> : null}
+
+        <Card style={styles.section} elevated>
+          <View style={styles.sectionHeader}><View style={[styles.sectionIcon, { backgroundColor: `${palette.purple}16` }]}><Ionicons name="sparkles-outline" size={22} color={palette.purple} /></View><View style={styles.sectionCopy}><AppText variant="heading">Ce este nou</AppText><AppText variant="caption" muted>Noutățile incluse în versiunea {latest}.</AppText></View></View>
+          <View style={styles.notes}>{(state.data?.releaseNotes.length ? state.data.releaseNotes : ['Îmbunătățiri de stabilitate și experiență.']).map((note, index) => <View key={`${index}-${note}`} style={styles.note}><View style={[styles.noteIndex, { backgroundColor: colors.primarySoft }]}><AppText variant="caption" style={{ color: colors.primary, fontWeight: '800' }}>{index + 1}</AppText></View><AppText style={styles.noteText}>{note}</AppText></View>)}</View>
+          {state.data?.publishedAt ? <AppText variant="caption" muted>Publicată la {state.data.publishedAt}</AppText> : null}
+        </Card>
+
+        <Card style={styles.section} elevated>
+          <View style={styles.sectionHeader}><View style={[styles.sectionIcon, { backgroundColor: `${palette.success}16` }]}><Ionicons name="shield-checkmark-outline" size={22} color={palette.success} /></View><View style={styles.sectionCopy}><AppText variant="heading">Actualizare sigură</AppText><AppText variant="caption" muted>Descarcă versiunea exclusiv din linkul oficial publicat de G-Shop.</AppText></View></View>
+          <Button label={updateAvailable ? 'Descarcă și actualizează' : 'Deschide ultima versiune'} icon="download-outline" disabled={Platform.OS !== 'android' && Platform.OS !== 'web'} onPress={() => void download()} />
+          <Button variant="outline" label="Verifică din nou" icon="refresh-outline" loading={state.refreshing} onPress={() => void state.reload(true)} />
+        </Card>
+      </>}
+    </View>
+  </Screen>;
+}
+
+function Version({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) { const { colors } = useAppTheme(); return <View><AppText variant="caption" muted>{label}</AppText><AppText variant="heading" style={accent ? { color: colors.primary } : undefined}>{value}</AppText></View>; }
+
+const styles = StyleSheet.create({
+  stack: { width: '100%', maxWidth: 760, alignSelf: 'center', gap: spacing.lg }, hero: { minHeight: 190, borderRadius: radius.xl, padding: spacing.xl, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', gap: spacing.md }, orb: { position: 'absolute', width: 250, height: 250, borderRadius: 125, top: -140, right: -75, backgroundColor: 'rgba(255,255,255,0.11)' }, appIcon: { width: 74, height: 74, borderRadius: 25, backgroundColor: 'rgba(255,255,255,0.17)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' }, heroCopy: { alignItems: 'center', gap: spacing.xs }, eyebrow: { color: '#D6E5FF', fontWeight: '900', letterSpacing: 1.1 }, heroTitle: { color: '#FFFFFF', textAlign: 'center' }, heroSubtitle: { color: '#D8E7FF', textAlign: 'center' },
+  versionCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md }, statusIcon: { width: 54, height: 54, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }, versionCopy: { minWidth: 0, flex: 1, gap: spacing.sm }, versionRows: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.md }, statusBadge: { minHeight: 28, borderRadius: radius.pill, paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center' },
+  expoNotice: { minHeight: 74, borderRadius: radius.lg, borderWidth: 1, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md }, noticeIcon: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }, noticeCopy: { minWidth: 0, flex: 1, gap: 2 },
+  section: { gap: spacing.lg }, sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md }, sectionIcon: { width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' }, sectionCopy: { minWidth: 0, flex: 1, gap: 2 }, notes: { gap: spacing.md }, note: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm }, noteIndex: { width: 28, height: 28, borderRadius: 9, alignItems: 'center', justifyContent: 'center' }, noteText: { minWidth: 0, flex: 1 },
+});

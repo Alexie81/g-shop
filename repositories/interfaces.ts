@@ -1,4 +1,4 @@
-import { AuditLog, AuthSession, Client, ClientExpense, ClientExpenseDeleteResult, ClientFinancialOverview, ClientParticipant, Collaborator, CreateClientExpensePayload, DashboardMetrics, Paginated, Permission, Property, ServiceSheet, UpdateClientExpensePayload, UpdateClientFinancialsPayload, User, UUID, WhatsAppMessage } from '@/types';
+import { AppUpdateInfo, AuditLog, AuthSession, Client, ClientExpense, ClientExpenseDeleteResult, ClientFinancialOverview, ClientParticipant, Collaborator, CompanyDetails, CreateClientExpensePayload, DashboardMetrics, Paginated, Permission, Property, ServiceSheet, UpdateClientExpensePayload, UpdateClientFinancialsPayload, User, UUID, WhatsAppMessage } from '@/types';
 
 export interface AuthRepository {
   login(username: string, password: string, device: string): Promise<AuthSession>;
@@ -8,7 +8,17 @@ export interface AuthRepository {
   updateProfile(firstName: string, lastName: string): Promise<User>;
 }
 
-export interface PropertyRepository { list(): Promise<Property[]>; }
+export interface PropertyRepository {
+  list(): Promise<Property[]>;
+  updateName(id: UUID, name: string): Promise<Property>;
+}
+export interface CompanyDetailsRepository {
+  get(propertyId: UUID): Promise<CompanyDetails>;
+  update(propertyId: UUID, input: Omit<CompanyDetails, 'propertyId' | 'stampUrl' | 'createdAt' | 'updatedAt'>): Promise<CompanyDetails>;
+  saveStamp(propertyId: UUID, stamp: string): Promise<CompanyDetails>;
+  removeStamp(propertyId: UUID): Promise<CompanyDetails>;
+}
+export interface AppUpdateRepository { get(): Promise<AppUpdateInfo>; }
 export interface DashboardRepository { get(propertyId: UUID): Promise<DashboardMetrics>; }
 export interface ClientRepository {
   list(propertyId: UUID, query?: string, qrStatus?: string): Promise<Paginated<Client>>;
@@ -50,7 +60,10 @@ export interface UserRepository {
   resetPassword(id: UUID, password: string): Promise<void>;
   updatePermissions(id: UUID, permissions: Permission[], propertyIds?: UUID[]): Promise<User>;
 }
-export interface AuditRepository { list(propertyId?: UUID): Promise<Paginated<AuditLog>>; }
+export interface AuditRepository {
+  list(propertyId?: UUID): Promise<Paginated<AuditLog>>;
+  remove(propertyId: UUID, ids?: UUID[]): Promise<{ deleted: number }>;
+}
 export interface WhatsAppMessageRepository {
   list(propertyId: UUID): Promise<WhatsAppMessage[]>;
   create(input: Pick<WhatsAppMessage, 'propertyId' | 'title' | 'message' | 'sortOrder'>): Promise<WhatsAppMessage>;

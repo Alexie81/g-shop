@@ -58,6 +58,12 @@
         }
       ],
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "G-Shop accesează fotografiile pentru a selecta ștampila firmei."
+        }
+      ],
+      [
         "expo-secure-store",
         {
           "configureAndroidBackup": true,

@@ -41,9 +41,9 @@ try {
     $messageCount->execute([uuid_bin($serviceId), uuid_bin($adminId)]);
     if ((int)$messageCount->fetchColumn() === 0) {
         $defaultMessages = [
-            ['Actualizare reparație', 'Bună ziua, {prenume}! Vă contactăm din partea {proprietate} cu o actualizare privind reparația dumneavoastră.', 10],
-            ['Reparație finalizată', 'Bună ziua, {prenume}! Reparația dumneavoastră este finalizată și poate fi ridicată. Vă mulțumim, {proprietate}!', 20],
-            ['Link status reparație', 'Bună ziua, {prenume}! Puteți urmări statusul reparației aici: {link_status}', 30],
+            ['Actualizare reparație', 'Bună ziua, {prenume}! Vă contactăm din partea {proprietate} cu o actualizare privind reparația dumneavoastră.', 1],
+            ['Reparație finalizată', 'Bună ziua, {prenume}! Reparația dumneavoastră este finalizată și poate fi ridicată. Vă mulțumim, {proprietate}!', 2],
+            ['Link status reparație', 'Bună ziua, {prenume}! Puteți urmări statusul reparației aici: {link_status}', 3],
         ];
         $message = $pdo->prepare('INSERT INTO whatsapp_messages (id,property_id,user_id,title,message,sort_order,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,1,?,?,?,?)');
         foreach ($defaultMessages as $defaultMessage) {
