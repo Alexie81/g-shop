@@ -7,7 +7,7 @@ import { AppText } from '@/components/ui/AppText';
 import { Card } from '@/components/ui/Card';
 import { Screen } from '@/components/ui/Screen';
 import { SectionHeader } from '@/components/ui/SectionHeader';
-import { ErrorState, LoadingState } from '@/components/ui/States';
+import { ErrorState } from '@/components/ui/States';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useProperty } from '@/contexts/PropertyContext';
@@ -44,7 +44,7 @@ export default function DashboardScreen() {
     return () => clearInterval(timer);
   }, []);
   const greeting = localHour < 12 ? 'Bună dimineața' : localHour < 18 ? 'Bună ziua' : 'Bună seara';
-  if (state.loading) return <Screen header={<AppHeader />}><LoadingState rows={6} /></Screen>;
+  if (state.loading) return <DashboardSkeleton />;
   if (state.error || !state.data) return <Screen header={<AppHeader />}><ErrorState message={state.error?.message ?? 'Date indisponibile.'} onRetry={() => void state.reload()} /></Screen>;
   const { metrics, sheets } = state.data;
   return <Screen header={<AppHeader />} scroll={false} bottomInset={false} style={styles.screen}>
@@ -93,6 +93,36 @@ export default function DashboardScreen() {
   </Screen>;
 }
 
+function DashboardSkeleton() {
+  const { colors } = useAppTheme();
+  return <Screen header={<AppHeader />} scroll={false} bottomInset={false} style={styles.screen}>
+    <View style={styles.dashboardRoot}>
+      <LinearGradient colors={['#082376', '#075CFF', '#0D78FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, styles.fixedHero]}>
+        <View style={styles.skeletonHeroCopy}>
+          <View style={styles.skeletonHeroTitle} />
+          <View style={styles.skeletonHeroSubtitle} />
+        </View>
+        <View style={styles.skeletonHeroGraphic}><Ionicons name="analytics-outline" size={52} color="#A8C7FF" /></View>
+      </LinearGradient>
+      <View style={[styles.skeletonSheet, { backgroundColor: colors.background }]}>
+        <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+        <View style={styles.skeletonHeading}>
+          <View style={[styles.skeletonHeadingIcon, { backgroundColor: colors.primarySoft }]} />
+          <View style={styles.skeletonHeadingCopy}>
+            <View style={[styles.skeletonLine, styles.skeletonLineTitle, { backgroundColor: colors.surfaceMuted }]} />
+            <View style={[styles.skeletonLine, styles.skeletonLineSubtitle, { backgroundColor: colors.surfaceMuted }]} />
+          </View>
+        </View>
+        <View style={styles.skeletonGrid}>{Array.from({ length: 6 }, (_, index) => <View key={index} style={[styles.skeletonCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={[styles.skeletonCardIcon, { backgroundColor: colors.surfaceMuted }]} />
+          <View style={[styles.skeletonLine, styles.skeletonValue, { backgroundColor: colors.surfaceMuted }]} />
+          <View style={[styles.skeletonLine, styles.skeletonLabel, { backgroundColor: colors.surfaceMuted }]} />
+        </View>)}</View>
+      </View>
+    </View>
+  </Screen>;
+}
+
 function DashboardSectionTitle({ title, subtitle, icon }: { title: string; subtitle: string; icon: keyof typeof Ionicons.glyphMap }) {
   const { colors, isDark } = useAppTheme();
   return <View style={styles.sectionHeading}>
@@ -113,6 +143,22 @@ const styles = StyleSheet.create({
   heroCopy: { flex: 1, gap: spacing.sm, maxWidth: 620 },
   wave: { color: '#FFD75C', fontSize: 30, lineHeight: 34 },
   heroGraphic: { width: 110, height: 110, borderRadius: 55, backgroundColor: '#FFFFFF16', alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-8deg' }] },
+  skeletonHeroCopy: { flex: 1, gap: spacing.md },
+  skeletonHeroTitle: { width: '56%', maxWidth: 270, height: 24, borderRadius: radius.pill, backgroundColor: '#FFFFFFD9' },
+  skeletonHeroSubtitle: { width: '78%', maxWidth: 430, height: 14, borderRadius: radius.pill, backgroundColor: '#FFFFFF70' },
+  skeletonHeroGraphic: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#FFFFFF16', alignItems: 'center', justifyContent: 'center' },
+  skeletonSheet: { position: 'absolute', top: 174, left: 0, right: 0, bottom: 0, borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: spacing.lg, gap: spacing.lg },
+  skeletonHeading: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  skeletonHeadingIcon: { width: 38, height: 38, borderRadius: radius.md },
+  skeletonHeadingCopy: { flex: 1, gap: spacing.sm },
+  skeletonLine: { borderRadius: radius.pill },
+  skeletonLineTitle: { width: 170, height: 15 },
+  skeletonLineSubtitle: { width: 230, maxWidth: '72%', height: 10 },
+  skeletonGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  skeletonCard: { flexGrow: 1, flexBasis: 150, minWidth: 138, height: 132, borderRadius: radius.lg, borderWidth: 1, padding: spacing.lg, gap: spacing.md },
+  skeletonCardIcon: { width: 38, height: 38, borderRadius: radius.md },
+  skeletonValue: { width: '58%', height: 18 },
+  skeletonLabel: { width: '76%', height: 10 },
   section: { gap: spacing.lg, marginTop: spacing.xxxl },
   firstSection: { marginTop: spacing.sm },
   sectionHeading: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
