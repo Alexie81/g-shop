@@ -69,12 +69,18 @@ function json_body(): array {
     return $data;
 }
 function respond($data = null, int $status = 200, array $meta = []): void {
-    if ($status < 400 && function_exists('gshop_flush_pending_service_sheet_pdfs')) {
-        gshop_flush_pending_service_sheet_pdfs();
-    }
+    $flushPdfs = $status < 400
+        && function_exists('gshop_flush_pending_service_sheet_pdfs')
+        && !empty($GLOBALS['gshop_pending_service_sheet_pdfs']);
     http_response_code($status);
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(array_merge(['data' => $data], $meta), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($flushPdfs && function_exists('fastcgi_finish_request')) {
+        fastcgi_finish_request();
+        gshop_flush_pending_service_sheet_pdfs();
+        exit;
+    }
+    if ($flushPdfs) gshop_flush_pending_service_sheet_pdfs();
     exit;
 }
 function fail(string $message, int $status = 400, ?array $errors = null): void {

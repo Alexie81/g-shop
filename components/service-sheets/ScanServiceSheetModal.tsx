@@ -195,7 +195,6 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
       }
 
       if (signature && canSign) saved = await serviceSheetRepository.saveSignature(saved.id, signature);
-      await serviceSheetRepository.generatePdf(saved.id).catch(() => undefined);
       showToast(updatedExisting ? 'Fișa de service a fost actualizată.' : 'Fișa de service a fost creată.', 'success');
       onCompleted(saved);
     } catch (error) {
@@ -224,7 +223,6 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
     setSignatureSaving(true);
     try {
       await serviceSheetRepository.saveSignature(existingSheet.id, signature);
-      await serviceSheetRepository.generatePdf(existingSheet.id).catch(() => undefined);
       setPendingSignature(null);
       setSignatureSaved(true);
       setSignatureOpen(false);

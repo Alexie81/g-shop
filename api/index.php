@@ -1473,7 +1473,7 @@ try {
             $pdo->commit();
         }catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}
         $safeNumber=preg_replace('/[^A-Za-z0-9_-]+/','-',(string)$before['number'])?:'fisa-service';$fileStem=strtolower($safeNumber);$pdfDirectory=__DIR__.'/uploads/service-sheets';
-        $files=array_merge([$pdfDirectory.'/'.$fileStem.'.pdf'],glob($pdfDirectory.'/'.$fileStem.'-*.pdf')?:[]);
+        $files=array_merge([$pdfDirectory.'/'.$fileStem.'.pdf',$pdfDirectory.'/'.$fileStem.'.pdf.sha256'],glob($pdfDirectory.'/'.$fileStem.'-*.pdf')?:[]);
         if($signaturePath){$candidate=realpath(__DIR__.'/'.ltrim((string)$signaturePath,'/\\'));$apiRoot=realpath(__DIR__);if($candidate!==false&&$apiRoot!==false&&str_starts_with($candidate,$apiRoot))$files[]=$candidate;}
         $removedFiles=0;foreach(array_unique($files)as$file)if(is_file($file)&&@unlink($file))$removedFiles++;
         audit_log('SERVICE_SHEET_DELETED','service_sheets','Fișă ștearsă definitiv: '.$before['number'],'ServiceSheet',$before['id'],$before['propertyId'],$before,['deleted'=>true,'removedFiles'=>$removedFiles],$user);

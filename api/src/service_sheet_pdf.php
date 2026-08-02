@@ -349,6 +349,30 @@ function gshop_pdf_overlay_page_two(Fpdi $pdf, array $sheet, array $client, stri
     }
 }
 
+function gshop_pdf_source_identity(?string $relativePath): ?array {
+    if (!$relativePath) return null;
+    $candidate = realpath(__DIR__ . '/../' . ltrim($relativePath, '/\\'));
+    $apiRoot = realpath(__DIR__ . '/..');
+    if ($candidate === false || $apiRoot === false || !str_starts_with($candidate, $apiRoot) || !is_file($candidate)) return null;
+    return [
+        'size' => filesize($candidate) ?: 0,
+        'hash' => hash_file('sha256', $candidate) ?: '',
+    ];
+}
+
+function gshop_pdf_cached_document(string $output, string $metadata, string $filename, string $fingerprint): ?array {
+    if (!is_file($output) || !is_file($metadata) || filesize($output) < 1000) return null;
+    $storedFingerprint = trim((string)@file_get_contents($metadata));
+    if ($storedFingerprint === '' || !hash_equals($fingerprint, $storedFingerprint)) return null;
+    clearstatcache(true, $output);
+    return [
+        'path' => $output,
+        'fileName' => $filename,
+        'generatedAt' => gmdate('c', filemtime($output) ?: time()),
+        'cached' => true,
+    ];
+}
+
 function generate_service_sheet_pdf(array $sheet, array $client, array $financial, array $summary, array $company, ?string $signaturePath, ?string $stampPath): array {
     $withCompany = !empty($sheet['showCompanyDetails']);
     $paid = ($financial['paymentStatus'] ?? 'UNPAID') === 'PAID' && (float)($summary['remainingDue'] ?? 0) <= 0.009;
@@ -357,39 +381,75 @@ function generate_service_sheet_pdf(array $sheet, array $client, array $financia
 
     $directory = __DIR__ . '/../uploads/service-sheets';
     if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) throw new RuntimeException('Directorul PDF nu poate fi creat.');
-    foreach (glob($directory . '/*.pdf') ?: [] as $existing) if (is_file($existing) && filemtime($existing) < time() - 1209600) @unlink($existing);
 
     $safeNumber = preg_replace('/[^A-Za-z0-9_-]+/', '-', gshop_pdf_string($sheet['number'] ?? 'fisa-service')) ?: 'fisa-service';
     $fileStem = strtolower($safeNumber);
     $filename = $fileStem . '.pdf';
     $output = $directory . '/' . $filename;
-    $temporary = tempnam($directory, $fileStem . '-generating-');
-    if ($temporary === false) throw new RuntimeException('Fișierul temporar pentru PDF nu poate fi creat.');
+    $metadata = $output . '.sha256';
+    $fingerprint = hash('sha256', serialize([
+        'version' => 2,
+        'sheet' => $sheet,
+        'client' => $client,
+        'financial' => $financial,
+        'summary' => $summary,
+        'company' => $company,
+        'signature' => gshop_pdf_source_identity($signaturePath),
+        'stamp' => gshop_pdf_source_identity($stampPath),
+        'template' => [filesize($template) ?: 0, filemtime($template) ?: 0],
+    ]));
 
-    $pdf = new Fpdi('P', 'pt', 'A4');
-    $pdf->SetAutoPageBreak(false);
-    $pdf->SetMargins(0, 0, 0);
-    $pdf->SetTitle('Fișă de service ' . gshop_pdf_string($sheet['number'] ?? ''), true);
-    $pdf->SetAuthor('G-Shop', true);
-    $pdf->AddFont('DejaVu', '', 'DejaVuSans.ttf', true);
-    $pdf->AddFont('DejaVu', 'B', 'DejaVuSans-Bold.ttf', true);
-    $pageCount = $pdf->setSourceFile($template);
-    for ($page = 1; $page <= $pageCount; $page++) {
-        $templateId = $pdf->importPage($page);
-        $size = $pdf->getTemplateSize($templateId);
-        $pdf->AddPage($size['orientation'], [$size['width'], $size['height']]);
-        $pdf->useTemplate($templateId);
-        if ($page === 1) gshop_pdf_overlay_page_one($pdf,$sheet,$client,$financial,$summary,$company);
-        if ($page === 2) gshop_pdf_overlay_page_two($pdf,$sheet,$client,gshop_pdf_string($company['propertyName'] ?? ''),$signaturePath,$stampPath);
-    }
+    $cached = gshop_pdf_cached_document($output, $metadata, $filename, $fingerprint);
+    if ($cached) return $cached;
+
+    $lockPath = sys_get_temp_dir() . '/gshop-pdf-' . hash('sha256', $output) . '.lock';
+    $lock = @fopen($lockPath, 'c');
+    if ($lock) @flock($lock, LOCK_EX);
     try {
-        $pdf->Output('F', $temporary, true);
-        if (!is_file($temporary) || filesize($temporary) < 1000) throw new RuntimeException('Fișa PDF nu a putut fi generată.');
-        if (!@rename($temporary, $output)) throw new RuntimeException('Fișa PDF existentă nu a putut fi înlocuită.');
-        @chmod($output, 0644);
-        foreach (glob($directory . '/' . $fileStem . '-*.pdf') ?: [] as $legacy) if (is_file($legacy)) @unlink($legacy);
+        $cached = gshop_pdf_cached_document($output, $metadata, $filename, $fingerprint);
+        if ($cached) return $cached;
+
+        $cleanupMarker = $directory . '/.cleanup';
+        if (!is_file($cleanupMarker) || filemtime($cleanupMarker) < time() - 86400) {
+            foreach (glob($directory . '/*.pdf') ?: [] as $existing) {
+                if (!is_file($existing) || filemtime($existing) >= time() - 1209600) continue;
+                @unlink($existing);
+                @unlink($existing . '.sha256');
+            }
+            @touch($cleanupMarker);
+        }
+
+        $temporary = tempnam($directory, $fileStem . '-generating-');
+        if ($temporary === false) throw new RuntimeException('Fișierul temporar pentru PDF nu poate fi creat.');
+
+        $pdf = new Fpdi('P', 'pt', 'A4');
+        $pdf->SetAutoPageBreak(false);
+        $pdf->SetMargins(0, 0, 0);
+        $pdf->SetTitle('Fișă de service ' . gshop_pdf_string($sheet['number'] ?? ''), true);
+        $pdf->SetAuthor('G-Shop', true);
+        $pdf->AddFont('DejaVu', '', 'DejaVuSans.ttf', true);
+        $pdf->AddFont('DejaVu', 'B', 'DejaVuSans-Bold.ttf', true);
+        $pageCount = $pdf->setSourceFile($template);
+        for ($page = 1; $page <= $pageCount; $page++) {
+            $templateId = $pdf->importPage($page);
+            $size = $pdf->getTemplateSize($templateId);
+            $pdf->AddPage($size['orientation'], [$size['width'], $size['height']]);
+            $pdf->useTemplate($templateId);
+            if ($page === 1) gshop_pdf_overlay_page_one($pdf,$sheet,$client,$financial,$summary,$company);
+            if ($page === 2) gshop_pdf_overlay_page_two($pdf,$sheet,$client,gshop_pdf_string($company['propertyName'] ?? ''),$signaturePath,$stampPath);
+        }
+        try {
+            $pdf->Output('F', $temporary, true);
+            if (!is_file($temporary) || filesize($temporary) < 1000) throw new RuntimeException('Fișa PDF nu a putut fi generată.');
+            if (!@rename($temporary, $output)) throw new RuntimeException('Fișa PDF existentă nu a putut fi înlocuită.');
+            @chmod($output, 0644);
+            @file_put_contents($metadata, $fingerprint, LOCK_EX);
+            foreach (glob($directory . '/' . $fileStem . '-*.pdf') ?: [] as $legacy) if (is_file($legacy)) @unlink($legacy);
+        } finally {
+            if (is_file($temporary)) @unlink($temporary);
+        }
+        return ['path'=>$output,'fileName'=>$filename,'generatedAt'=>gmdate('c'),'cached'=>false];
     } finally {
-        if (is_file($temporary)) @unlink($temporary);
+        if ($lock) { @flock($lock, LOCK_UN); @fclose($lock); }
     }
-    return ['path'=>$output,'fileName'=>$filename,'generatedAt'=>gmdate('c')];
 }
