@@ -11,6 +11,7 @@ import { useProperty } from '@/contexts/PropertyContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { collaboratorRepository } from '@/repositories/api-repositories';
 import { apiRequest } from '@/services/api';
 import { palette, radius, spacing } from '@/theme/tokens';
@@ -111,6 +112,7 @@ export default function CollaboratorsScreen() {
     const finance = await apiRequest<CollaboratorFinanceSummary>(`/collaborator-finances?propertyId=${propertyId}`).catch(() => emptyFinance);
     return { collaborators, finance };
   }, [propertyId]);
+  useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);
 
   const financeByCollaborator = useMemo(() => new Map(
     (state.data?.finance.collaborators ?? []).map((item) => [item.collaboratorId, item]),
@@ -231,13 +233,9 @@ export default function CollaboratorsScreen() {
         <AppText variant="display" style={styles.heroTitle}>Colaboratori și comisioane</AppText>
         <AppText style={styles.heroSubtitle}>Gestionează echipa, regulile de plată și situația fiecărui client dintr-un singur loc.</AppText>
       </View>
-      {canManage ? <Button
-        label="Colaborator nou"
-        icon="person-add-outline"
-        variant="secondary"
-        onPress={() => openEditor('new')}
-        style={[styles.heroButton, compact && styles.heroButtonCompact]}
-      /> : null}
+      <View style={styles.heroTeamIcon}>
+        <Ionicons name="people-outline" size={32} color="#FFFFFF" />
+      </View>
     </LinearGradient>
 
     <ScrollView
@@ -285,6 +283,14 @@ export default function CollaboratorsScreen() {
         <AppText variant="title">Echipa activă</AppText>
         <AppText variant="caption" muted>{collaborators.length} {collaborators.length === 1 ? 'rezultat' : 'rezultate'}</AppText>
       </View>
+      {canManage ? <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Adaugă colaborator"
+        onPress={() => openEditor('new')}
+        style={({ pressed }) => [styles.addCollaboratorButton, { backgroundColor: colors.primary, opacity: pressed ? 0.78 : 1, transform: [{ scale: pressed ? 0.96 : 1 }] }]}
+      >
+        <Ionicons name="add" size={25} color="#FFFFFF" />
+      </Pressable> : null}
     </View>
 
     {state.loading ? <LoadingState rows={4} /> : state.error ? <ErrorState message={state.error.message} onRetry={() => void state.reload()} /> : !state.data?.collaborators.length ? <EmptyState
@@ -748,13 +754,12 @@ const styles = StyleSheet.create({
   fixedHero: { position: 'absolute', top: spacing.lg, left: spacing.lg, right: spacing.lg },
   heroDecorationOne: { position: 'absolute', width: 210, height: 210, borderRadius: 105, backgroundColor: '#FFFFFF0C', right: -36, top: -92 },
   heroDecorationTwo: { position: 'absolute', width: 130, height: 130, borderRadius: 65, backgroundColor: '#FFFFFF0B', right: 138, bottom: -76 },
-  heroCopy: { minWidth: 240, flex: 1, gap: spacing.sm },
+  heroCopy: { minWidth: 0, flex: 1, gap: spacing.sm, paddingRight: 82 },
   eyebrow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   eyebrowText: { color: '#BFD7FF', letterSpacing: 1.2 },
   heroTitle: { color: '#fff', maxWidth: 650 },
   heroSubtitle: { color: '#DDE9FF', maxWidth: 670 },
-  heroButton: { backgroundColor: '#FFFFFF' },
-  heroButtonCompact: { width: '100%' },
+  heroTeamIcon: { position: 'absolute', right: spacing.xxl, top: spacing.xxl, width: 64, height: 64, borderRadius: 24, borderWidth: 1, borderColor: '#FFFFFF22', backgroundColor: '#FFFFFF18', alignItems: 'center', justifyContent: 'center' },
   summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginTop: -48 },
   summaryCard: { minWidth: 140, flexBasis: 150, flexGrow: 1, minHeight: 92, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md },
   summaryIcon: { width: 46, height: 46, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
@@ -765,6 +770,7 @@ const styles = StyleSheet.create({
   filters: { gap: spacing.sm, paddingRight: spacing.lg },
   filter: { minHeight: 40, borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs },
   sectionHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+  addCollaboratorButton: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', shadowColor: '#075CFF', shadowOpacity: 0.2, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
   cards: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'stretch', gap: spacing.md },
   collaboratorCard: { minWidth: 280, flexGrow: 1, maxWidth: 420, gap: spacing.md, padding: spacing.lg, borderWidth: 1.5 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
