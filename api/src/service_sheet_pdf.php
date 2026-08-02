@@ -97,11 +97,8 @@ function gshop_pdf_overlay_page_one(Fpdi $pdf, array $sheet, array $client, arra
     $showCompany = !empty($sheet['showCompanyDetails']);
     $shift = $showCompany ? 0.0 : 48.0;
     $currency = gshop_pdf_string($financial['currencyCode'] ?? $sheet['currencyCode'] ?? 'RON') ?: 'RON';
-    $statuses = ['NEW'=>'Nouă','WAITING'=>'În așteptare','VERIFYING'=>'În verificare','IN_PROGRESS'=>'În lucru','WAITING_PARTS'=>'Așteptăm piesele','COMPLETED'=>'Finalizată','DELIVERED'=>'Predată','CANCELLED'=>'Anulată'];
-
-    gshop_pdf_text($pdf, 353, 780, $sheet['number'] ?? '', 5.4, 'B', 52);
-    gshop_pdf_text($pdf, 412, 780, $statuses[$sheet['status'] ?? ''] ?? ($sheet['status'] ?? ''), 6.1, 'B', 62);
-    gshop_pdf_text($pdf, 485, 780, gshop_pdf_date($sheet['receivedAt'] ?? ''), 6.4, 'B', 65);
+    gshop_pdf_text($pdf, 353, 779, $sheet['number'] ?? '', 9.2, 'B', 91);
+    gshop_pdf_text($pdf, 459, 779, gshop_pdf_date($sheet['receivedAt'] ?? ''), 6.8, 'B', 91);
 
     if ($showCompany) {
         gshop_pdf_text($pdf, 125, 730, $company['legalName'] ?? '', 6.7, '', 85);
@@ -149,7 +146,7 @@ function gshop_pdf_overlay_page_one(Fpdi $pdf, array $sheet, array $client, arra
     gshop_pdf_text($pdf, 295, 182 + $shift, gshop_pdf_date($sheet['estimatedAt'] ?? ''), 6.8, '', 82);
     gshop_pdf_text($pdf, 455, 182 + $shift, gshop_pdf_date($sheet['completedAt'] ?? ''), 6.8, '', 103);
     gshop_pdf_text($pdf, 100, 161 + $shift, $sheet['technicianName'] ?? '', 6.8, '', 455);
-    gshop_pdf_multiline($pdf, 33, 121 + $shift, 525, $sheet['internalNotes'] ?? '', 5, 6.8, 14);
+    gshop_pdf_multiline($pdf, 33, 121 + $shift, 525, $sheet['handoverNotes'] ?? '', 5, 6.8, 14);
 }
 
 function gshop_pdf_overlay_page_two(Fpdi $pdf, array $sheet, array $client, ?string $signaturePath, ?string $stampPath): void {

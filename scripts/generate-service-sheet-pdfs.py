@@ -195,16 +195,16 @@ def draw_header(c: canvas.Canvas, data: dict[str, Any], continuation: bool = Fal
     info_x = PAGE_W - MARGIN - 230
     rounded_box(c, info_x, y + 10, 218, 42, radius=8, fill=ELECTRIC_LIGHT, stroke=HexColor("#B9D0FF"))
     values = (
-        ("NR. FIȘĂ", text(data, "sheet", "number"), 10, 91),
-        ("DATA PRIMIRII", text(data, "sheet", "receivedAt"), 116, 91),
+        ("NR. FIȘĂ", text(data, "sheet", "number"), 10, 91, 9.2),
+        ("DATA PRIMIRII", text(data, "sheet", "receivedAt"), 116, 91, 6.8),
     )
-    for label_text, value, offset, width in values:
+    for label_text, value, offset, width, value_size in values:
         c.setFillColor(ELECTRIC_DARK)
         c.setFont("GShop-Bold", 5.5)
         c.drawString(info_x + offset, y + 37, label_text)
         c.setFillColor(NAVY)
-        c.setFont("GShop-Bold", 6.4)
-        c.drawString(info_x + offset, y + 22, fit_text(value, "GShop-Bold", 6.4, width))
+        c.setFont("GShop-Bold", value_size)
+        c.drawString(info_x + offset, y + 21, fit_text(value, "GShop-Bold", value_size, width))
         c.setStrokeColor(HexColor("#9ABEFF"))
         c.line(info_x + offset, y + 18, info_x + offset + width, y + 18)
 
