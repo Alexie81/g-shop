@@ -101,12 +101,12 @@ function gshop_pdf_overlay_page_one(Fpdi $pdf, array $sheet, array $client, arra
     gshop_pdf_text($pdf, 459, 779, gshop_pdf_date($sheet['receivedAt'] ?? ''), 6.8, 'B', 91);
 
     if ($showCompany) {
-        gshop_pdf_text($pdf, 125, 730, $company['legalName'] ?? '', 6.7, '', 85);
-        gshop_pdf_text($pdf, 245, 730, $company['taxId'] ?? '', 6.7, '', 135);
-        gshop_pdf_text($pdf, 474, 730, $company['tradeRegisterNumber'] ?? '', 6.4, '', 84);
-        gshop_pdf_text($pdf, 78, 713, gshop_pdf_full_address($company), 6.4, '', 205);
-        gshop_pdf_text($pdf, 327, 713, $company['phone'] ?? '', 6.4, '', 80);
-        gshop_pdf_text($pdf, 474, 713, $company['email'] ?? '', 6.2, '', 87);
+        gshop_pdf_text($pdf, 34, 723, $company['legalName'] ?? '', 7.2, 'B', 216);
+        gshop_pdf_text($pdf, 269, 723, $company['taxId'] ?? '', 7.2, 'B', 82);
+        gshop_pdf_text($pdf, 370, 723, $company['tradeRegisterNumber'] ?? '', 6.9, '', 181);
+        gshop_pdf_text($pdf, 34, 697, gshop_pdf_full_address($company), 6.8, '', 224);
+        gshop_pdf_text($pdf, 277, 697, $company['phone'] ?? '', 6.8, '', 82);
+        gshop_pdf_text($pdf, 378, 697, $company['email'] ?? '', 6.8, '', 173);
     }
 
     $clientName = trim(gshop_pdf_string($client['firstName'] ?? '') . ' ' . gshop_pdf_string($client['lastName'] ?? ''));

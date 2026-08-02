@@ -378,18 +378,63 @@ def money_field(
         c.drawRightString(x + w - 3, y + 2, fit_text(value, "GShop-Bold", 7.2, w - 6))
 
 
+def draw_company_field(
+    c: canvas.Canvas,
+    x: float,
+    label_y: float,
+    value_y: float,
+    w: float,
+    label_text: str,
+    value: str = "",
+    *,
+    emphasized: bool = False,
+    value_size: float = 7.0,
+) -> None:
+    c.setFillColor(ELECTRIC_DARK)
+    c.setFont("GShop-Bold", 5.2)
+    c.drawString(x, label_y, label_text.upper())
+    if not value:
+        return
+    font = "GShop-Bold" if emphasized else "GShop-Regular"
+    c.setFillColor(NAVY)
+    c.setFont(font, value_size)
+    c.drawString(x, value_y, fit_text(value, font, value_size, w))
+
+
 def draw_company_block(c: canvas.Canvas, data: dict[str, Any]) -> None:
-    y = 702
-    rounded_box(c, MARGIN, y, CONTENT_W, 44, radius=8, fill=white, stroke=LINE)
+    y = 694
+    rounded_box(
+        c,
+        MARGIN,
+        y,
+        CONTENT_W,
+        52,
+        radius=10,
+        fill=white,
+        stroke=HexColor("#B9D0FF"),
+        line_width=1.0,
+    )
+    c.setFillColor(ELECTRIC)
+    c.roundRect(MARGIN, y + 6, 4, 40, 2, fill=1, stroke=0)
+
+    inner_left = MARGIN + 12
+    inner_right = PAGE_W - MARGIN - 12
+    c.setStrokeColor(LINE)
+    c.setLineWidth(0.7)
+    c.line(inner_left, 720, inner_right, 720)
+    for separator_x in (259, 360):
+        c.line(separator_x, 724, separator_x, 741)
+    for separator_x in (267, 368):
+        c.line(separator_x, 699, separator_x, 716)
+
     company = data.get("company", {}) if isinstance(data.get("company"), dict) else {}
     company_data = {"company": company}
-    col = (CONTENT_W - 28) / 3
-    draw_line_field(c, MARGIN + 10, y + 26, col, "Denumire juridică", text(company_data, "company", "legalName"))
-    draw_line_field(c, MARGIN + 18 + col, y + 26, col, "CUI / CIF", text(company_data, "company", "taxId"))
-    draw_line_field(c, MARGIN + 26 + col * 2, y + 26, col - 18, "Registrul Comerțului", text(company_data, "company", "tradeRegisterNumber"), label_size=5.3)
-    draw_line_field(c, MARGIN + 10, y + 9, col * 1.45, "Sediu", full_address(company_data, "company"))
-    draw_line_field(c, MARGIN + 20 + col * 1.45, y + 9, col * 0.75, "Telefon", text(company_data, "company", "phone"))
-    draw_line_field(c, MARGIN + 30 + col * 2.2, y + 9, CONTENT_W - col * 2.2 - 40, "Email", text(company_data, "company", "email"))
+    draw_company_field(c, 34, 735, 723, 216, "Denumire juridică", text(company_data, "company", "legalName"), emphasized=True, value_size=7.2)
+    draw_company_field(c, 269, 735, 723, 82, "CUI / CIF", text(company_data, "company", "taxId"), emphasized=True, value_size=7.2)
+    draw_company_field(c, 370, 735, 723, 181, "Registrul Comerțului", text(company_data, "company", "tradeRegisterNumber"), value_size=6.9)
+    draw_company_field(c, 34, 709, 697, 224, "Sediu", full_address(company_data, "company"), value_size=6.8)
+    draw_company_field(c, 277, 709, 697, 82, "Telefon", text(company_data, "company", "phone"), value_size=6.8)
+    draw_company_field(c, 378, 709, 697, 173, "Email", text(company_data, "company", "email"), value_size=6.8)
 
 
 def draw_client_and_equipment(c: canvas.Canvas, data: dict[str, Any]) -> None:
