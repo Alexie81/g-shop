@@ -1409,18 +1409,23 @@ try {
     }
     if ($method==='DELETE'&&path_match('/service-sheets/{id}',$path,$params)) {
         $user=require_permission('service_sheets.update');$before=get_sheet($params['id']);ensure_property($before['propertyId'],$user);
-        if(empty($before['isActive']))respond(['deleted'=>true,'id'=>$before['id']]);
         $pdo=db();$pdo->beginTransaction();$now=now_utc();
         $clientLock=$pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE');$clientLock->execute([uuid_bin($before['clientId'])]);
         $paidStmt=$pdo->prepare("SELECT 1 FROM commissions WHERE service_sheet_id=? AND is_active=1 AND status='PAID' AND paid_at IS NOT NULL LIMIT 1");$paidStmt->execute([uuid_bin($before['id'])]);
         if($paidStmt->fetchColumn()){$pdo->rollBack();fail('Fișa are un comision de colaborator achitat. Marchează-l neachitat înainte să ștergi fișa.',409,['code'=>'COLLABORATOR_COMMISSION_PAID']);}
+        $signatureStmt=$pdo->prepare('SELECT signature_path FROM service_sheets WHERE id=? LIMIT 1');$signatureStmt->execute([uuid_bin($before['id'])]);$signaturePath=$signatureStmt->fetchColumn()?:null;
         try{
-            $pdo->prepare("UPDATE service_sheets SET is_active=0,status='CANCELLED',updated_at=?,updated_by=? WHERE id=?")->execute([$now,uuid_bin($user['id']),uuid_bin($before['id'])]);
-            if($before['status']!=='CANCELLED')$pdo->prepare("INSERT INTO service_sheet_status_history (id,service_sheet_id,old_status,new_status,changed_by,created_at) VALUES (?,?,?,'CANCELLED',?,?)")->execute([uuid_bin(uuid_v4()),uuid_bin($before['id']),$before['status'],uuid_bin($user['id']),$now]);
-            $pdo->prepare("UPDATE commissions SET status='CANCELLED',is_active=0,paid_at=NULL,updated_at=?,updated_by=? WHERE service_sheet_id=? AND is_active=1")->execute([$now,uuid_bin($user['id']),uuid_bin($before['id'])]);
+            $pdo->prepare('UPDATE interventions SET service_sheet_id=NULL WHERE service_sheet_id=?')->execute([uuid_bin($before['id'])]);
+            $pdo->prepare('DELETE FROM commissions WHERE service_sheet_id=?')->execute([uuid_bin($before['id'])]);
+            $pdo->prepare('DELETE FROM service_sheet_status_history WHERE service_sheet_id=?')->execute([uuid_bin($before['id'])]);
+            $pdo->prepare('DELETE FROM service_sheets WHERE id=?')->execute([uuid_bin($before['id'])]);
             $pdo->commit();
         }catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}
-        $after=get_sheet($before['id']);audit_log('SERVICE_SHEET_DELETED','service_sheets','Fișă ștearsă: '.$before['number'],'ServiceSheet',$before['id'],$before['propertyId'],$before,$after,$user);
+        $safeNumber=preg_replace('/[^A-Za-z0-9_-]+/','-',(string)$before['number'])?:'fisa-service';$fileStem=strtolower($safeNumber);$pdfDirectory=__DIR__.'/uploads/service-sheets';
+        $files=array_merge([$pdfDirectory.'/'.$fileStem.'.pdf'],glob($pdfDirectory.'/'.$fileStem.'-*.pdf')?:[]);
+        if($signaturePath){$candidate=realpath(__DIR__.'/'.ltrim((string)$signaturePath,'/\\'));$apiRoot=realpath(__DIR__);if($candidate!==false&&$apiRoot!==false&&str_starts_with($candidate,$apiRoot))$files[]=$candidate;}
+        $removedFiles=0;foreach(array_unique($files)as$file)if(is_file($file)&&@unlink($file))$removedFiles++;
+        audit_log('SERVICE_SHEET_DELETED','service_sheets','Fișă ștearsă definitiv: '.$before['number'],'ServiceSheet',$before['id'],$before['propertyId'],$before,['deleted'=>true,'removedFiles'=>$removedFiles],$user);
         respond(['deleted'=>true,'id'=>$before['id']]);
     }
     if ($method==='POST'&&path_match('/service-sheets/{id}/signature',$path,$params)) { $user=require_permission('service_sheets.sign');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);$body=json_body();$data=(string)($body['signature']??'');if(!preg_match('#^data:image/png;base64,(.+)$#',$data,$match))fail('Formatul semnăturii nu este valid.',422);$binary=base64_decode($match[1],true);if($binary===false||strlen($binary)<100||strlen($binary)>1500000)fail('Semnătura este invalidă sau prea mare.',422);$directory=__DIR__.'/uploads/signatures';if(!is_dir($directory)&&!mkdir($directory,0755,true)&&!is_dir($directory))throw new RuntimeException('Directorul pentru semnături nu poate fi creat.');$filename=$sheet['id'].'.png';if(file_put_contents($directory.'/'.$filename,$binary,LOCK_EX)===false)throw new RuntimeException('Semnătura nu poate fi salvată.');$pathValue='uploads/signatures/'.$filename;$now=now_utc();db()->prepare('UPDATE service_sheets SET signature_path=?,signed_at=?,updated_at=?,updated_by=? WHERE id=?')->execute([$pathValue,$now,$now,uuid_bin($user['id']),uuid_bin($sheet['id'])]);audit_log('SERVICE_SHEET_SIGNED','service_sheets','Semnătură client salvată pentru '.$sheet['number'],'ServiceSheet',$sheet['id'],$sheet['propertyId'],null,['signedAt'=>$now],$user);respond(get_sheet($sheet['id'])); }
@@ -1431,7 +1436,7 @@ try {
         ensure_company_details_table(db());$stampStmt=db()->prepare('SELECT stamp_path FROM property_company_details WHERE property_id=? LIMIT 1');$stampStmt->execute([uuid_bin($sheet['propertyId'])]);$stampPath=$stampStmt->fetchColumn()?:null;
         require_once __DIR__.'/src/service_sheet_pdf.php';
         $document=generate_service_sheet_pdf($sheet,$client,$bundle['financials'],$bundle['summary'],$company,$signaturePath,$stampPath);
-        $result=['url'=>public_base_url().'/uploads/service-sheets/'.rawurlencode($document['fileName']),'fileName'=>$document['fileName'],'generatedAt'=>$document['generatedAt']];
+        $result=['url'=>public_base_url().'/uploads/service-sheets/'.rawurlencode($document['fileName']).'?v='.rawurlencode($document['generatedAt']),'fileName'=>$document['fileName'],'generatedAt'=>$document['generatedAt']];
         audit_log('SERVICE_SHEET_PDF_GENERATED','service_sheets','PDF generat pentru '.$sheet['number'],'ServiceSheet',$sheet['id'],$sheet['propertyId'],null,['fileName'=>$document['fileName'],'showCompanyDetails'=>$sheet['showCompanyDetails']],$user);
         respond($result,201);
     }

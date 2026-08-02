@@ -359,8 +359,11 @@ function generate_service_sheet_pdf(array $sheet, array $client, array $financia
     foreach (glob($directory . '/*.pdf') ?: [] as $existing) if (is_file($existing) && filemtime($existing) < time() - 1209600) @unlink($existing);
 
     $safeNumber = preg_replace('/[^A-Za-z0-9_-]+/', '-', gshop_pdf_string($sheet['number'] ?? 'fisa-service')) ?: 'fisa-service';
-    $filename = strtolower($safeNumber) . '-' . gmdate('Ymd-His') . '-' . bin2hex(random_bytes(6)) . '.pdf';
+    $fileStem = strtolower($safeNumber);
+    $filename = $fileStem . '.pdf';
     $output = $directory . '/' . $filename;
+    $temporary = tempnam($directory, $fileStem . '-generating-');
+    if ($temporary === false) throw new RuntimeException('Fișierul temporar pentru PDF nu poate fi creat.');
 
     $pdf = new Fpdi('P', 'pt', 'A4');
     $pdf->SetAutoPageBreak(false);
@@ -378,7 +381,13 @@ function generate_service_sheet_pdf(array $sheet, array $client, array $financia
         if ($page === 1) gshop_pdf_overlay_page_one($pdf,$sheet,$client,$financial,$summary,$company);
         if ($page === 2) gshop_pdf_overlay_page_two($pdf,$sheet,$client,gshop_pdf_string($company['propertyName'] ?? ''),$signaturePath,$stampPath);
     }
-    $pdf->Output('F', $output, true);
-    if (!is_file($output) || filesize($output) < 1000) throw new RuntimeException('Fișa PDF nu a putut fi generată.');
+    try {
+        $pdf->Output('F', $temporary, true);
+        if (!is_file($temporary) || filesize($temporary) < 1000) throw new RuntimeException('Fișa PDF nu a putut fi generată.');
+        if (!@rename($temporary, $output)) throw new RuntimeException('Fișa PDF existentă nu a putut fi înlocuită.');
+        foreach (glob($directory . '/' . $fileStem . '-*.pdf') ?: [] as $legacy) if (is_file($legacy)) @unlink($legacy);
+    } finally {
+        if (is_file($temporary)) @unlink($temporary);
+    }
     return ['path'=>$output,'fileName'=>$filename,'generatedAt'=>gmdate('c')];
 }
