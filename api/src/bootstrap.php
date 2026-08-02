@@ -69,6 +69,9 @@ function json_body(): array {
     return $data;
 }
 function respond($data = null, int $status = 200, array $meta = []): void {
+    if ($status < 400 && function_exists('gshop_flush_pending_service_sheet_pdfs')) {
+        gshop_flush_pending_service_sheet_pdfs();
+    }
     http_response_code($status);
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(array_merge(['data' => $data], $meta), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

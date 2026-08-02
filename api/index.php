@@ -509,6 +509,28 @@ function map_sheet(array $row): array {
 }
 function get_sheet(string $id): array { $stmt = db()->prepare(sheet_select() . ' WHERE s.id=? LIMIT 1'); $stmt->execute([uuid_bin($id)]); $row = $stmt->fetch(); if (!$row) fail('Fișa nu există.', 404); return map_sheet($row); }
 
+function gshop_regenerate_service_sheet_pdf(string $sheetId): array {
+    $sheet=get_sheet($sheetId);if(empty($sheet['isActive']))throw new RuntimeException('Fișa de service nu mai este activă.');
+    $client=get_client($sheet['clientId']);$bundle=client_financial_bundle($client);$company=company_details_record($sheet['propertyId']);$company['propertyName']=(string)property_record($sheet['propertyId'])['name'];
+    $pathStmt=db()->prepare('SELECT signature_path FROM service_sheets WHERE id=? LIMIT 1');$pathStmt->execute([uuid_bin($sheet['id'])]);$signaturePath=$pathStmt->fetchColumn()?:null;
+    ensure_company_details_table(db());$stampStmt=db()->prepare('SELECT stamp_path FROM property_company_details WHERE property_id=? LIMIT 1');$stampStmt->execute([uuid_bin($sheet['propertyId'])]);$stampPath=$stampStmt->fetchColumn()?:null;
+    require_once __DIR__.'/src/service_sheet_pdf.php';
+    return generate_service_sheet_pdf($sheet,$client,$bundle['financials'],$bundle['summary'],$company,$signaturePath,$stampPath);
+}
+function gshop_queue_service_sheet_pdf(string $sheetId): void { $GLOBALS['gshop_pending_service_sheet_pdfs'][$sheetId]=true; }
+function gshop_queue_client_service_sheet_pdf(string $clientId): void {
+    $stmt=db()->prepare('SELECT '.uuid_sql('id').' id FROM service_sheets WHERE client_id=? AND is_active=1');$stmt->execute([uuid_bin($clientId)]);
+    foreach($stmt->fetchAll()as$row)gshop_queue_service_sheet_pdf((string)$row['id']);
+}
+function gshop_queue_property_service_sheet_pdfs(string $propertyId): void {
+    $stmt=db()->prepare('SELECT '.uuid_sql('id').' id FROM service_sheets WHERE property_id=? AND is_active=1');$stmt->execute([uuid_bin($propertyId)]);
+    foreach($stmt->fetchAll()as$row)gshop_queue_service_sheet_pdf((string)$row['id']);
+}
+function gshop_flush_pending_service_sheet_pdfs(): void {
+    $pending=array_keys($GLOBALS['gshop_pending_service_sheet_pdfs']??[]);if(!$pending||db()->inTransaction())return;$GLOBALS['gshop_pending_service_sheet_pdfs']=[];
+    foreach($pending as$sheetId)gshop_regenerate_service_sheet_pdf((string)$sheetId);
+}
+
 function collaborator_select(string $extraColumns = ''): string {
     return 'SELECT ' . uuid_sql('c.id') . ' id,c.name,c.phone,c.email,c.role,c.default_commission_type,c.default_commission_value,c.bank_account,c.notes,c.is_active,c.created_at,c.updated_at,' . uuid_sql('c.created_by') . ' created_by,' . uuid_sql('c.updated_by') . ' updated_by' . $extraColumns . ' FROM collaborators c';
 }
@@ -751,7 +773,7 @@ function sync_service_sheet_financials_from_client(PDO $pdo, array $client, arra
     $now=now_utc();
     $stmt=$pdo->prepare('UPDATE service_sheets SET parts_cost=?,labor_cost=?,total_cost=?,direct_costs=?,net_value=?,updated_at=?,updated_by=? WHERE client_id=? AND is_active=1 AND NOT (parts_cost <=> ? AND labor_cost <=> ? AND total_cost <=> ? AND direct_costs <=> ? AND net_value <=> ?)');
     $stmt->execute([$parts,$labor,$total,$direct,$net,$now,uuid_bin($user['id']),uuid_bin($client['id']),$parts,$labor,$total,$direct,$net]);
-    return $stmt->rowCount()>0;
+    $changed=$stmt->rowCount()>0;if($changed)gshop_queue_client_service_sheet_pdf((string)$client['id']);return $changed;
 }
 function sync_client_financials_from_service_sheet(PDO $pdo, array $client, array $sheet, array $user): array {
     $before=client_financial_record($client);
@@ -979,7 +1001,7 @@ try {
         $name=validated_whatsapp_message_text($body['name']??null,'Numele proprietății',2,120);
         if($name===$before['name'])respond($before);
         db()->prepare('UPDATE properties SET name=?,updated_at=?,updated_by=? WHERE id=?')->execute([$name,now_utc(),uuid_bin($user['id']),uuid_bin($propertyId)]);
-        $after=property_record($propertyId);audit_log('PROPERTY_NAME_UPDATED','settings','Numele proprietății a fost actualizat','Property',$propertyId,$propertyId,['name'=>$before['name']],['name'=>$after['name']],$user);respond($after);
+        $after=property_record($propertyId);audit_log('PROPERTY_NAME_UPDATED','settings','Numele proprietății a fost actualizat','Property',$propertyId,$propertyId,['name'=>$before['name']],['name'=>$after['name']],$user);gshop_queue_property_service_sheet_pdfs($propertyId);respond($after);
     }
 
     if ($method === 'GET' && $path === '/company-details') {
@@ -995,7 +1017,7 @@ try {
         $bankName=company_detail_text($body['bankName']??null,'Banca',100);$iban=company_detail_text($body['iban']??null,'IBAN-ul',40);if($iban!==null){$iban=strtoupper(str_replace(' ','',$iban));if(!preg_match('/^[A-Z]{2}[A-Z0-9]{13,38}$/',$iban))fail('IBAN-ul nu este valid.',422);}
         $representativeName=company_detail_text($body['representativeName']??null,'Reprezentantul legal',120);$representativeRole=company_detail_text($body['representativeRole']??null,'Funcția reprezentantului',80);$vatPayer=(bool)($body['vatPayer']??false);$now=now_utc();ensure_company_details_table(db());
         db()->prepare('INSERT INTO property_company_details (property_id,legal_name,tax_id,trade_register_number,vat_payer,address,city,county,postal_code,country,phone,email,website,bank_name,iban,representative_name,representative_role,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE legal_name=VALUES(legal_name),tax_id=VALUES(tax_id),trade_register_number=VALUES(trade_register_number),vat_payer=VALUES(vat_payer),address=VALUES(address),city=VALUES(city),county=VALUES(county),postal_code=VALUES(postal_code),country=VALUES(country),phone=VALUES(phone),email=VALUES(email),website=VALUES(website),bank_name=VALUES(bank_name),iban=VALUES(iban),representative_name=VALUES(representative_name),representative_role=VALUES(representative_role),updated_at=VALUES(updated_at),updated_by=VALUES(updated_by)')->execute([uuid_bin($propertyId),$legalName,$taxId,$tradeRegister,$vatPayer?1:0,$address,$city,$county,$postalCode,$country,$phone,$email,$website,$bankName,$iban,$representativeName,$representativeRole,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);
-        $after=company_details_record($propertyId);audit_log('COMPANY_DETAILS_UPDATED','settings','Datele firmei au fost actualizate','Property',$propertyId,$propertyId,company_details_snapshot($before),company_details_snapshot($after),$user);respond($after);
+        $after=company_details_record($propertyId);audit_log('COMPANY_DETAILS_UPDATED','settings','Datele firmei au fost actualizate','Property',$propertyId,$propertyId,company_details_snapshot($before),company_details_snapshot($after),$user);gshop_queue_property_service_sheet_pdfs($propertyId);respond($after);
     }
     if ($method === 'POST' && path_match('/company-details/{id}/stamp',$path,$params)) {
         $user=require_permission('settings.manage');if($user['role']!=='ADMIN')fail('Doar administratorul poate modifica ștampila.',403);
@@ -1003,11 +1025,11 @@ try {
         if(!preg_match('#^data:image/(png|jpeg|webp);base64,(.+)$#',$data,$match))fail('Formatul ștampilei nu este valid.',422);$binary=base64_decode($match[2],true);if($binary===false||strlen($binary)<100||strlen($binary)>2500000)fail('Imaginea ștampilei este invalidă sau prea mare.',422);
         $extensions=['png'=>'png','jpeg'=>'jpg','webp'=>'webp'];$extension=$extensions[$match[1]];$directory=__DIR__.'/uploads/stamps';if(!is_dir($directory)&&!mkdir($directory,0755,true)&&!is_dir($directory))throw new RuntimeException('Directorul pentru ștampile nu poate fi creat.');
         foreach(glob($directory.'/'.$propertyId.'.*')?:[]as$oldFile)if(is_file($oldFile))@unlink($oldFile);$filename=$propertyId.'.'.$extension;if(file_put_contents($directory.'/'.$filename,$binary,LOCK_EX)===false)throw new RuntimeException('Ștampila nu poate fi salvată.');$pathValue='uploads/stamps/'.$filename;$now=now_utc();ensure_company_details_table(db());
-        db()->prepare("INSERT INTO property_company_details (property_id,country,stamp_path,created_at,updated_at,created_by,updated_by) VALUES (?,'România',?,?,?,?,?) ON DUPLICATE KEY UPDATE stamp_path=VALUES(stamp_path),updated_at=VALUES(updated_at),updated_by=VALUES(updated_by)")->execute([uuid_bin($propertyId),$pathValue,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);$after=company_details_record($propertyId);audit_log('COMPANY_STAMP_UPDATED','settings','Ștampila firmei a fost actualizată','Property',$propertyId,$propertyId,['hasStamp'=>!empty($before['stampUrl'])],['hasStamp'=>true],$user);respond($after);
+        db()->prepare("INSERT INTO property_company_details (property_id,country,stamp_path,created_at,updated_at,created_by,updated_by) VALUES (?,'România',?,?,?,?,?) ON DUPLICATE KEY UPDATE stamp_path=VALUES(stamp_path),updated_at=VALUES(updated_at),updated_by=VALUES(updated_by)")->execute([uuid_bin($propertyId),$pathValue,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);$after=company_details_record($propertyId);audit_log('COMPANY_STAMP_UPDATED','settings','Ștampila firmei a fost actualizată','Property',$propertyId,$propertyId,['hasStamp'=>!empty($before['stampUrl'])],['hasStamp'=>true],$user);gshop_queue_property_service_sheet_pdfs($propertyId);respond($after);
     }
     if ($method === 'DELETE' && path_match('/company-details/{id}/stamp',$path,$params)) {
         $user=require_permission('settings.manage');if($user['role']!=='ADMIN')fail('Doar administratorul poate elimina ștampila.',403);$propertyId=validated_uuid($params['id'],'Proprietatea');ensure_property($propertyId,$user);$before=company_details_record($propertyId);
-        $directory=__DIR__.'/uploads/stamps';foreach(glob($directory.'/'.$propertyId.'.*')?:[]as$oldFile)if(is_file($oldFile))@unlink($oldFile);db()->prepare('UPDATE property_company_details SET stamp_path=NULL,updated_at=?,updated_by=? WHERE property_id=?')->execute([now_utc(),uuid_bin($user['id']),uuid_bin($propertyId)]);$after=company_details_record($propertyId);audit_log('COMPANY_STAMP_DELETED','settings','Ștampila firmei a fost eliminată','Property',$propertyId,$propertyId,['hasStamp'=>!empty($before['stampUrl'])],['hasStamp'=>false],$user);respond($after);
+        $directory=__DIR__.'/uploads/stamps';foreach(glob($directory.'/'.$propertyId.'.*')?:[]as$oldFile)if(is_file($oldFile))@unlink($oldFile);db()->prepare('UPDATE property_company_details SET stamp_path=NULL,updated_at=?,updated_by=? WHERE property_id=?')->execute([now_utc(),uuid_bin($user['id']),uuid_bin($propertyId)]);$after=company_details_record($propertyId);audit_log('COMPANY_STAMP_DELETED','settings','Ștampila firmei a fost eliminată','Property',$propertyId,$propertyId,['hasStamp'=>!empty($before['stampUrl'])],['hasStamp'=>false],$user);gshop_queue_property_service_sheet_pdfs($propertyId);respond($after);
     }
 
     if ($method === 'GET' && $path === '/whatsapp-messages') {
@@ -1074,7 +1096,7 @@ try {
         $user=require_permission('financials.view');$client=get_client(validated_uuid($params['id'],'Clientul'));ensure_property($client['propertyId'],$user);respond(client_financial_bundle($client));
     }
     if ($method === 'PUT' && path_match('/clients/{id}/financials',$path,$params)) {
-        $user=require_financial_write();$client=get_client(validated_uuid($params['id'],'Clientul'));ensure_property($client['propertyId'],$user);$body=json_body();$before=client_financial_record($client);$next=$before;
+        $user=require_financial_write();$client=get_client(validated_uuid($params['id'],'Clientul'));ensure_property($client['propertyId'],$user);$body=json_body();gshop_queue_client_service_sheet_pdf($client['id']);$before=client_financial_record($client);$next=$before;
         $currency=array_key_exists('currencyCode',$body)?validated_currency($body['currencyCode']):$before['currencyCode'];$next['currencyCode']=$currency;
         if($currency==='RON')$next['exchangeRateToRon']=array_key_exists('exchangeRateToRon',$body)?validated_exchange_rate($body['exchangeRateToRon'],$currency):1.0;
         else{if(!array_key_exists('exchangeRateToRon',$body)&&(!$before['persisted']||$currency!==$before['currencyCode']))fail('Cursul de schimb este obligatoriu pentru moneda selectată.',422);$next['exchangeRateToRon']=array_key_exists('exchangeRateToRon',$body)?validated_exchange_rate($body['exchangeRateToRon'],$currency):(float)$before['exchangeRateToRon'];}
@@ -1241,6 +1263,7 @@ try {
         try{$pdo->prepare('UPDATE clients SET '.implode(',',$sets).' WHERE id=?')->execute($args);if($assignmentTouched)replace_client_collaborators($pdo,$params['id'],$requestedAssignments,$user,$now);$after=get_client($params['id']);if($assignmentChanged)sync_client_commission($pdo,$after,$beforeFinancial,$expenses,$user,true);$pdo->commit();}catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}
         audit_log('CLIENT_UPDATED','clients','Client actualizat: '.$after['firstName'].' '.$after['lastName'],'Client',$params['id'],$after['propertyId'],client_audit_snapshot($before),client_audit_snapshot($after),$user);
         if($assignmentChanged)audit_log('CLIENT_COLLABORATOR_SYNCED','commissions','Atribuirile și comisioanele colaboratorilor au fost sincronizate','Client',$after['id'],$after['propertyId'],$beforeAssignmentSnapshot,$nextAssignmentSnapshot,$user);
+        gshop_queue_client_service_sheet_pdf($after['id']);
         respond(client_for_user($after,$user));
     }
     if ($method === 'DELETE' && path_match('/clients/{id}', $path, $params)) {
@@ -1293,6 +1316,12 @@ try {
     if ($method === 'POST' && path_match('/clients/{id}/qr/use', $path, $params)) { $user=require_permission('qr.generate');$client=get_client($params['id']);ensure_property($client['propertyId'],$user);if(empty($client['qr']))fail('QR inexistent.',404);$now=now_utc();db()->prepare("UPDATE client_qr SET status='USED',used_at=?,updated_at=?,updated_by=? WHERE id=?")->execute([$now,$now,uuid_bin($user['id']),uuid_bin($client['qr']['id'])]);audit_log('QR_MARKED_USED','qr','Cod QR marcat ca folosit','ClientQR',$client['qr']['id'],$client['propertyId'],null,null,$user);respond(client_for_user(get_client($client['id']),$user)); }
     if ($method === 'GET' && path_match('/clients/{id}/intake', $path, $params)) { $user=require_permission('clients.view');$client=get_client($params['id']);ensure_property($client['propertyId'],$user);$stmt=db()->prepare('SELECT payload FROM client_intakes WHERE client_id=? AND is_active=1 ORDER BY submitted_at DESC LIMIT 1');$stmt->execute([uuid_bin($client['id'])]);$payload=$stmt->fetchColumn();respond($payload?json_decode($payload,true):null); }
 
+    if ($method==='GET' && path_match('/public/client-form/{token}/service-sheet', $path, $params)) {
+        $token=$params['token'];$stmt=db()->prepare('SELECT '.uuid_sql('s.id').' sheet_id,s.number FROM client_qr q JOIN clients c ON c.id=q.client_id JOIN service_sheets s ON s.client_id=c.id AND s.property_id=q.property_id AND s.is_active=1 WHERE q.token=? AND q.is_active=1 AND c.is_active=1 ORDER BY s.updated_at DESC LIMIT 1');$stmt->execute([uuid_bin($token)]);$row=$stmt->fetch();
+        if(!$row)fail('Fișa de service nu este disponibilă.',404);
+        $document=gshop_regenerate_service_sheet_pdf((string)$row['sheet_id']);$downloadName=preg_replace('/[^A-Za-z0-9_-]+/','-',(string)$row['number'])?:'fisa-service';
+        header('Content-Type: application/pdf');header('Content-Disposition: inline; filename="'.strtolower($downloadName).'.pdf"');header('Content-Length: '.filesize($document['path']));header('Cache-Control: private, no-store, max-age=0');header('X-Content-Type-Options: nosniff');readfile($document['path']);exit;
+    }
     if ($method==='GET' && path_match('/public/client-form/{token}', $path, $params)) {
         $token=$params['token'];
         $stmt=db()->prepare(
@@ -1309,7 +1338,7 @@ try {
         db()->prepare('UPDATE client_qr SET opened_at=COALESCE(opened_at,?),updated_at=? WHERE id=?')->execute([$now,$now,uuid_bin($qr['id'])]);
 
         $sheetStmt=db()->prepare(
-            'SELECT number,equipment,brand,model,reported_issue,status,received_at,estimated_at,completed_at,updated_at ' .
+            'SELECT '.uuid_sql('id').' id,number,equipment,brand,model,reported_issue,status,received_at,estimated_at,completed_at,updated_at ' .
             'FROM service_sheets WHERE client_id=? AND property_id=? AND is_active=1 ' .
             'ORDER BY updated_at DESC,created_at DESC LIMIT 1'
         );
@@ -1341,6 +1370,7 @@ try {
                 'estimatedAt'=>iso_date($sheet['estimated_at']),
                 'completedAt'=>iso_date($sheet['completed_at']),
                 'updatedAt'=>iso_date($sheet['updated_at']),
+                'serviceSheetUrl'=>public_base_url().'/index.php/public/client-form/'.rawurlencode($token).'/service-sheet',
             ]:null,
         ]);
     }
@@ -1378,7 +1408,7 @@ try {
         audit_log('SERVICE_SHEET_CREATED','service_sheets','Fișă creată: '.$number,'ServiceSheet',$id,$propertyId,null,$body,$user);
         if(!empty($financeSync['changed']))audit_log('CLIENT_FINANCIALS_SYNCED_FROM_SHEET','financials','Costurile clientului au fost sincronizate din fișa '.$number,'Client',$clientId,$propertyId,financial_mutable_snapshot($financeSync['before']),financial_mutable_snapshot($financeSync['after']),$user);
         if($commissionCreated)audit_log('COMMISSION_CREATED','commissions','Comision aprobat automat pentru fișa '.$number,'Client',$clientId,$propertyId,null,client_financial_bundle($client)['collaborator'],$user);
-        respond(get_sheet($id),201);
+        gshop_queue_service_sheet_pdf($id);respond(get_sheet($id),201);
     }
     if ($method==='PUT'&&path_match('/service-sheets/{id}',$path,$params)) {
         $user=require_permission('service_sheets.update');$before=get_sheet($params['id']);ensure_property($before['propertyId'],$user);$body=json_body();
@@ -1405,7 +1435,7 @@ try {
         $after=get_sheet($params['id']);audit_log('SERVICE_SHEET_UPDATED','service_sheets','Fișă actualizată: '.$after['number'],'ServiceSheet',$params['id'],$after['propertyId'],$before,$after,$user);
         if($financeChanged&&!empty($financeSync['changed']))audit_log('CLIENT_FINANCIALS_SYNCED_FROM_SHEET','financials','Costurile clientului au fost sincronizate din fișa '.$after['number'],'Client',$after['clientId'],$after['propertyId'],financial_mutable_snapshot($financeSync['before']),financial_mutable_snapshot($financeSync['after']),$user);
         if($financeChanged&&$recalculated>0)audit_log('COMMISSION_RECALCULATED','commissions','Comision recalculat pentru fișa '.$after['number'],'ServiceSheet',$params['id'],$after['propertyId'],['totalCost'=>$before['totalCost'],'directCosts'=>$before['directCosts'],'netValue'=>$before['netValue'],'collaboratorCommission'=>$before['collaboratorCommission']],['totalCost'=>$after['totalCost'],'directCosts'=>$after['directCosts'],'netValue'=>$after['netValue'],'collaboratorCommission'=>$after['collaboratorCommission']],$user);
-        respond($after);
+        gshop_queue_service_sheet_pdf($after['id']);respond($after);
     }
     if ($method==='DELETE'&&path_match('/service-sheets/{id}',$path,$params)) {
         $user=require_permission('service_sheets.update');$before=get_sheet($params['id']);ensure_property($before['propertyId'],$user);
@@ -1428,7 +1458,7 @@ try {
         audit_log('SERVICE_SHEET_DELETED','service_sheets','Fișă ștearsă definitiv: '.$before['number'],'ServiceSheet',$before['id'],$before['propertyId'],$before,['deleted'=>true,'removedFiles'=>$removedFiles],$user);
         respond(['deleted'=>true,'id'=>$before['id']]);
     }
-    if ($method==='POST'&&path_match('/service-sheets/{id}/signature',$path,$params)) { $user=require_permission('service_sheets.sign');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);$body=json_body();$data=(string)($body['signature']??'');if(!preg_match('#^data:image/png;base64,(.+)$#',$data,$match))fail('Formatul semnăturii nu este valid.',422);$binary=base64_decode($match[1],true);if($binary===false||strlen($binary)<100||strlen($binary)>1500000)fail('Semnătura este invalidă sau prea mare.',422);$directory=__DIR__.'/uploads/signatures';if(!is_dir($directory)&&!mkdir($directory,0755,true)&&!is_dir($directory))throw new RuntimeException('Directorul pentru semnături nu poate fi creat.');$filename=$sheet['id'].'.png';if(file_put_contents($directory.'/'.$filename,$binary,LOCK_EX)===false)throw new RuntimeException('Semnătura nu poate fi salvată.');$pathValue='uploads/signatures/'.$filename;$now=now_utc();db()->prepare('UPDATE service_sheets SET signature_path=?,signed_at=?,updated_at=?,updated_by=? WHERE id=?')->execute([$pathValue,$now,$now,uuid_bin($user['id']),uuid_bin($sheet['id'])]);audit_log('SERVICE_SHEET_SIGNED','service_sheets','Semnătură client salvată pentru '.$sheet['number'],'ServiceSheet',$sheet['id'],$sheet['propertyId'],null,['signedAt'=>$now],$user);respond(get_sheet($sheet['id'])); }
+    if ($method==='POST'&&path_match('/service-sheets/{id}/signature',$path,$params)) { $user=require_permission('service_sheets.sign');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);$body=json_body();$data=(string)($body['signature']??'');if(!preg_match('#^data:image/png;base64,(.+)$#',$data,$match))fail('Formatul semnăturii nu este valid.',422);$binary=base64_decode($match[1],true);if($binary===false||strlen($binary)<100||strlen($binary)>1500000)fail('Semnătura este invalidă sau prea mare.',422);$directory=__DIR__.'/uploads/signatures';if(!is_dir($directory)&&!mkdir($directory,0755,true)&&!is_dir($directory))throw new RuntimeException('Directorul pentru semnături nu poate fi creat.');$filename=$sheet['id'].'.png';if(file_put_contents($directory.'/'.$filename,$binary,LOCK_EX)===false)throw new RuntimeException('Semnătura nu poate fi salvată.');$pathValue='uploads/signatures/'.$filename;$now=now_utc();db()->prepare('UPDATE service_sheets SET signature_path=?,signed_at=?,updated_at=?,updated_by=? WHERE id=?')->execute([$pathValue,$now,$now,uuid_bin($user['id']),uuid_bin($sheet['id'])]);audit_log('SERVICE_SHEET_SIGNED','service_sheets','Semnătură client salvată pentru '.$sheet['number'],'ServiceSheet',$sheet['id'],$sheet['propertyId'],null,['signedAt'=>$now],$user);gshop_queue_service_sheet_pdf($sheet['id']);respond(get_sheet($sheet['id'])); }
     if ($method==='POST'&&path_match('/service-sheets/{id}/pdf',$path,$params)) {
         $user=require_permission('service_sheets.view');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);
         $client=get_client($sheet['clientId']);$bundle=client_financial_bundle($client);$company=company_details_record($sheet['propertyId']);$company['propertyName']=(string)property_record($sheet['propertyId'])['name'];
@@ -1547,7 +1577,7 @@ try {
         $beforeAmount=round((float)array_sum(array_map(fn($row)=>(float)$row['commission_value'],$before)),2);$afterAmount=round((float)array_sum(array_map(fn($row)=>(float)$row['commission_value'],$after)),2);
         $beforeStatuses=$before?implode(',',array_values(array_unique(array_column($before,'status')))):'NONE';$afterStatuses=$after?implode(',',array_values(array_unique(array_column($after,'status')))):'NONE';
         audit_log($paid?'COLLABORATOR_PAYMENT_MARKED_PAID':'COLLABORATOR_PAYMENT_MARKED_DUE','commissions',($paid?'Comisioane marcate achitate':'Comisioane marcate de achitat').' pentru '.$client['firstName'].' '.$client['lastName'].' / '.$collaboratorName,'Client',$clientId,$propertyId,['status'=>$beforeStatuses,'amount'=>$beforeAmount,'affectedCount'=>count($before)],['status'=>$afterStatuses,'amount'=>$afterAmount,'affectedCount'=>count($after)],$user);
-        $paidAt=$paid&&$after?iso_date($after[0]['paid_at']):null;respond(['updated'=>$update->rowCount(),'status'=>$status,'paid'=>$paid,'paidAt'=>$paidAt,'amount'=>$afterAmount]);
+        $paidAt=$paid&&$after?iso_date($after[0]['paid_at']):null;gshop_queue_client_service_sheet_pdf($clientId);respond(['updated'=>$update->rowCount(),'status'=>$status,'paid'=>$paid,'paidAt'=>$paidAt,'amount'=>$afterAmount]);
     }
 
     if ($method==='GET'&&$path==='/users') { $user=require_permission('users.view');$propertyId=(string)($_GET['propertyId']??'');ensure_property($propertyId,$user);$select='SELECT '.uuid_sql('u.id').' id,u.username,u.first_name,u.last_name,u.email,u.phone,u.role,u.permissions,u.is_active,u.last_login_at,u.created_at,u.updated_at,'.uuid_sql('u.created_by').' created_by,'.uuid_sql('u.updated_by').' updated_by FROM users u';$args=[];if($user['role']!=='ADMIN'){$select.=' JOIN user_properties up ON up.user_id=u.id WHERE up.property_id=?';$args[] = uuid_bin($propertyId);}$select.=' ORDER BY u.is_active DESC,u.first_name,u.last_name';$stmt=db()->prepare($select);$stmt->execute($args);$data=[];foreach($stmt->fetchAll()as$row){$item=entity_base($row);$item['permissions']=json_decode((string)$row['permissions'],true)?:[];$item['propertyIds']=[];$pstmt=db()->prepare('SELECT '.uuid_sql('property_id').' id FROM user_properties WHERE user_id=?');$pstmt->execute([uuid_bin($item['id'])]);$item['propertyIds']=array_column($pstmt->fetchAll(),'id');$data[]=$item;}respond($data); }
