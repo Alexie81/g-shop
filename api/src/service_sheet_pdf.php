@@ -385,6 +385,7 @@ function generate_service_sheet_pdf(array $sheet, array $client, array $financia
         $pdf->Output('F', $temporary, true);
         if (!is_file($temporary) || filesize($temporary) < 1000) throw new RuntimeException('Fișa PDF nu a putut fi generată.');
         if (!@rename($temporary, $output)) throw new RuntimeException('Fișa PDF existentă nu a putut fi înlocuită.');
+        @chmod($output, 0644);
         foreach (glob($directory . '/' . $fileStem . '-*.pdf') ?: [] as $legacy) if (is_file($legacy)) @unlink($legacy);
     } finally {
         if (is_file($temporary)) @unlink($temporary);
