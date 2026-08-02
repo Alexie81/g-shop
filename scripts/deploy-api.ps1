@@ -16,13 +16,16 @@ function Send-FtpFile {
 
   $common = @('--silent', '--show-error', '--fail', '--ssl-reqd', '--ftp-create-dirs', '--user', "${FtpUser}:${FtpPassword}")
   if ($SkipCertificateCheck) { $common = @('--insecure') + $common }
-  if ($File.Length -le 12000) {
+  $requiresChunking = $File.Length -gt 12000 -and @('.php', '.sql') -contains $File.Extension.ToLowerInvariant()
+  if (-not $requiresChunking) {
     & curl.exe @common --upload-file $File.FullName $Target
     if ($LASTEXITCODE -ne 0) { throw "Transferul a eșuat pentru $($File.Name)" }
     return
   }
 
   # Unele configurații LiteSpeed refuză transferurile PHP/SQL mari cu FTP 451.
+  # Fișierele binare (PDF, fonturi, imagini) sunt transferate integral; fragmentarea
+  # lor în mii de cereri este inutilă și încetinește sever publicarea.
   # Segmentele sunt reasamblate cu APPE, apoi dimensiunea este verificată de server.
   $bytes = [System.IO.File]::ReadAllBytes($File.FullName)
   $temporary = [System.IO.Path]::GetTempFileName()
