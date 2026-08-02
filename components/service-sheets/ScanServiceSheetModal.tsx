@@ -94,6 +94,8 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
   const [saving, setSaving] = useState(false);
   const [signatureOpen, setSignatureOpen] = useState(false);
   const [pendingSignature, setPendingSignature] = useState<string | null>(null);
+  const [signatureSaving, setSignatureSaving] = useState(false);
+  const [signatureSaved, setSignatureSaved] = useState(false);
   const savingRef = useRef(false);
   const translateY = useRef(new Animated.Value(640)).current;
   const canSign = hasPermission('service_sheets.sign');
@@ -104,6 +106,8 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
     setForm(formFromSheet(existingSheet));
     setSignatureOpen(false);
     setPendingSignature(null);
+    setSignatureSaving(false);
+    setSignatureSaved(false);
     savingRef.current = false;
     setSaving(false);
     translateY.setValue(640);
@@ -207,6 +211,31 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
     void persist(pendingSignature);
   };
 
+  const confirmSignature = async (signature: string) => {
+    if (!existingSheet) {
+      setPendingSignature(signature);
+      setSignatureSaved(false);
+      setSignatureOpen(false);
+      showToast('Semnătura clientului este pregătită.', 'success');
+      return;
+    }
+
+    if (signatureSaving) return;
+    setSignatureSaving(true);
+    try {
+      await serviceSheetRepository.saveSignature(existingSheet.id, signature);
+      await serviceSheetRepository.generatePdf(existingSheet.id).catch(() => undefined);
+      setPendingSignature(null);
+      setSignatureSaved(true);
+      setSignatureOpen(false);
+      showToast('Semnătura a fost actualizată și fișa a fost regenerată.', 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Semnătura nu a putut fi actualizată.', 'error');
+    } finally {
+      setSignatureSaving(false);
+    }
+  };
+
   return <><Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={dismiss}>
     <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
       <Pressable accessibilityLabel="Anulează fișa rapidă" style={StyleSheet.absoluteFill} onPress={dismiss} />
@@ -264,10 +293,10 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
               <Switch value={form.showCompanyDetails} onValueChange={(value) => update('showCompanyDetails', value)} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#FFFFFF" />
             </View>
 
-            {canSign ? <View style={[styles.signaturePrompt, { borderColor: pendingSignature ? palette.success : colors.border, backgroundColor: pendingSignature ? `${palette.success}10` : colors.surfaceMuted }]}>
-              <View style={[styles.signaturePromptIcon, { backgroundColor: pendingSignature ? `${palette.success}18` : `${palette.purple}16` }]}><Ionicons name={pendingSignature ? 'checkmark-circle-outline' : 'pencil-outline'} size={24} color={pendingSignature ? palette.success : palette.purple} /></View>
-              <View style={styles.signaturePromptCopy}><AppText variant="label">{pendingSignature ? 'Semnătura este pregătită' : existingSheet?.signatureUrl ? 'Fișa are deja o semnătură' : 'Semnătura clientului'}</AppText><AppText variant="caption" muted>{pendingSignature ? 'Va fi salvată împreună cu fișa de service.' : 'Deschide cadrul dedicat pentru ca persoana să poată semna fără conflict cu scrollul.'}</AppText></View>
-              <Button compact label={pendingSignature || existingSheet?.signatureUrl ? 'Resemnează' : 'Semnează clientul'} icon="pencil-outline" onPress={() => setSignatureOpen(true)} style={styles.signaturePromptButton} />
+            {canSign ? <View style={[styles.signaturePrompt, { borderColor: pendingSignature || signatureSaved ? palette.success : colors.border, backgroundColor: pendingSignature || signatureSaved ? `${palette.success}10` : colors.surfaceMuted }]}>
+              <View style={[styles.signaturePromptIcon, { backgroundColor: pendingSignature || signatureSaved ? `${palette.success}18` : `${palette.purple}16` }]}><Ionicons name={pendingSignature || signatureSaved ? 'checkmark-circle-outline' : 'pencil-outline'} size={24} color={pendingSignature || signatureSaved ? palette.success : palette.purple} /></View>
+              <View style={styles.signaturePromptCopy}><AppText variant="label">{signatureSaved ? 'Semnătura a fost actualizată' : pendingSignature ? 'Semnătura este pregătită' : existingSheet?.signatureUrl ? 'Fișa are deja o semnătură' : 'Semnătura clientului'}</AppText><AppText variant="caption" muted>{signatureSaved ? 'Este salvată online și apare în PDF-ul regenerat.' : pendingSignature ? 'Va fi salvată împreună cu fișa de service.' : 'Deschide cadrul dedicat pentru ca persoana să poată semna fără conflict cu scrollul.'}</AppText></View>
+              <Button compact label={pendingSignature || signatureSaved || existingSheet?.signatureUrl ? 'Resemnează' : 'Semnează clientul'} icon="pencil-outline" disabled={signatureSaving} onPress={() => setSignatureOpen(true)} style={styles.signaturePromptButton} />
             </View> : null}
 
             <Button
@@ -287,13 +316,14 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
     <QuickSignatureModal
       visible={visible && signatureOpen}
       clientName={clientName}
+      saving={signatureSaving}
       onClose={() => setSignatureOpen(false)}
-      onConfirm={(signature) => { setPendingSignature(signature); setSignatureOpen(false); showToast('Semnătura clientului este pregătită.', 'success'); }}
+      onConfirm={(signature) => void confirmSignature(signature)}
     />
   </>;
 }
 
-function QuickSignatureModal({ visible, clientName, onClose, onConfirm }: { visible: boolean; clientName: string; onClose: () => void; onConfirm: (signature: string) => void }) {
+function QuickSignatureModal({ visible, clientName, saving, onClose, onConfirm }: { visible: boolean; clientName: string; saving: boolean; onClose: () => void; onConfirm: (signature: string) => void }) {
   const { colors } = useAppTheme();
   const signatureRef = useRef<SignatureViewRef>(null);
   const [hasStroke, setHasStroke] = useState(false);
@@ -307,6 +337,7 @@ function QuickSignatureModal({ visible, clientName, onClose, onConfirm }: { visi
   }, [visible]);
 
   const finish = () => {
+    if (saving) return;
     if (!hasStroke) {
       setError('Clientul trebuie să semneze în cadrul alb înainte să apeși Gata.');
       return;
@@ -323,14 +354,14 @@ function QuickSignatureModal({ visible, clientName, onClose, onConfirm }: { visi
 
   const signatureWebStyle = '.m-signature-pad { box-shadow: none; border: none; background: #fff; } .m-signature-pad--body { border: none; background: #fff; } .m-signature-pad--footer { display: none; } body,html { background: transparent; }';
 
-  return <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
+  return <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => !saving && onClose()}>
     <View style={[styles.signatureOverlay, { backgroundColor: colors.overlay }]}>
-      <Pressable accessibilityLabel="Închide semnătura" style={StyleSheet.absoluteFill} onPress={onClose} />
+      <Pressable accessibilityLabel="Închide semnătura" disabled={saving} style={StyleSheet.absoluteFill} onPress={onClose} />
       <View style={[styles.signatureModal, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
         <View style={styles.signatureModalHeader}>
           <View style={[styles.signatureModalIcon, { backgroundColor: `${palette.purple}16` }]}><Ionicons name="pencil-outline" size={26} color={palette.purple} /></View>
           <View style={styles.signatureModalCopy}><AppText variant="title">Semnează clientul</AppText><AppText variant="caption" muted>{clientName} · semnează în cadrul de mai jos</AppText></View>
-          <Pressable accessibilityRole="button" accessibilityLabel="Închide" onPress={onClose} style={[styles.signatureModalClose, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={22} color={colors.text} /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Închide" disabled={saving} onPress={onClose} style={[styles.signatureModalClose, { backgroundColor: colors.surfaceMuted, opacity: saving ? 0.45 : 1 }]}><Ionicons name="close" size={22} color={colors.text} /></Pressable>
         </View>
 
         <View style={[styles.signatureCanvas, { borderColor: hasStroke ? colors.primary : colors.border }]}>
@@ -353,8 +384,8 @@ function QuickSignatureModal({ visible, clientName, onClose, onConfirm }: { visi
         {error ? <View style={[styles.signatureError, { backgroundColor: `${palette.danger}12`, borderColor: `${palette.danger}35` }]}><Ionicons name="alert-circle-outline" size={19} color={palette.danger} /><AppText variant="caption" style={{ color: palette.danger, flex: 1 }}>{error}</AppText></View> : <View style={[styles.signatureHint, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="hand-left-outline" size={18} color={colors.primary} /><AppText variant="caption" muted style={{ flex: 1 }}>Acest popup nu se derulează. Toate gesturile din cadrul alb sunt folosite numai pentru semnătură.</AppText></View>}
 
         <View style={styles.signatureModalActions}>
-          <Button variant="outline" label="Șterge" icon="trash-outline" onPress={clear} style={styles.signatureModalAction} />
-          <Button label="Gata" icon="checkmark-circle-outline" onPress={finish} style={styles.signatureModalAction} />
+          <Button variant="outline" label="Șterge" icon="trash-outline" disabled={saving} onPress={clear} style={styles.signatureModalAction} />
+          <Button label="Gata" icon="checkmark-circle-outline" loading={saving} onPress={finish} style={styles.signatureModalAction} />
         </View>
       </View>
     </View>
