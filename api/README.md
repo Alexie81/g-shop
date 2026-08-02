@@ -52,6 +52,7 @@ ORDER BY data_length + index_length DESC;
 - `POST|DELETE /company-details/{propertyId}/stamp` — salvează sau elimină ștampila ca fișier; imaginea nu este stocată în MySQL
 - `GET /dashboard?propertyId={uuid}`
 - `POST /admin/migrations/collaborator-presets` — migrare administrativă idempotentă pentru instalările existente; necesită `settings.manage`
+- `POST /admin/migrations/client-collaborators` — creează legătura compactă pentru atribuirea mai multor colaboratori și preia automat atribuirea veche; necesită `settings.manage`
 - `POST /admin/migrations/client-finance` — creează idempotent structurile compacte pentru finanțe, cheltuieli și participanți și adaugă statusul client `FINALIZED`; necesită `settings.manage`
 
 ### Clienți și QR
