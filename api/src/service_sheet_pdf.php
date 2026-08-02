@@ -125,21 +125,23 @@ function gshop_pdf_overlay_page_one(Fpdi $pdf, array $sheet, array $client, arra
     gshop_pdf_multiline($pdf, 309, 438 + $shift, 250, $sheet['workPerformed'] ?? '', 2);
     gshop_pdf_multiline($pdf, 309, 395 + $shift, 250, $sheet['partsUsed'] ?? '', 2);
 
-    $rowOne = [
-        $financial['diagnosticFee'] ?? 0, $financial['displayedPartsCost'] ?? $sheet['partsCost'] ?? 0,
-        $financial['displayedLaborCost'] ?? $sheet['laborCost'] ?? 0, ($financial['discountPercent'] ?? 0) . '%', $currency,
+    $summaryCards = [
+        $summary['totalDue'] ?? $sheet['totalCost'] ?? 0,
+        $financial['advancePaid'] ?? 0,
+        $summary['remainingDue'] ?? 0,
     ];
-    $x = 33.0;
-    foreach ($rowOne as $index => $value) {
-        $formatted = $index < 3 ? gshop_pdf_money($value, $currency) : (string)$value;
-        gshop_pdf_text($pdf, $x, 301 + $shift, $formatted, 6.3, 'B', 92, 'R');
-        $x += 107.6;
+    foreach ($summaryCards as $index => $value) {
+        gshop_pdf_text($pdf, 43 + $index * 179, 291 + $shift, gshop_pdf_money($value, $currency), 10, 'B', 151);
     }
-    $rowTwo = [$financial['advancePaid'] ?? 0, $summary['remainingDue'] ?? 0, $summary['totalDue'] ?? $sheet['totalCost'] ?? 0];
-    $x = 33.0;
-    foreach ($rowTwo as $value) {
-        gshop_pdf_text($pdf, $x, 263 + $shift, gshop_pdf_money($value, $currency), 7, 'B', 164, 'R');
-        $x += 179.3;
+    $details = [
+        gshop_pdf_money($financial['diagnosticFee'] ?? 0, $currency),
+        gshop_pdf_money($financial['displayedPartsCost'] ?? $sheet['partsCost'] ?? 0, $currency),
+        gshop_pdf_money($financial['displayedLaborCost'] ?? $sheet['laborCost'] ?? 0, $currency),
+        ($financial['discountPercent'] ?? 0) . '%',
+        $currency,
+    ];
+    foreach ($details as $index => $value) {
+        gshop_pdf_text($pdf, 33 + $index * 105.8, 252 + $shift, $value, 6.7, 'B', 94);
     }
 
     gshop_pdf_text($pdf, 118, 182 + $shift, gshop_pdf_date($sheet['receivedAt'] ?? ''), 6.8, '', 80);

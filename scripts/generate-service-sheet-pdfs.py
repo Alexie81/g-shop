@@ -354,7 +354,7 @@ def status_badge(c: canvas.Canvas, x: float, y: float, status: str | None) -> No
     c.drawCentredString(x + width / 2, y + 3.3, status)
 
 
-def money_field(
+def financial_summary_card(
     c: canvas.Canvas,
     x: float,
     y: float,
@@ -362,20 +362,38 @@ def money_field(
     label_text: str,
     value: str = "",
     *,
+    fill: Color = SURFACE_MUTED,
+    value_color: Color = ELECTRIC_DARK,
     status: str | None = None,
 ) -> None:
+    rounded_box(c, x, y, w, 43, radius=8, fill=fill, stroke=LINE, line_width=0.7)
     c.setFillColor(SLATE)
-    c.setFont("GShop-Bold", 5.8)
-    c.drawString(x, y + 12, label_text.upper())
+    c.setFont("GShop-Bold", 5.5)
+    c.drawString(x + 10, y + 29, label_text.upper())
     if status:
-        status_badge(c, x + w - (43 if status == "ACHITAT" else 51), y + 8, status)
-    c.setStrokeColor(HexColor("#C8D3E3"))
-    c.setLineWidth(0.8)
-    c.line(x, y, x + w, y)
+        status_width = 43 if status == "ACHITAT" else 51
+        status_badge(c, x + w - status_width - 8, y + 25, status)
+    if value:
+        c.setFillColor(value_color)
+        c.setFont("GShop-Bold", 10.0)
+        c.drawString(x + 10, y + 9, fit_text(value, "GShop-Bold", 10.0, w - 20))
+
+
+def financial_detail(
+    c: canvas.Canvas,
+    x: float,
+    y: float,
+    w: float,
+    label_text: str,
+    value: str = "",
+) -> None:
+    c.setFillColor(SLATE)
+    c.setFont("GShop-Bold", 4.8)
+    c.drawString(x, y + 14, label_text.upper())
     if value:
         c.setFillColor(NAVY)
-        c.setFont("GShop-Bold", 7.2)
-        c.drawRightString(x + w - 3, y + 2, fit_text(value, "GShop-Bold", 7.2, w - 6))
+        c.setFont("GShop-Bold", 6.7)
+        c.drawString(x, y + 2, fit_text(value, "GShop-Bold", 6.7, w))
 
 
 def draw_company_field(
@@ -494,30 +512,46 @@ def draw_financials(c: canvas.Canvas, data: dict[str, Any], variant: Variant) ->
     total = first_value(data, (("summary", "totalDue"), ("sheet", "totalCost")))
     rest = text(data, "summary", "remainingDue")
 
-    row1 = (
+    payment_status = variant.total_status
+    paid = payment_status == "ACHITAT"
+    summary = (
+        ("Total de plată", total, ELECTRIC_LIGHT, ELECTRIC_DARK, None),
+        ("Avans încasat", advance, SUCCESS_SOFT, SUCCESS, None),
+        ("Rest de plată", rest, SUCCESS_SOFT if paid else WARNING_SOFT, SUCCESS if paid else WARNING, payment_status),
+    )
+    gap = 8
+    card_w = (CONTENT_W - 22 - gap * 2) / 3
+    x = MARGIN + 11
+    for label_text, value, fill, value_color, status in summary:
+        financial_summary_card(
+            c,
+            x,
+            y + 34,
+            card_w,
+            label_text,
+            value,
+            fill=fill,
+            value_color=value_color,
+            status=status,
+        )
+        x += card_w + gap
+
+    details = (
         ("Diagnostic", diagnostic),
         ("Piese", parts),
         ("Manoperă", labor),
-        ("Reducere %", discount),
+        ("Reducere", f"{discount}%" if discount else ""),
         ("Monedă", currency),
     )
-    gap = 9
-    cell_w = (CONTENT_W - 22 - gap * 4) / 5
+    detail_w = (CONTENT_W - 22) / 5
     x = MARGIN + 11
-    for label_text, value in row1:
-        money_field(c, x, y + 51, cell_w, label_text, value)
-        x += cell_w + gap
-
-    row2 = (
-        ("Avans încasat", advance, None),
-        ("Rest de plată", rest, variant.rest_status),
-        ("Total de plată", total, variant.total_status),
-    )
-    cell_w = (CONTENT_W - 22 - gap * 2) / 3
-    x = MARGIN + 11
-    for label_text, value, status in row2:
-        money_field(c, x, y + 13, cell_w, label_text, value, status=status)
-        x += cell_w + gap
+    for index, (label_text, value) in enumerate(details):
+        financial_detail(c, x, y + 2, detail_w - 11, label_text, value)
+        if index < len(details) - 1:
+            c.setStrokeColor(LINE)
+            c.setLineWidth(0.7)
+            c.line(x + detail_w - 6, y + 4, x + detail_w - 6, y + 24)
+        x += detail_w
 
 
 def draw_planning(c: canvas.Canvas, data: dict[str, Any]) -> None:
