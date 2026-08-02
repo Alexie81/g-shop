@@ -1,6 +1,7 @@
 import { ClientQRPanel } from '@/components/clients/ClientQRPanel';
 import { ClientAuditHistory } from '@/components/clients/ClientAuditHistory';
 import { ClientStatusBadge } from '@/components/clients/ClientStatusBadge';
+import { WhatsAppQuickMessagesModal } from '@/components/clients/WhatsAppQuickMessagesModal';
 import { ClientCollaboratorFinanceCard } from '@/components/clients/finance/ClientCollaboratorFinanceCard';
 import { ClientFinanceOverviewCard, ClientFinanceSection } from '@/components/clients/finance';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -11,14 +12,15 @@ import { Screen } from '@/components/ui/Screen';
 import { ErrorState, LoadingState } from '@/components/ui/States';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useProperty } from '@/contexts/PropertyContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
-import { clientRepository, serviceSheetRepository } from '@/repositories/api-repositories';
+import { clientRepository, serviceSheetRepository, whatsAppMessageRepository } from '@/repositories/api-repositories';
 import { apiRequest } from '@/services/api';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { AuditLog, Client, ClientFinancialOverview, Paginated } from '@/types';
-import { formatDate, fullName, initials, normalizePhoneForWhatsApp } from '@/utils/format';
+import { formatDate, fullName, initials } from '@/utils/format';
 import { ClientFinanceValue } from '@/utils/client-finance';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -31,10 +33,12 @@ type Tab = 'Detalii' | 'Finanțe' | 'QR' | 'Istoric';
 export default function ClientDetailsScreen() {
   const { clientId } = useLocalSearchParams<{ clientId: string }>();
   const { user, hasPermission } = useAuth();
+  const { activeProperty } = useProperty();
   const { width } = useWindowDimensions();
   const { colors } = useAppTheme(); const { showToast } = useToast(); const [tab, setTab] = useState<Tab>('Detalii');
   const [financeSaving, setFinanceSaving] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
+  const [whatsAppOpen, setWhatsAppOpen] = useState(false);
   const isAdmin = user?.role === 'ADMIN';
   const compactLayout = width <= 390;
   const canViewFinancials = hasPermission('financials.view');
@@ -53,19 +57,20 @@ export default function ClientDetailsScreen() {
     if (!client.qr || client.qr.status === 'NOT_GENERATED') {
       try { client = await clientRepository.ensureQr(client.id); } catch { /* Keep legacy client profiles accessible if QR provisioning is unavailable. */ }
     }
-    const [sheets, financials, history] = await Promise.all([
+    const [sheets, financials, history, whatsAppMessages] = await Promise.all([
       serviceSheetRepository.list(client.propertyId),
       canViewFinancials ? clientRepository.getFinancials(client.id) : Promise.resolve(null),
       isAdmin ? apiRequest<Paginated<AuditLog>>(`/audit-logs?propertyId=${client.propertyId}&entityId=${client.id}`) : Promise.resolve({ data: [], page: 1, pageSize: 0, total: 0, totalPages: 0 }),
+      whatsAppMessageRepository.list(client.propertyId).catch(() => []),
     ]);
-    return { client, sheets: sheets.data.filter((item) => item.clientId === client.id), financials, history: history.data };
+    return { client, sheets: sheets.data.filter((item) => item.clientId === client.id), financials, history: history.data, whatsAppMessages };
   }, [canViewFinancials, clientId, isAdmin]);
   useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);
 
   if (state.loading) return <Screen header={<AppHeader title="Detalii client" back onBack={returnToClients} />}><LoadingState rows={5} /></Screen>;
   if (state.error || !state.data) return <Screen header={<AppHeader title="Detalii client" back onBack={returnToClients} />}><ErrorState message={state.error?.message ?? 'Clientul nu există.'} onRetry={() => void state.reload()} /></Screen>;
 
-  const { client, sheets, financials, history } = state.data;
+  const { client, sheets, financials, history, whatsAppMessages } = state.data;
   const serviceSheet = sheets[0];
   const contact = async (url: string) => { if (await Linking.canOpenURL(url)) await Linking.openURL(url); else showToast('Acțiunea nu este disponibilă.', 'error'); };
   const openServiceSheet = () => serviceSheet
@@ -155,7 +160,7 @@ export default function ClientDetailsScreen() {
       <View style={[styles.profileDivider, { backgroundColor: colors.border }]} />
       <View style={styles.quickActions}>
         <ClientQuickAction label="Sună" icon="call-outline" onPress={() => void contact(`tel:${client.phone}`)} />
-        <ClientQuickAction label="WhatsApp" icon="logo-whatsapp" onPress={() => void contact(`https://wa.me/${normalizePhoneForWhatsApp(client.phone)}`)} />
+        <ClientQuickAction label="WhatsApp" icon="logo-whatsapp" onPress={() => setWhatsAppOpen(true)} />
         <ClientQuickAction label="Email" icon="mail-outline" disabled={!client.email} onPress={() => void contact(`mailto:${client.email}`)} />
         <ClientQuickAction label="Fișă" icon="document-text-outline" primary onPress={openServiceSheet} />
       </View>
@@ -191,6 +196,7 @@ export default function ClientDetailsScreen() {
         onSetPaid={setCollaboratorPaid}
       />
     </> : <History items={history} />}
+    <WhatsAppQuickMessagesModal visible={whatsAppOpen} client={client} propertyName={activeProperty?.name ?? 'G-Shop'} messages={whatsAppMessages} onClose={() => setWhatsAppOpen(false)} />
   </Screen>;
 }
 

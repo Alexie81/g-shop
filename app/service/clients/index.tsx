@@ -1,4 +1,5 @@
 import { ClientCard } from '@/components/clients/ClientCard';
+import { WhatsAppQuickMessagesModal } from '@/components/clients/WhatsAppQuickMessagesModal';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { AnimatedRefreshIcon } from '@/components/ui/AnimatedRefreshIcon';
 import { AppText } from '@/components/ui/AppText';
@@ -11,14 +12,14 @@ import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
-import { clientRepository } from '@/repositories/api-repositories';
+import { clientRepository, whatsAppMessageRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { Client } from '@/types';
-import { fullName, normalizePhoneForWhatsApp } from '@/utils/format';
+import { fullName } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Linking, Modal, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 
 type ClientStateFilter = '' | 'ACTIVE' | 'FINALIZED';
 type ClientSort = '' | 'NEWEST' | 'OLDEST' | 'NAME_ASC' | 'NAME_DESC';
@@ -49,6 +50,7 @@ export default function ClientsScreen() {
   const [deleteTarget, setDeleteTarget] = useState<Client | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  const [whatsAppTarget, setWhatsAppTarget] = useState<Client | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(query), 320);
@@ -59,7 +61,9 @@ export default function ClientsScreen() {
     () => clientRepository.list(activeProperty?.id ?? '', debounced),
     [activeProperty?.id, debounced],
   );
+  const messagesState = useAsyncData(() => whatsAppMessageRepository.list(activeProperty?.id ?? ''), [activeProperty?.id]);
   useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);
+  useRefreshOnFocus(() => messagesState.reload(true), messagesState.loading || messagesState.refreshing);
   const visibleClients = useMemo(() => {
     const clients = [...(state.data?.data ?? [])];
     const filtered = filter === 'FINALIZED'
@@ -77,19 +81,6 @@ export default function ClientsScreen() {
   const shown = visibleClients.length;
   const activeFilter = stateFilters.find((item) => item.value === filter) ?? stateFilters[0];
   const activeSort = sortOptions.find((item) => item.value === sort);
-
-  const openWhatsApp = async (client: Client) => {
-    const internationalPhone = normalizePhoneForWhatsApp(client.phone);
-    if (!internationalPhone) {
-      showToast('Clientul nu are un număr de telefon valid.', 'error');
-      return;
-    }
-    try {
-      await Linking.openURL(`https://wa.me/${internationalPhone}`);
-    } catch {
-      showToast('WhatsApp nu a putut fi deschis pe acest dispozitiv.', 'error');
-    }
-  };
 
   const requestDelete = (client: Client) => {
     setDeleteError('');
@@ -281,7 +272,7 @@ export default function ClientsScreen() {
                 key={client.id}
                 client={client}
                 index={index}
-                onWhatsApp={(item) => void openWhatsApp(item)}
+                onWhatsApp={setWhatsAppTarget}
                 onDeleteRequest={requestDelete}
               />)}
             </View>}
@@ -293,6 +284,7 @@ export default function ClientsScreen() {
       onClose={closeDeleteModal}
       onConfirm={() => void confirmDelete()}
     />
+    {whatsAppTarget ? <WhatsAppQuickMessagesModal visible client={whatsAppTarget} propertyName={activeProperty?.name ?? 'G-Shop'} messages={messagesState.data ?? []} onClose={() => setWhatsAppTarget(null)} /> : null}
   </Screen>;
 }
 
