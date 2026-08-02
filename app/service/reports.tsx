@@ -10,6 +10,7 @@ import { ErrorState, LoadingState } from '@/components/ui/States';
 import { useProperty } from '@/contexts/PropertyContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { useBackToAdministration } from '@/hooks/useBackToAdministration';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { dashboardRepository } from '@/repositories/api-repositories';
 import { apiRequest } from '@/services/api';
@@ -58,6 +59,7 @@ const statusLabels: Record<CommissionStatus, string> = {
 const dateInputPattern = /^\d{4}-\d{2}-\d{2}$/;
 
 export default function ReportsScreen() {
+  useBackToAdministration();
   const { activeProperty } = useProperty();
   const { colors, isDark } = useAppTheme();
   const { width } = useWindowDimensions();

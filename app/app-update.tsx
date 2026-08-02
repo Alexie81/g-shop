@@ -7,6 +7,7 @@ import { ErrorState, LoadingState } from '@/components/ui/States';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { useBackToAdministration } from '@/hooks/useBackToAdministration';
 import { appUpdateRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,6 +26,7 @@ function compareVersions(a: string, b: string) {
 }
 
 export default function AppUpdateScreen() {
+  useBackToAdministration();
   const { colors } = useAppTheme();
   const { showToast } = useToast();
   const state = useAsyncData(() => appUpdateRepository.get(), []);

@@ -7,6 +7,7 @@ import { ROLE_LABELS } from '@/constants/permissions';
 import { useProperty } from '@/contexts/PropertyContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { useBackToAdministration } from '@/hooks/useBackToAdministration';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { userRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
@@ -28,6 +29,7 @@ const avatarGradients: [string, string][] = [
 ];
 
 export default function UsersScreen() {
+  useBackToAdministration();
   const { activeProperty } = useProperty();
   const { colors, isDark } = useAppTheme();
   const { width } = useWindowDimensions();

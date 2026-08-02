@@ -9,6 +9,7 @@ import { useProperty } from '@/contexts/PropertyContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { useBackToAdministration } from '@/hooks/useBackToAdministration';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { auditRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
@@ -31,6 +32,7 @@ const actionMeta = (action: string) => {
 };
 
 export default function AuditScreen() {
+  useBackToAdministration();
   const { user } = useAuth();
   const { activeProperty } = useProperty();
   const { colors, isDark } = useAppTheme();

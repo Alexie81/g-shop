@@ -11,6 +11,7 @@ import { useProperty } from '@/contexts/PropertyContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { useBackToAdministration } from '@/hooks/useBackToAdministration';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { collaboratorRepository } from '@/repositories/api-repositories';
 import { apiRequest } from '@/services/api';
@@ -86,6 +87,7 @@ function formFromCollaborator(collaborator: Collaborator): CollaboratorForm {
 }
 
 export default function CollaboratorsScreen() {
+  useBackToAdministration();
   const { activeProperty } = useProperty();
   const { hasPermission } = useAuth();
   const { colors, isDark } = useAppTheme();

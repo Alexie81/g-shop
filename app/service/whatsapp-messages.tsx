@@ -9,6 +9,7 @@ import { useProperty } from '@/contexts/PropertyContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { useBackToAdministration } from '@/hooks/useBackToAdministration';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { whatsAppMessageRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
@@ -24,6 +25,7 @@ type Draft = { id?: string; title: string; message: string; sortOrder: string };
 const emptyDraft: Draft = { title: '', message: '', sortOrder: '1' };
 
 export default function WhatsAppMessagesScreen() {
+  useBackToAdministration();
   const { activeProperty } = useProperty();
   const { hasPermission } = useAuth();
   const { colors, isDark } = useAppTheme();

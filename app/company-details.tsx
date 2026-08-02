@@ -10,6 +10,7 @@ import { useProperty } from '@/contexts/PropertyContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { useBackToAdministration } from '@/hooks/useBackToAdministration';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { companyDetailsRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
@@ -25,6 +26,7 @@ type CompanyForm = Omit<CompanyDetails, 'propertyId' | 'stampUrl' | 'createdAt' 
 const emptyForm: CompanyForm = { legalName: '', taxId: '', tradeRegisterNumber: '', vatPayer: false, address: '', city: '', county: '', postalCode: '', country: 'România', phone: '', email: '', website: '', bankName: '', iban: '', representativeName: '', representativeRole: '' };
 
 export default function CompanyDetailsScreen() {
+  useBackToAdministration();
   const { user } = useAuth();
   const { activeProperty } = useProperty();
   const { colors, isDark } = useAppTheme();

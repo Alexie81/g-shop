@@ -9,6 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useProperty } from '@/contexts/PropertyContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
+import { useBackToAdministration } from '@/hooks/useBackToAdministration';
 import { propertyRepository } from '@/repositories/api-repositories';
 import { API_URL } from '@/services/api';
 import { palette, radius, spacing } from '@/theme/tokens';
@@ -18,6 +19,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
 export default function SettingsScreen() {
+  useBackToAdministration();
   const { user, changePassword } = useAuth();
   const { activeProperty, reload: reloadProperties } = useProperty();
   const { colors } = useAppTheme();

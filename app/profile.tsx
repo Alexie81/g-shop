@@ -9,6 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useProperty } from '@/contexts/PropertyContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
+import { useBackToAdministration } from '@/hooks/useBackToAdministration';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { initials } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +21,7 @@ import { Modal, Pressable, StyleSheet, useWindowDimensions, View } from 'react-n
 const normalizeName = (value: string) => value.trim().replace(/\s+/g, ' ');
 
 export default function ProfileScreen() {
+  useBackToAdministration();
   const { user, logout, updateProfile } = useAuth();
   const { properties, activeProperty } = useProperty();
   const { colors, isDark } = useAppTheme();
