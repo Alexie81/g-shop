@@ -267,11 +267,12 @@ function gshop_pdf_overlay_page_one(Fpdi $pdf, array $sheet, array $client, arra
     gshop_pdf_multiline($pdf, 309, 438 + $shift, 250, $sheet['workPerformed'] ?? '', 2);
     gshop_pdf_multiline($pdf, 309, 395 + $shift, 250, $sheet['partsUsed'] ?? '', 2);
 
-    $summaryCards = [
-        $summary['totalDue'] ?? $sheet['totalCost'] ?? 0,
-        $summary['receivedAmount'] ?? $financial['advancePaid'] ?? 0,
-        $summary['remainingDue'] ?? 0,
-    ];
+    $totalDue = round(max(0, (float)($summary['totalDue'] ?? $sheet['totalCost'] ?? 0)), 2);
+    $advancePaid = round(min(max(0, (float)($financial['advancePaid'] ?? 0)), $totalDue), 2);
+    // The application shows the live outstanding balance (0 after full payment).
+    // The PDF keeps the original payment breakdown: advance + remainder settled later.
+    $documentRemainder = round(max(0, $totalDue - $advancePaid), 2);
+    $summaryCards = [$totalDue, $advancePaid, $documentRemainder];
     $summaryPositions = [[44, 280, 185], [259, 280, 121], [410, 280, 141]];
     foreach ($summaryCards as $index => $value) {
         [$x, $baseline, $width] = $summaryPositions[$index];
