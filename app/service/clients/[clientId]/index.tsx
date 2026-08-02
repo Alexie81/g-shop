@@ -13,6 +13,7 @@ import { useAppTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { clientRepository, serviceSheetRepository } from '@/repositories/api-repositories';
 import { apiRequest } from '@/services/api';
 import { palette, radius, spacing } from '@/theme/tokens';
@@ -59,6 +60,7 @@ export default function ClientDetailsScreen() {
     ]);
     return { client, sheets: sheets.data.filter((item) => item.clientId === client.id), financials, history: history.data };
   }, [canViewFinancials, clientId, isAdmin]);
+  useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);
 
   if (state.loading) return <Screen header={<AppHeader title="Detalii client" back onBack={returnToClients} />}><LoadingState rows={5} /></Screen>;
   if (state.error || !state.data) return <Screen header={<AppHeader title="Detalii client" back onBack={returnToClients} />}><ErrorState message={state.error?.message ?? 'Clientul nu există.'} onRetry={() => void state.reload()} /></Screen>;
@@ -167,6 +169,7 @@ export default function ClientDetailsScreen() {
       value={financials.financials}
       expenses={financials.expenses}
       collaboratorCost={financials.summary.collaboratorCost}
+      collaboratorPaid={financials.collaborator?.paid ?? 0}
       commissionType={client.commissionType}
       commissionValue={client.commissionValue}
       disabled={!canEditFinancials}

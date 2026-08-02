@@ -106,6 +106,7 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
   const [finance, setFinance] = useState<ClientFinanceValue>({ ...emptyFinance });
   const [financeExpenses, setFinanceExpenses] = useState<ClientExpense[]>([]);
   const [financeCollaboratorCost, setFinanceCollaboratorCost] = useState(0);
+  const [financeCollaboratorPaid, setFinanceCollaboratorPaid] = useState(0);
   const [financeLoading, setFinanceLoading] = useState(Boolean(client && canViewFinancials));
   const [financeError, setFinanceError] = useState<string>();
   const [financeReloadKey, setFinanceReloadKey] = useState(0);
@@ -127,6 +128,7 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
       setFinance(overview.financials);
       setFinanceExpenses(overview.expenses);
       setFinanceCollaboratorCost(overview.summary.collaboratorCost);
+      setFinanceCollaboratorPaid(overview.collaborator?.paid ?? 0);
     }).catch((error) => {
       if (!active) return;
       setFinanceError(error instanceof Error ? error.message : 'Datele financiare nu au putut fi încărcate.');
@@ -322,6 +324,7 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
           value={finance}
           expenses={financeExpenses}
           collaboratorCost={financeCollaboratorCost}
+          collaboratorPaid={financeCollaboratorPaid}
           commissionType={form.collaboratorId ? form.commissionType : undefined}
           commissionValue={form.collaboratorId ? safeCommission : 0}
           disabled={!canEditFinancials}

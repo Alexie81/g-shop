@@ -24,6 +24,7 @@ export type ClientFinanceSectionProps = {
   value: ClientFinanceValue;
   expenses: readonly ClientFinanceExpense[];
   collaboratorCost?: number;
+  collaboratorPaid?: number;
   commissionType?: CommissionType;
   commissionValue?: number;
   disabled?: boolean;
@@ -39,6 +40,7 @@ export function ClientFinanceSection({
   value,
   expenses,
   collaboratorCost = 0,
+  collaboratorPaid = 0,
   commissionType,
   commissionValue = 0,
   disabled = false,
@@ -71,8 +73,8 @@ export function ClientFinanceSection({
         : commissionType === 'FIXED'
           ? rateOrAmount
           : collaboratorCost;
-    return calculateClientFinance(normalizedValue, expenses, liveCollaboratorCost);
-  }, [collaboratorCost, commissionType, commissionValue, expenses, normalizedValue]);
+    return calculateClientFinance(normalizedValue, expenses, liveCollaboratorCost, collaboratorPaid);
+  }, [collaboratorCost, collaboratorPaid, commissionType, commissionValue, expenses, normalizedValue]);
   const currency = findCurrency(normalizedValue.currencyCode);
   const usesConversion = currency.code !== DEFAULT_CURRENCY_CODE;
   const exchangeInvalid = usesConversion && normalizedValue.exchangeRateToRon <= 0;
@@ -196,7 +198,8 @@ export function ClientFinanceSection({
           <CalculationLine label="Încasat" value={money(calculations.receivedAmount)} />
           <CalculationLine label="Cost efectiv piese" value={`− ${money(normalizedValue.actualPartsCost)}`} muted />
           <CalculationLine label="Cheltuieli suplimentare" value={`− ${money(calculations.additionalExpenses)}`} muted />
-          <CalculationLine label="Comision colaborator" value={`− ${money(calculations.collaboratorCost)}`} muted />
+          <CalculationLine label="Comision colaborator achitat" value={`− ${money(calculations.collaboratorPaid)}`} muted />
+          {calculations.collaboratorCost > calculations.collaboratorPaid ? <CalculationLine label="Comision de achitat (nu se scade încă)" value={money(calculations.collaboratorCost - calculations.collaboratorPaid)} muted /> : null}
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
           <CalculationLine label="G-Shop Net" value={money(calculations.gshopNet)} accent />
         </View>

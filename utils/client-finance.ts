@@ -48,6 +48,7 @@ export type ClientFinanceCalculation = {
   additionalExpenses: number;
   internalCosts: number;
   collaboratorCost: number;
+  collaboratorPaid: number;
   gshopNet: number;
   displayedBreakdownDifference: number;
   exchangeRateToRon: number;
@@ -61,6 +62,7 @@ export function calculateClientFinance(
   value: ClientFinanceValue,
   expenses: readonly Pick<ClientFinanceExpense, 'amount'>[],
   collaboratorCost = 0,
+  collaboratorPaid = 0,
 ): ClientFinanceCalculation {
   const workPrice = nonNegative(value.workPrice);
   const diagnosticFee = nonNegative(value.diagnosticFee);
@@ -74,8 +76,9 @@ export function calculateClientFinance(
   const additionalExpenses = roundMoney(expenses.reduce((total, expense) => total + nonNegative(expense.amount), 0));
   const actualPartsCost = nonNegative(value.actualPartsCost);
   const normalizedCollaboratorCost = roundMoney(nonNegative(collaboratorCost));
+  const normalizedCollaboratorPaid = roundMoney(nonNegative(collaboratorPaid));
   const internalCosts = roundMoney(actualPartsCost + additionalExpenses);
-  const gshopNet = roundMoney(receivedAmount - internalCosts - normalizedCollaboratorCost);
+  const gshopNet = roundMoney(receivedAmount - internalCosts - normalizedCollaboratorPaid);
   const displayedBreakdownDifference = roundMoney(
     nonNegative(value.displayedPartsCost) + nonNegative(value.displayedLaborCost) - workPrice,
   );
@@ -89,6 +92,7 @@ export function calculateClientFinance(
     additionalExpenses,
     internalCosts,
     collaboratorCost: normalizedCollaboratorCost,
+    collaboratorPaid: normalizedCollaboratorPaid,
     gshopNet,
     displayedBreakdownDifference,
     exchangeRateToRon: value.currencyCode === 'RON' ? 1 : nonNegative(value.exchangeRateToRon),
