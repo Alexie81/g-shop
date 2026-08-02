@@ -92,9 +92,8 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
   const { showToast } = useToast();
   const [form, setForm] = useState<QuickSheetForm>(() => formFromSheet(existingSheet));
   const [saving, setSaving] = useState(false);
-  const [signatureStarted, setSignatureStarted] = useState(false);
-  const [signatureInteracting, setSignatureInteracting] = useState(false);
-  const signatureRef = useRef<SignatureViewRef>(null);
+  const [signatureOpen, setSignatureOpen] = useState(false);
+  const [pendingSignature, setPendingSignature] = useState<string | null>(null);
   const savingRef = useRef(false);
   const translateY = useRef(new Animated.Value(640)).current;
   const canSign = hasPermission('service_sheets.sign');
@@ -103,8 +102,8 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
   useEffect(() => {
     if (!visible) return;
     setForm(formFromSheet(existingSheet));
-    setSignatureStarted(false);
-    setSignatureInteracting(false);
+    setSignatureOpen(false);
+    setPendingSignature(null);
     savingRef.current = false;
     setSaving(false);
     translateY.setValue(640);
@@ -205,13 +204,10 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
   const submit = () => {
     if (savingRef.current) return;
     Keyboard.dismiss();
-    if (canSign && signatureStarted) signatureRef.current?.readSignature();
-    else void persist(null);
+    void persist(pendingSignature);
   };
 
-  const signatureWebStyle = '.m-signature-pad { box-shadow: none; border: none; background: #fff; } .m-signature-pad--body { border: none; background: #fff; } .m-signature-pad--footer { display: none; } body,html { background: transparent; }';
-
-  return <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={dismiss}>
+  return <><Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={dismiss}>
     <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
       <Pressable accessibilityLabel="Anulează fișa rapidă" style={StyleSheet.absoluteFill} onPress={dismiss} />
       <KeyboardAvoidingView style={styles.positioner} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -232,7 +228,6 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
 
           <ScrollView
             automaticallyAdjustKeyboardInsets
-            scrollEnabled={!signatureInteracting}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
             contentContainerStyle={styles.content}
@@ -269,34 +264,11 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
               <Switch value={form.showCompanyDetails} onValueChange={(value) => update('showCompanyDetails', value)} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#FFFFFF" />
             </View>
 
-            {canSign ? <>
-              <View style={styles.sectionTitle}><Ionicons name="pencil-outline" size={20} color={palette.purple} /><AppText variant="heading">Semnătura clientului</AppText></View>
-              <AppText variant="caption" muted>Clientul poate semna direct mai jos. În zona albă gesturile desenează, iar scrollul se blochează automat până când degetul este ridicat.</AppText>
-              <View
-                onStartShouldSetResponderCapture={() => { setSignatureInteracting(true); return false; }}
-                onTouchStart={() => setSignatureInteracting(true)}
-                onTouchEnd={() => setSignatureInteracting(false)}
-                onTouchCancel={() => setSignatureInteracting(false)}
-                style={[styles.signature, { borderColor: signatureInteracting || signatureStarted ? colors.primary : colors.border }]}
-              >
-                <SignatureScreen
-                  ref={signatureRef}
-                  onBegin={() => { setSignatureStarted(true); setSignatureInteracting(true); }}
-                  onEnd={() => setSignatureInteracting(false)}
-                  onOK={(signature) => void persist(signature)}
-                  onEmpty={() => void persist(null)}
-                  autoClear={false}
-                  scrollable={false}
-                  descriptionText=""
-                  clearText="Șterge"
-                  confirmText="Salvează"
-                  webStyle={signatureWebStyle}
-                  backgroundColor="transparent"
-                  penColor="#07152D"
-                />
-              </View>
-              <Button compact variant="outline" label="Șterge semnătura" icon="trash-outline" onPress={() => { signatureRef.current?.clearSignature(); setSignatureStarted(false); setSignatureInteracting(false); }} />
-            </> : null}
+            {canSign ? <View style={[styles.signaturePrompt, { borderColor: pendingSignature ? palette.success : colors.border, backgroundColor: pendingSignature ? `${palette.success}10` : colors.surfaceMuted }]}>
+              <View style={[styles.signaturePromptIcon, { backgroundColor: pendingSignature ? `${palette.success}18` : `${palette.purple}16` }]}><Ionicons name={pendingSignature ? 'checkmark-circle-outline' : 'pencil-outline'} size={24} color={pendingSignature ? palette.success : palette.purple} /></View>
+              <View style={styles.signaturePromptCopy}><AppText variant="label">{pendingSignature ? 'Semnătura este pregătită' : existingSheet?.signatureUrl ? 'Fișa are deja o semnătură' : 'Semnătura clientului'}</AppText><AppText variant="caption" muted>{pendingSignature ? 'Va fi salvată împreună cu fișa de service.' : 'Deschide cadrul dedicat pentru ca persoana să poată semna fără conflict cu scrollul.'}</AppText></View>
+              <Button compact label={pendingSignature || existingSheet?.signatureUrl ? 'Resemnează' : 'Semnează clientul'} icon="pencil-outline" onPress={() => setSignatureOpen(true)} style={styles.signaturePromptButton} />
+            </View> : null}
 
             <Button
               label={existingSheet ? 'Actualizează și generează fișa' : 'Creează și generează fișa'}
@@ -310,6 +282,81 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
           </ScrollView>
         </Animated.View>
       </KeyboardAvoidingView>
+    </View>
+  </Modal>
+    <QuickSignatureModal
+      visible={visible && signatureOpen}
+      clientName={clientName}
+      onClose={() => setSignatureOpen(false)}
+      onConfirm={(signature) => { setPendingSignature(signature); setSignatureOpen(false); showToast('Semnătura clientului este pregătită.', 'success'); }}
+    />
+  </>;
+}
+
+function QuickSignatureModal({ visible, clientName, onClose, onConfirm }: { visible: boolean; clientName: string; onClose: () => void; onConfirm: (signature: string) => void }) {
+  const { colors } = useAppTheme();
+  const signatureRef = useRef<SignatureViewRef>(null);
+  const [hasStroke, setHasStroke] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!visible) return;
+    setHasStroke(false);
+    setError('');
+    signatureRef.current?.clearSignature();
+  }, [visible]);
+
+  const finish = () => {
+    if (!hasStroke) {
+      setError('Clientul trebuie să semneze în cadrul alb înainte să apeși Gata.');
+      return;
+    }
+    setError('');
+    signatureRef.current?.readSignature();
+  };
+
+  const clear = () => {
+    signatureRef.current?.clearSignature();
+    setHasStroke(false);
+    setError('');
+  };
+
+  const signatureWebStyle = '.m-signature-pad { box-shadow: none; border: none; background: #fff; } .m-signature-pad--body { border: none; background: #fff; } .m-signature-pad--footer { display: none; } body,html { background: transparent; }';
+
+  return <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
+    <View style={[styles.signatureOverlay, { backgroundColor: colors.overlay }]}>
+      <Pressable accessibilityLabel="Închide semnătura" style={StyleSheet.absoluteFill} onPress={onClose} />
+      <View style={[styles.signatureModal, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
+        <View style={styles.signatureModalHeader}>
+          <View style={[styles.signatureModalIcon, { backgroundColor: `${palette.purple}16` }]}><Ionicons name="pencil-outline" size={26} color={palette.purple} /></View>
+          <View style={styles.signatureModalCopy}><AppText variant="title">Semnează clientul</AppText><AppText variant="caption" muted>{clientName} · semnează în cadrul de mai jos</AppText></View>
+          <Pressable accessibilityRole="button" accessibilityLabel="Închide" onPress={onClose} style={[styles.signatureModalClose, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={22} color={colors.text} /></Pressable>
+        </View>
+
+        <View style={[styles.signatureCanvas, { borderColor: hasStroke ? colors.primary : colors.border }]}>
+          <SignatureScreen
+            ref={signatureRef}
+            onBegin={() => { setHasStroke(true); setError(''); }}
+            onOK={onConfirm}
+            onEmpty={() => setError('Clientul trebuie să semneze înainte să apeși Gata.')}
+            autoClear={false}
+            scrollable={false}
+            descriptionText=""
+            clearText="Șterge"
+            confirmText="Gata"
+            webStyle={signatureWebStyle}
+            backgroundColor="transparent"
+            penColor="#07152D"
+          />
+        </View>
+
+        {error ? <View style={[styles.signatureError, { backgroundColor: `${palette.danger}12`, borderColor: `${palette.danger}35` }]}><Ionicons name="alert-circle-outline" size={19} color={palette.danger} /><AppText variant="caption" style={{ color: palette.danger, flex: 1 }}>{error}</AppText></View> : <View style={[styles.signatureHint, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="hand-left-outline" size={18} color={colors.primary} /><AppText variant="caption" muted style={{ flex: 1 }}>Acest popup nu se derulează. Toate gesturile din cadrul alb sunt folosite numai pentru semnătură.</AppText></View>}
+
+        <View style={styles.signatureModalActions}>
+          <Button variant="outline" label="Șterge" icon="trash-outline" onPress={clear} style={styles.signatureModalAction} />
+          <Button label="Gata" icon="checkmark-circle-outline" onPress={finish} style={styles.signatureModalAction} />
+        </View>
+      </View>
     </View>
   </Modal>;
 }
@@ -347,6 +394,20 @@ const styles = StyleSheet.create({
   companyRow: { minHeight: 76, borderWidth: 1, borderRadius: radius.lg, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   companyIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   companyCopy: { minWidth: 0, flex: 1, gap: 2 },
-  signature: { height: 230, borderWidth: 1.5, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#FFFFFF' },
+  signaturePrompt: { minHeight: 82, borderWidth: 1, borderRadius: radius.lg, padding: spacing.md, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.md },
+  signaturePromptIcon: { width: 46, height: 46, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  signaturePromptCopy: { minWidth: 170, flex: 1, gap: 2 },
+  signaturePromptButton: { minWidth: 170 },
+  signatureOverlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
+  signatureModal: { width: '100%', maxWidth: 720, maxHeight: '94%', borderWidth: 1, borderRadius: radius.xl, padding: spacing.lg, gap: spacing.md, shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 28, elevation: 18 },
+  signatureModalHeader: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  signatureModalIcon: { width: 50, height: 50, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  signatureModalCopy: { minWidth: 0, flex: 1, gap: 3 },
+  signatureModalClose: { width: 44, height: 44, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  signatureCanvas: { width: '100%', height: 310, borderWidth: 2, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#FFFFFF' },
+  signatureHint: { minHeight: 48, borderRadius: radius.md, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  signatureError: { minHeight: 48, borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  signatureModalActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  signatureModalAction: { flex: 1, minWidth: 150 },
   submit: { marginTop: spacing.sm },
 });
