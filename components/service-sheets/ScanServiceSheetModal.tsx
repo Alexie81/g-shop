@@ -93,6 +93,7 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
   const [form, setForm] = useState<QuickSheetForm>(() => formFromSheet(existingSheet));
   const [saving, setSaving] = useState(false);
   const [signatureStarted, setSignatureStarted] = useState(false);
+  const [signatureInteracting, setSignatureInteracting] = useState(false);
   const signatureRef = useRef<SignatureViewRef>(null);
   const savingRef = useRef(false);
   const translateY = useRef(new Animated.Value(640)).current;
@@ -103,6 +104,7 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
     if (!visible) return;
     setForm(formFromSheet(existingSheet));
     setSignatureStarted(false);
+    setSignatureInteracting(false);
     savingRef.current = false;
     setSaving(false);
     translateY.setValue(640);
@@ -118,6 +120,8 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
   }, [onCancel, translateY]);
 
   const panResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => !savingRef.current,
+    onStartShouldSetPanResponderCapture: () => !savingRef.current,
     onMoveShouldSetPanResponder: (_event, gesture) => gesture.dy > 7 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
     onMoveShouldSetPanResponderCapture: (_event, gesture) => gesture.dy > 7 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
     onPanResponderGrant: () => translateY.stopAnimation(),
@@ -212,20 +216,23 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
       <Pressable accessibilityLabel="Anulează fișa rapidă" style={StyleSheet.absoluteFill} onPress={dismiss} />
       <KeyboardAvoidingView style={styles.positioner} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Animated.View style={[styles.sheet, { backgroundColor: colors.surfaceElevated, borderColor: colors.border, transform: [{ translateY }] }]}>
-          <View style={styles.dragHeader} {...panResponder.panHandlers}>
-            <View style={[styles.handle, { backgroundColor: colors.border }]} />
-            <View style={styles.headerRow}>
-              <View style={[styles.headerIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="document-text-outline" size={25} color={colors.primary} /></View>
-              <View style={styles.headerCopy}>
-                <AppText variant="title">Fișă rapidă</AppText>
-                <AppText variant="caption" muted>{clientName} · completează, semnează și generează</AppText>
+          <View style={styles.dragHeader}>
+            <View style={styles.dragSurface} {...panResponder.panHandlers}>
+              <View style={[styles.handle, { backgroundColor: colors.border }]} />
+              <View style={styles.headerRow}>
+                <View style={[styles.headerIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="document-text-outline" size={25} color={colors.primary} /></View>
+                <View style={styles.headerCopy}>
+                  <AppText variant="title">Fișă rapidă</AppText>
+                  <AppText variant="caption" muted>{clientName} · completează, semnează și generează</AppText>
+                </View>
               </View>
-              <Pressable accessibilityRole="button" accessibilityLabel="Anulează și închide" onPress={dismiss} style={[styles.close, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={23} color={colors.text} /></Pressable>
             </View>
+            <Pressable accessibilityRole="button" accessibilityLabel="Anulează și închide" onPress={dismiss} style={[styles.close, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={23} color={colors.text} /></Pressable>
           </View>
 
           <ScrollView
             automaticallyAdjustKeyboardInsets
+            scrollEnabled={!signatureInteracting}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
             contentContainerStyle={styles.content}
@@ -264,14 +271,22 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
 
             {canSign ? <>
               <View style={styles.sectionTitle}><Ionicons name="pencil-outline" size={20} color={palette.purple} /><AppText variant="heading">Semnătura clientului</AppText></View>
-              <AppText variant="caption" muted>Clientul poate semna direct mai jos. Semnătura este inclusă automat în fișa generată.</AppText>
-              <View style={[styles.signature, { borderColor: signatureStarted ? colors.primary : colors.border }]}>
+              <AppText variant="caption" muted>Clientul poate semna direct mai jos. În zona albă gesturile desenează, iar scrollul se blochează automat până când degetul este ridicat.</AppText>
+              <View
+                onStartShouldSetResponderCapture={() => { setSignatureInteracting(true); return false; }}
+                onTouchStart={() => setSignatureInteracting(true)}
+                onTouchEnd={() => setSignatureInteracting(false)}
+                onTouchCancel={() => setSignatureInteracting(false)}
+                style={[styles.signature, { borderColor: signatureInteracting || signatureStarted ? colors.primary : colors.border }]}
+              >
                 <SignatureScreen
                   ref={signatureRef}
-                  onBegin={() => setSignatureStarted(true)}
+                  onBegin={() => { setSignatureStarted(true); setSignatureInteracting(true); }}
+                  onEnd={() => setSignatureInteracting(false)}
                   onOK={(signature) => void persist(signature)}
                   onEmpty={() => void persist(null)}
                   autoClear={false}
+                  scrollable={false}
                   descriptionText=""
                   clearText="Șterge"
                   confirmText="Salvează"
@@ -280,7 +295,7 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
                   penColor="#07152D"
                 />
               </View>
-              <Button compact variant="outline" label="Șterge semnătura" icon="trash-outline" onPress={() => { signatureRef.current?.clearSignature(); setSignatureStarted(false); }} />
+              <Button compact variant="outline" label="Șterge semnătura" icon="trash-outline" onPress={() => { signatureRef.current?.clearSignature(); setSignatureStarted(false); setSignatureInteracting(false); }} />
             </> : null}
 
             <Button
@@ -312,12 +327,13 @@ const styles = StyleSheet.create({
   overlay: { flex: 1 },
   positioner: { flex: 1, justifyContent: 'flex-end' },
   sheet: { width: '100%', maxWidth: 760, maxHeight: '94%', alignSelf: 'center', borderWidth: 1, borderTopLeftRadius: 30, borderTopRightRadius: 30, overflow: 'hidden' },
-  dragHeader: { paddingTop: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
+  dragHeader: { position: 'relative', minHeight: 100 },
+  dragSurface: { minHeight: 100, paddingTop: spacing.sm, paddingLeft: spacing.lg, paddingRight: 82, paddingBottom: spacing.md },
   handle: { width: 48, height: 5, borderRadius: radius.pill, alignSelf: 'center', marginBottom: spacing.md },
   headerRow: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   headerIcon: { width: 50, height: 50, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   headerCopy: { minWidth: 0, flex: 1, gap: 3 },
-  close: { width: 46, height: 46, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  close: { position: 'absolute', zIndex: 5, elevation: 5, top: 34, right: spacing.lg, width: 46, height: 46, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.md },
   notice: { borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   noticeCopy: { minWidth: 0, flex: 1, fontWeight: '700' },
