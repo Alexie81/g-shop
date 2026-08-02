@@ -1380,7 +1380,22 @@ try {
     if ($method==='POST' && path_match('/public/client-form/{token}', $path, $params)) {
         fail('Formularul public nu mai este disponibil. Acest link este folosit pentru urmărirea reparației.',405);
     }
-    if ($method==='POST'&&$path==='/qr/resolve') { $user=require_permission('qr.scan');$body=json_body();$raw=(string)($body['data']??'');if(!preg_match('/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})/',$raw,$match))fail('Cod QR G-Shop invalid.',422);$stmt=db()->prepare('SELECT '.uuid_sql('q.id').' id,'.uuid_sql('q.client_id').' client_id,'.uuid_sql('q.property_id').' property_id,q.status,c.first_name,c.last_name FROM client_qr q JOIN clients c ON c.id=q.client_id WHERE q.token=? AND q.is_active=1 LIMIT 1');$stmt->execute([uuid_bin($match[1])]);$qr=$stmt->fetch();if(!$qr)fail('Codul este invalid.',404);ensure_property($qr['property_id'],$user);$requestedPropertyId=trim((string)($body['propertyId']??''));if($requestedPropertyId!==''&&$requestedPropertyId!==$qr['property_id'])fail('Codul QR nu aparține proprietății selectate.',422);$action=(string)($body['action']??'OPEN_PROFILE');if(!in_array($action,['OPEN_PROFILE','CHECK_IN','DROP_OFF','PICK_UP'],true))$action='OPEN_PROFILE';db()->prepare('INSERT INTO qr_scan_logs (id,qr_id,client_id,property_id,scanned_by,action,device,status,created_at) VALUES (?,?,?,?,?,?,?,?,?)')->execute([uuid_bin(uuid_v4()),uuid_bin($qr['id']),uuid_bin($qr['client_id']),uuid_bin($qr['property_id']),uuid_bin($user['id']),$action,substr((string)($body['device']??''),0,100),'VALID',now_utc()]);audit_log('QR_SCANNED','qr','QR scanat: '.$action,'ClientQR',$qr['id'],$qr['property_id'],null,['action'=>$action,'device'=>$body['device']??null],$user);respond(['clientId'=>$qr['client_id'],'clientName'=>$qr['first_name'].' '.$qr['last_name']]); }
+    if ($method==='POST'&&$path==='/qr/resolve') {
+        $user=require_permission('qr.scan');$body=json_body();$raw=(string)($body['data']??'');
+        if(!preg_match('/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})/',$raw,$match))fail('Cod QR G-Shop invalid.',422);
+        $stmt=db()->prepare('SELECT '.uuid_sql('q.id').' id,'.uuid_sql('q.client_id').' client_id,'.uuid_sql('q.property_id').' property_id,q.status,c.first_name,c.last_name FROM client_qr q JOIN clients c ON c.id=q.client_id WHERE q.token=? AND q.is_active=1 LIMIT 1');$stmt->execute([uuid_bin($match[1])]);$qr=$stmt->fetch();
+        if(!$qr)fail('Codul este invalid.',404);ensure_property($qr['property_id'],$user);
+        $requestedPropertyId=trim((string)($body['propertyId']??''));if($requestedPropertyId!==''&&$requestedPropertyId!==$qr['property_id'])fail('Codul QR nu aparține proprietății selectate.',422);
+        $action=(string)($body['action']??'OPEN_PROFILE');if(!in_array($action,['OPEN_PROFILE','CHECK_IN','DROP_OFF','PICK_UP'],true))$action='OPEN_PROFILE';
+        $now=now_utc();$pdo=db();$pdo->beginTransaction();
+        try{
+            $pdo->prepare('INSERT INTO qr_scan_logs (id,qr_id,client_id,property_id,scanned_by,action,device,status,created_at) VALUES (?,?,?,?,?,?,?,?,?)')->execute([uuid_bin(uuid_v4()),uuid_bin($qr['id']),uuid_bin($qr['client_id']),uuid_bin($qr['property_id']),uuid_bin($user['id']),$action,substr((string)($body['device']??''),0,100),'VALID',$now]);
+            $pdo->prepare("UPDATE client_qr SET status='USED',used_at=COALESCE(used_at,?),updated_at=?,updated_by=? WHERE id=?")->execute([$now,$now,uuid_bin($user['id']),uuid_bin($qr['id'])]);
+            $pdo->commit();
+        }catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}
+        audit_log('QR_SCANNED','qr','QR scanat și marcat ca folosit: '.$action,'ClientQR',$qr['id'],$qr['property_id'],['status'=>$qr['status']],['status'=>'USED','action'=>$action,'device'=>$body['device']??null],$user);
+        respond(['clientId'=>$qr['client_id'],'clientName'=>$qr['first_name'].' '.$qr['last_name'],'qrStatus'=>'USED']);
+    }
 
     if ($method==='GET'&&$path==='/service-sheets') { $user=require_permission('service_sheets.view');$propertyId=(string)($_GET['propertyId']??'');ensure_property($propertyId,$user);$stmt=db()->prepare(sheet_select().' WHERE s.property_id=? AND s.is_active=1 ORDER BY s.received_at DESC,s.created_at DESC LIMIT 100');$stmt->execute([uuid_bin($propertyId)]);$data=array_map('map_sheet',$stmt->fetchAll());respond(['data'=>$data,'page'=>1,'pageSize'=>100,'total'=>count($data),'totalPages'=>1]); }
     if ($method==='GET'&&path_match('/service-sheets/{id}',$path,$params)) { $user=require_permission('service_sheets.view');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);respond($sheet); }
