@@ -13,6 +13,7 @@ import { Alert, Pressable, StyleSheet, View } from 'react-native';
 type Item = { label: string; description: string; icon: keyof typeof Ionicons.glyphMap; color: string; route?: string; permission?: Permission; action?: () => void };
 export default function MoreScreen() { const { colors } = useAppTheme(); const { logout, hasPermission } = useAuth(); const { properties } = useProperty(); const serviceProperty = properties.find((property) => property.type === 'SERVICE'); const allItems: Item[] = [
   { label: 'Colaboratori', description: 'Atribuiri și comisioane', icon: 'people-circle-outline', color: palette.cyan, route: '/service/collaborators', permission: 'collaborators.view' },
+  { label: 'Mesaje WhatsApp', description: 'Mesajele rapide ale contului tău', icon: 'logo-whatsapp', color: '#18B95D', route: '/service/whatsapp-messages', permission: 'clients.view' },
   { label: 'Utilizatori', description: 'Roluri, parole și permisiuni', icon: 'people-outline', color: palette.purple, route: '/service/users', permission: 'users.view' },
   { label: 'Rapoarte', description: 'Venituri, costuri și performanță', icon: 'bar-chart-outline', color: palette.success, route: '/service/reports', permission: 'reports.view' },
   { label: 'Istoric modificări', description: 'Audit complet asociat utilizatorilor', icon: 'time-outline', color: palette.electric, route: '/service/audit', permission: 'audit.view' },
