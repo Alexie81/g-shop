@@ -1,6 +1,6 @@
 import { AppHeader } from '@/components/layout/AppHeader';
 import { ServiceSheetActionsModal } from '@/components/service-sheets/ServiceSheetActionsModal';
-import { ServiceSheetStatus, SERVICE_STATUS_LABELS } from '@/components/service-sheets/ServiceSheetStatus';
+import { ServiceSheetStatus } from '@/components/service-sheets/ServiceSheetStatus';
 import { AppText } from '@/components/ui/AppText';
 import { Card } from '@/components/ui/Card';
 import { Screen } from '@/components/ui/Screen';
@@ -14,11 +14,11 @@ import { serviceSheetRepository } from '@/repositories/api-repositories';
 import { radius, spacing } from '@/theme/tokens';
 import { ServiceSheet } from '@/types';
 import { formatFinanceMoney } from '@/utils/client-finance';
-import { formatDate } from '@/utils/format';
+import { formatDate, normalizePhoneForWhatsApp } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useRef, useState } from 'react';
-import { Pressable, Share, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, View } from 'react-native';
 
 export default function ServiceSheetsScreen() {
   const { activeProperty } = useProperty();
@@ -33,18 +33,12 @@ export default function ServiceSheetsScreen() {
   const openSheet = (sheet: ServiceSheet) => router.push(`/service/service-sheets/${sheet.id}`);
   const editSheet = (sheet: ServiceSheet) => router.push(`/service/service-sheets/${sheet.id}/edit`);
   const sendSheet = async (sheet: ServiceSheet) => {
-    const clientName = sheet.client ? `${sheet.client.firstName} ${sheet.client.lastName}` : 'Client';
-    const message = [
-      `Fișă de service ${sheet.number}`,
-      `Client: ${clientName}`,
-      `Echipament: ${[sheet.equipment, sheet.brand, sheet.model].filter(Boolean).join(' · ')}`,
-      `Status: ${SERVICE_STATUS_LABELS[sheet.status]}`,
-      `Valoare: ${formatFinanceMoney(sheet.totalCost, sheet.currencyCode ?? 'RON')}`,
-      '',
-      'Document trimis din G-Shop.',
-    ].join('\n');
+    const phone = normalizePhoneForWhatsApp(sheet.client?.phone ?? '');
+    if (!phone) return showToast('Clientul nu are un număr de telefon valid pentru WhatsApp.', 'error');
     try {
-      await Share.share({ title: sheet.number, message });
+      const generated = await serviceSheetRepository.generatePdf(sheet.id);
+      const message = `Bună ziua! Vă trimitem fișa de service ${sheet.number}, generată din datele actualizate: ${generated.url}`;
+      await Linking.openURL(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`);
       setSelectedSheet(null);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Fișa nu a putut fi trimisă.', 'error');

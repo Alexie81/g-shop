@@ -116,12 +116,12 @@ export function ServiceSheetActionsModal({ visible, sheet, onClose, onView, onEd
           <View style={styles.actions}>
             <Action icon="eye-outline" color={colors.primary} label="Vizualizare fișă de service" description="Deschide toate detaliile fișei" onPress={() => closeThen(onView)} />
             <Action icon="create-outline" color={palette.purple} label="Editare fișă de service" description="Modifică echipamentul, valorile și statusul" onPress={() => closeThen(onEdit)} />
-            <Action icon="share-social-outline" color={palette.success} label="Trimitere fișă de service" description="Deschide meniul telefonului, inclusiv WhatsApp" onPress={() => void onSend(sheet)} />
+            <Action icon="logo-whatsapp" color={palette.success} label="Trimitere fișă de service" description="Generează PDF-ul actual și deschide conversația clientului" onPress={() => void onSend(sheet)} />
             <Action icon="trash-outline" color={palette.danger} label="Ștergere fișă de service" description="Eliminare sigură, cu audit păstrat" onPress={() => setConfirmingDelete(true)} />
           </View>
           <View style={[styles.future, { backgroundColor: colors.surfaceMuted }]}>
             <Ionicons name="document-attach-outline" size={20} color={colors.primary} />
-            <AppText variant="caption" muted style={styles.futureCopy}>PDF-ul și linkul public pentru WhatsApp vor fi generate de API într-o etapă viitoare.</AppText>
+            <AppText variant="caption" muted style={styles.futureCopy}>La fiecare trimitere se generează un PDF nou, folosind exact datele curente.</AppText>
           </View>
         </>}
       </Animated.View>

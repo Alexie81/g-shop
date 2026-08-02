@@ -15,12 +15,12 @@ import { clientRepository, serviceSheetRepository } from '@/repositories/api-rep
 import { palette, radius, spacing } from '@/theme/tokens';
 import { ClientFinancialOverview, ServiceSheet, ServiceSheetStatus as Status } from '@/types';
 import { formatFinanceMoney } from '@/utils/client-finance';
-import { formatDate } from '@/utils/format';
+import { formatDate, normalizePhoneForWhatsApp } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Image, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Image, Linking, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 const statusOrder: Status[] = ['NEW', 'WAITING', 'VERIFYING', 'IN_PROGRESS', 'WAITING_PARTS', 'COMPLETED', 'DELIVERED'];
 const selectableStatuses: Status[] = [...statusOrder, 'CANCELLED'];
@@ -33,6 +33,7 @@ export default function ServiceSheetDetails() {
   const { showToast } = useToast();
   const [signing, setSigning] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
+  const [pdfAction, setPdfAction] = useState<'download' | 'whatsapp' | null>(null);
   const mobile = width < 520;
   const veryNarrow = width <= 360;
   const canViewFinancials = hasPermission('financials.view');
@@ -54,6 +55,27 @@ export default function ServiceSheetDetails() {
   const currencyCode = sheet.currencyCode ?? financials?.financials.currencyCode ?? 'RON';
   const formatCurrency = (value: number) => formatFinanceMoney(value, currencyCode);
   const currentStatusIndex = statusOrder.indexOf(sheet.status);
+
+  const openFreshPdf = async (action: 'download' | 'whatsapp') => {
+    if (pdfAction) return;
+    if (action === 'whatsapp' && !normalizePhoneForWhatsApp(sheet.client?.phone ?? '')) return showToast('Clientul nu are un număr de telefon valid pentru WhatsApp.', 'error');
+    setPdfAction(action);
+    try {
+      const generated = await serviceSheetRepository.generatePdf(sheet.id);
+      if (action === 'download') {
+        await Linking.openURL(generated.url);
+        showToast('Fișa PDF a fost generată din datele curente.', 'success');
+        return;
+      }
+      const phone = normalizePhoneForWhatsApp(sheet.client?.phone ?? '');
+      const message = `Bună ziua! Vă trimitem fișa de service ${sheet.number}, generată din datele actualizate: ${generated.url}`;
+      await Linking.openURL(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Fișa PDF nu a putut fi generată.', 'error');
+    } finally {
+      setPdfAction(null);
+    }
+  };
 
   const replaceSheet = (next: ServiceSheet) => state.setData((current) => current ? { ...current, sheet: next } : current);
   const changeStatus = async (status: Status) => {
@@ -106,7 +128,8 @@ export default function ServiceSheetDetails() {
       <SheetAction mobile={mobile} icon="create-outline" label="Editează" color={colors.primary} onPress={() => router.push(('/service/service-sheets/' + sheet.id + '/edit') as never)} />
       <SheetAction mobile={mobile} icon="swap-horizontal-outline" label="Schimbă status" color={palette.warning} selected={statusOpen} onPress={() => setStatusOpen((value) => !value)} />
       <SheetAction mobile={mobile} icon="pencil-outline" label={sheet.signatureUrl ? 'Resemnează' : 'Semnează'} color={palette.purple} onPress={() => setSigning(true)} />
-      <SheetAction mobile={mobile} icon="download-outline" label="Export PDF" color={palette.cyan} onPress={() => showToast('Exportul PDF va fi generat de API după publicare.', 'info')} />
+      <SheetAction mobile={mobile} icon="download-outline" label={pdfAction === 'download' ? 'Se generează…' : 'Descarcă PDF'} color={palette.cyan} loading={pdfAction === 'download'} onPress={() => void openFreshPdf('download')} />
+      <SheetAction mobile={mobile} icon="logo-whatsapp" label={pdfAction === 'whatsapp' ? 'Se generează…' : 'Trimite pe WhatsApp'} color="#19B85A" loading={pdfAction === 'whatsapp'} onPress={() => void openFreshPdf('whatsapp')} />
     </View>
 
     {statusOpen ? <Card style={[styles.panel, mobile && styles.cardMobile]} elevated>
@@ -213,11 +236,12 @@ export default function ServiceSheetDetails() {
   </Screen>;
 }
 
-function SheetAction({ mobile, icon, label, color, selected = false, onPress }: { mobile: boolean; icon: keyof typeof Ionicons.glyphMap; label: string; color: string; selected?: boolean; onPress: () => void }) {
+function SheetAction({ mobile, icon, label, color, selected = false, loading = false, onPress }: { mobile: boolean; icon: keyof typeof Ionicons.glyphMap; label: string; color: string; selected?: boolean; loading?: boolean; onPress: () => void }) {
   const { colors, isDark } = useAppTheme();
   return <Pressable
     accessibilityRole="button"
     accessibilityLabel={label}
+    disabled={loading}
     onPress={() => {
       void Haptics.selectionAsync().catch(() => undefined);
       onPress();
@@ -229,7 +253,7 @@ function SheetAction({ mobile, icon, label, color, selected = false, onPress }: 
       pressed && styles.pressed,
     ]}
   >
-    <View style={[styles.quickActionIcon, { backgroundColor: isDark ? `${color}28` : `${color}14` }]}><Ionicons name={icon} size={21} color={color} /></View>
+    <View style={[styles.quickActionIcon, { backgroundColor: isDark ? `${color}28` : `${color}14` }]}><Ionicons name={loading ? 'hourglass-outline' : icon} size={21} color={color} /></View>
     <AppText variant="label" numberOfLines={2} style={styles.quickActionLabel}>{label}</AppText>
   </Pressable>;
 }
