@@ -211,7 +211,8 @@ def draw_header(c: canvas.Canvas, data: dict[str, Any], continuation: bool = Fal
     c.setFont("GShop-Bold", 7.4)
     property_name = first_value(data, (("company", "propertyName"), ("property", "name")))
     if property_name:
-        c.drawString(MARGIN + 76, y + 22, fit_text(property_name, "GShop-Bold", 7.4, 230 if not continuation else 420))
+        property_label = f"G-SHOP | {property_name.upper()}"
+        c.drawString(MARGIN + 76, y + 22, fit_text(property_label, "GShop-Bold", 7.4, 230 if not continuation else 420))
 
     if continuation:
         return

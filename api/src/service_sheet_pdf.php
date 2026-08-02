@@ -11,6 +11,13 @@ function gshop_pdf_string(mixed $value): string {
     return trim((string)($value ?? ''));
 }
 
+function gshop_pdf_property_label(mixed $value): string {
+    $name = gshop_pdf_string($value);
+    if ($name === '') return '';
+    $uppercase = function_exists('mb_strtoupper') ? mb_strtoupper($name, 'UTF-8') : strtoupper($name);
+    return 'G-SHOP | ' . $uppercase;
+}
+
 function gshop_pdf_date(mixed $value, bool $withTime = false): string {
     $raw = gshop_pdf_string($value);
     if ($raw === '') return '';
@@ -97,7 +104,7 @@ function gshop_pdf_overlay_page_one(Fpdi $pdf, array $sheet, array $client, arra
     $showCompany = !empty($sheet['showCompanyDetails']);
     $shift = $showCompany ? 0.0 : 48.0;
     $currency = gshop_pdf_string($financial['currencyCode'] ?? $sheet['currencyCode'] ?? 'RON') ?: 'RON';
-    gshop_pdf_text($pdf, 98, 780, $company['propertyName'] ?? '', 7.4, 'B', 230);
+    gshop_pdf_text($pdf, 98, 780, gshop_pdf_property_label($company['propertyName'] ?? ''), 7.4, 'B', 230);
     gshop_pdf_text($pdf, 353, 779, $sheet['number'] ?? '', 9.2, 'B', 91);
     gshop_pdf_text($pdf, 459, 779, gshop_pdf_date($sheet['receivedAt'] ?? ''), 6.8, 'B', 91);
 
@@ -155,7 +162,7 @@ function gshop_pdf_overlay_page_one(Fpdi $pdf, array $sheet, array $client, arra
 }
 
 function gshop_pdf_overlay_page_two(Fpdi $pdf, array $sheet, array $client, string $propertyName, ?string $signaturePath, ?string $stampPath): void {
-    gshop_pdf_text($pdf, 98, 780, $propertyName, 7.4, 'B', 420);
+    gshop_pdf_text($pdf, 98, 780, gshop_pdf_property_label($propertyName), 7.4, 'B', 420);
     $checkXs = [34.0, 165.75, 297.5, 429.25];
     $checks = ['approveDiagnostics','approveRepair','repairRefused','productDelivered'];
     foreach ($checks as $index => $key) if (!empty($sheet[$key])) gshop_pdf_text($pdf, $checkXs[$index] + 1, 517, '✓', 8.5, 'B');
