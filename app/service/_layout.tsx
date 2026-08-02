@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Redirect, Tabs } from 'expo-router';
 
-const icons: Record<string, keyof typeof Ionicons.glyphMap> = { dashboard: 'home-outline', clients: 'people-outline', 'service-sheets': 'document-text-outline', 'qr-scanner': 'scan-outline', more: 'grid-outline' };
+const icons: Record<string, keyof typeof Ionicons.glyphMap> = { dashboard: 'home-outline', clients: 'people-outline', 'service-sheets': 'document-text-outline', 'qr-scanner': 'qr-code-outline', more: 'grid-outline' };
 
 export default function ServiceLayout() {
   const { user, ready } = useAuth(); const { activeProperty, loading } = useProperty(); const { colors } = useAppTheme();

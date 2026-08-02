@@ -9,8 +9,8 @@ import { fullName, normalizePhoneForWhatsApp } from '@/utils/format';
 import { renderWhatsAppMessage } from '@/utils/whatsapp-messages';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useEffect, useMemo, useState } from 'react';
-import { Linking, Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Easing, Linking, Modal, PanResponder, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 export function WhatsAppQuickMessagesModal({ visible, client, propertyName, messages, onClose }: {
   visible: boolean;
@@ -24,12 +24,32 @@ export function WhatsAppQuickMessagesModal({ visible, client, propertyName, mess
   const { width } = useWindowDimensions();
   const mobile = width < 620;
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const translateY = useRef(new Animated.Value(0)).current;
   const selected = useMemo(() => messages.find((item) => item.id === selectedId) ?? null, [messages, selectedId]);
   const preview = selected ? renderWhatsAppMessage(selected.message, client, propertyName) : '';
 
   useEffect(() => {
-    if (visible) setSelectedId(messages[0]?.id ?? null);
-  }, [messages, visible]);
+    if (visible) { setSelectedId(messages[0]?.id ?? null); translateY.setValue(0); }
+  }, [messages, translateY, visible]);
+
+  const closeByDrag = useCallback(() => {
+    Animated.timing(translateY, { toValue: 720, duration: 230, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(({ finished }) => {
+      if (!finished) return;
+      translateY.setValue(0);
+      onClose();
+    });
+  }, [onClose, translateY]);
+  const panResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => false,
+    onMoveShouldSetPanResponder: (_event, gesture) => gesture.dy > 4 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+    onMoveShouldSetPanResponderCapture: (_event, gesture) => gesture.dy > 4 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+    onPanResponderMove: (_event, gesture) => translateY.setValue(Math.max(0, gesture.dy)),
+    onPanResponderRelease: (_event, gesture) => {
+      if (gesture.dy > 76 || gesture.vy > 0.65) { closeByDrag(); return; }
+      Animated.spring(translateY, { toValue: 0, damping: 20, stiffness: 230, mass: 0.8, useNativeDriver: true }).start();
+    },
+    onPanResponderTerminate: () => Animated.spring(translateY, { toValue: 0, damping: 20, stiffness: 230, mass: 0.8, useNativeDriver: true }).start(),
+  }), [closeByDrag, translateY]);
 
   const choose = (id: string | null) => {
     Haptics.selectionAsync().catch(() => undefined);
@@ -51,12 +71,14 @@ export function WhatsAppQuickMessagesModal({ visible, client, propertyName, mess
   return <Modal visible={visible} transparent animationType="slide" statusBarTranslucent onRequestClose={onClose}>
     <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
       <Pressable accessibilityLabel="Închide mesajele WhatsApp" style={StyleSheet.absoluteFill} onPress={onClose} />
-      <View style={[styles.sheet, mobile && styles.sheetMobile, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <View style={[styles.handle, { backgroundColor: colors.border }]} />
-        <View style={styles.header}>
-          <View style={styles.whatsAppIcon}><Ionicons name="logo-whatsapp" size={29} color="#fff" /></View>
-          <View style={styles.headerCopy}><AppText variant="title">Mesaj rapid</AppText><AppText variant="caption" muted numberOfLines={1}>Către {fullName(client)} · {client.phone}</AppText></View>
-          <Pressable accessibilityLabel="Închide" onPress={onClose} style={[styles.close, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={22} color={colors.text} /></Pressable>
+      <Animated.View style={[styles.sheet, mobile && styles.sheetMobile, { backgroundColor: colors.surface, borderColor: colors.border, transform: [{ translateY }] }]}>
+        <View {...panResponder.panHandlers} accessibilityRole="adjustable" accessibilityLabel="Trage în jos pentru a închide" style={styles.draggableHeader}>
+          <View style={[styles.handle, { backgroundColor: colors.border }]} />
+          <View style={styles.header}>
+            <View style={styles.whatsAppIcon}><Ionicons name="logo-whatsapp" size={29} color="#fff" /></View>
+            <View style={styles.headerCopy}><AppText variant="title">Mesaj rapid</AppText><AppText variant="caption" muted numberOfLines={1}>Către {fullName(client)} · {client.phone}</AppText></View>
+            <Pressable accessibilityLabel="Închide" onPress={onClose} style={[styles.close, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={22} color={colors.text} /></Pressable>
+          </View>
         </View>
 
         <AppText variant="label">Alege unul dintre mesajele contului tău</AppText>
@@ -78,7 +100,7 @@ export function WhatsAppQuickMessagesModal({ visible, client, propertyName, mess
         {!messages.length ? <View style={[styles.empty, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="chatbox-ellipses-outline" size={27} color={colors.textMuted} /><View style={styles.emptyCopy}><AppText variant="label">Nu ai mesaje predefinite</AppText><AppText variant="caption" muted>Le poți crea din Mai mult → Mesaje WhatsApp.</AppText></View></View> : null}
 
         <Button label="Deschide WhatsApp" icon="logo-whatsapp" onPress={() => void openWhatsApp()} style={styles.sendButton} />
-      </View>
+      </Animated.View>
     </View>
   </Modal>;
 }
@@ -86,7 +108,7 @@ export function WhatsAppQuickMessagesModal({ visible, client, propertyName, mess
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end', alignItems: 'center' },
   sheet: { width: '94%', maxWidth: 680, maxHeight: '92%', borderWidth: 1, borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: spacing.xl, gap: spacing.lg },
-  sheetMobile: { width: '100%', paddingHorizontal: spacing.lg }, handle: { width: 46, height: 5, borderRadius: radius.pill, alignSelf: 'center' },
+  sheetMobile: { width: '100%', paddingHorizontal: spacing.lg }, draggableHeader: { marginHorizontal: -spacing.lg, marginTop: -spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, gap: spacing.md }, handle: { width: 46, height: 5, borderRadius: radius.pill, alignSelf: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md }, whatsAppIcon: { width: 52, height: 52, borderRadius: 18, backgroundColor: '#25D366', alignItems: 'center', justifyContent: 'center', shadowColor: '#075E54', shadowOpacity: 0.2, shadowRadius: 12, shadowOffset: { width: 0, height: 7 }, elevation: 4 }, headerCopy: { minWidth: 0, flex: 1 }, close: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
   listScroll: { flexGrow: 0, maxHeight: 290 }, list: { gap: spacing.sm, paddingBottom: spacing.xs }, option: { minHeight: 74, borderWidth: 1, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md }, optionCheck: { width: 24, height: 24, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' }, optionCopy: { minWidth: 0, flex: 1, gap: 3 },
   preview: { borderWidth: 1, borderRadius: radius.md, padding: spacing.md, gap: spacing.sm }, previewTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs }, previewLabel: { color: '#14984E', fontWeight: '900', letterSpacing: 0.8 }, previewText: { lineHeight: 21 },

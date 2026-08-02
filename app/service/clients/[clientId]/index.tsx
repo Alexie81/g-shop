@@ -181,6 +181,7 @@ export default function ClientDetailsScreen() {
       saving={financeSaving}
       onChange={(next) => replaceFinancials({ ...financials, financials: { ...financials.financials, ...next } })}
       onSave={canEditFinancials ? saveFinancials : undefined}
+      onPaymentStatusChange={canEditFinancials ? saveFinancials : undefined}
       onAddExpense={canEditFinancials ? async (input) => { await clientRepository.addExpense(client.id, input); await refreshExpenses(); await reloadFinanceHistory(); showToast('Cheltuiala a fost adăugată.', 'success'); } : undefined}
       onUpdateExpense={canEditFinancials ? async (expenseId, input) => { await clientRepository.updateExpense(client.id, expenseId, input); await refreshExpenses(); await reloadFinanceHistory(); showToast('Cheltuiala a fost actualizată.', 'success'); } : undefined}
       onDeleteExpense={canEditFinancials ? async (expenseId) => { await clientRepository.removeExpense(client.id, expenseId); await refreshExpenses(); await reloadFinanceHistory(); showToast('Cheltuiala a fost ștearsă.', 'success'); } : undefined}

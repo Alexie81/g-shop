@@ -31,6 +31,7 @@ export type ClientFinanceSectionProps = {
   saving?: boolean;
   onChange: (value: ClientFinanceValue) => void;
   onSave?: (value: ClientFinanceValue) => Promise<void> | void;
+  onPaymentStatusChange?: (value: ClientFinanceValue) => Promise<void> | void;
   onAddExpense?: (input: ExpenseInput) => Promise<void> | void;
   onUpdateExpense?: (id: string, input: ExpenseInput) => Promise<void> | void;
   onDeleteExpense?: (id: string) => Promise<void> | void;
@@ -47,6 +48,7 @@ export function ClientFinanceSection({
   saving = false,
   onChange,
   onSave,
+  onPaymentStatusChange,
   onAddExpense,
   onUpdateExpense,
   onDeleteExpense,
@@ -96,6 +98,19 @@ export function ClientFinanceSection({
       setActionError(caught instanceof Error ? caught.message : 'Datele financiare nu au putut fi salvate.');
     }
   };
+  const updatePaymentStatus = async (next: ClientFinanceValue['paymentStatus']) => {
+    if (next === normalizedValue.paymentStatus) return;
+    const nextValue = { ...normalizedValue, paymentStatus: next };
+    onChange(nextValue);
+    if (!onPaymentStatusChange) return;
+    setActionError('');
+    try {
+      await onPaymentStatusChange(nextValue);
+    } catch (caught) {
+      onChange(normalizedValue);
+      setActionError(caught instanceof Error ? caught.message : 'Statusul plății nu a putut fi salvat automat.');
+    }
+  };
 
   const submitExpense = async (input: ExpenseInput) => {
     if (editingExpense) {
@@ -133,7 +148,7 @@ export function ClientFinanceSection({
             <AppText variant="caption" muted>Valori, încasări și profitabilitate, într-un singur loc</AppText>
           </View>
         </View>
-        <PaymentStatus mobile={mobile} value={normalizedValue.paymentStatus} disabled={disabled} onChange={(next) => update('paymentStatus', next)} />
+        <PaymentStatus mobile={mobile} value={normalizedValue.paymentStatus} disabled={disabled || saving} onChange={(next) => void updatePaymentStatus(next)} />
       </View>
       <View style={[styles.metrics, mobile && styles.compactGap]}>
         <FinanceMetric mobile={mobile} icon="receipt-outline" label="Total" value={money(calculations.totalDue)} helper={ronEquivalent(calculations.totalDue)} color={colors.primary} />
