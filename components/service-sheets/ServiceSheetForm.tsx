@@ -1,6 +1,8 @@
 import { ClientFinanceSection, type ExpenseInput } from '@/components/clients/finance';
 import { AccessoriesField, hasNoAccessories, NO_ACCESSORIES_VALUE } from '@/components/service-sheets/AccessoriesField';
+import { IntakeEstimateSection } from '@/components/service-sheets/IntakeEstimateSection';
 import { ServiceSheetCollaborators } from '@/components/service-sheets/ServiceSheetCollaborators';
+import { DocumentStageHeader, ServiceDocumentTimeline } from '@/components/service-sheets/ServiceDocumentTimeline';
 import { SERVICE_STATUS_LABELS } from '@/components/service-sheets/ServiceSheetStatus';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
@@ -13,11 +15,12 @@ import { useToast } from '@/contexts/ToastContext';
 import { clientRepository, serviceSheetRepository } from '@/repositories/api-repositories';
 import { apiRequest, ApiError } from '@/services/api';
 import { palette, radius, spacing } from '@/theme/tokens';
-import { Client, ClientFinancialOverview, ServiceSheet, ServiceSheetStatus, UUID } from '@/types';
+import { Client, ClientFinancialOverview, EstimatedCosts, ServiceSheet, ServiceSheetStatus, UUID } from '@/types';
 import { calculateClientFinance, ClientFinanceValue } from '@/utils/client-finance';
+import { calculateEstimatedCosts, estimatedCostsFromFinance, estimatedDateFromWorkingDays, financeFromEstimatedCosts } from '@/utils/estimated-costs';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 type Intake = { equipmentType?: string; brand?: string; model?: string; problem?: string; notes?: string; requestType?: string };
@@ -46,6 +49,7 @@ type Form = {
   productDelivered: boolean;
   receivedAt: string;
   intakeAgreementAt: string;
+  estimatedRepairDays: string;
   estimatedAt: string;
   completedAt: string;
   status: ServiceSheetStatus;
@@ -83,6 +87,7 @@ const blank: Form = {
   productDelivered: false,
   receivedAt: '',
   intakeAgreementAt: '',
+  estimatedRepairDays: '',
   estimatedAt: '',
   completedAt: '',
   status: 'NEW',
@@ -116,6 +121,7 @@ function formFromSheet(sheet: ServiceSheet): Form {
     productDelivered: sheet.productDelivered ?? false,
     receivedAt: sheet.receivedAt || new Date().toISOString(),
     intakeAgreementAt: sheet.intakeAgreementAt ?? sheet.signedAt ?? sheet.receivedAt ?? '',
+    estimatedRepairDays: sheet.estimatedRepairDays ? String(sheet.estimatedRepairDays) : '',
     estimatedAt: sheet.estimatedAt ?? '',
     completedAt: sheet.completedAt ?? '',
     status: sheet.status,
@@ -133,8 +139,8 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
   const [financePrefilling, setFinancePrefilling] = useState(false);
   const [financeOverview, setFinanceOverview] = useState<ClientFinancialOverview | null>(null);
   const [financeValue, setFinanceValue] = useState<ClientFinanceValue>(() => ({ ...emptyFinance, currencyCode: sheet?.currencyCode ?? 'RON', displayedPartsCost: sheet?.partsCost ?? 0, displayedLaborCost: sheet?.laborCost ?? 0 }));
+  const [estimatedCosts, setEstimatedCosts] = useState<EstimatedCosts>(() => calculateEstimatedCosts({ currencyCode: sheet?.currencyCode ?? 'RON', partsCost: sheet?.partsCost ?? 0, laborCost: sheet?.laborCost ?? 0 }));
   const [financeSourceClientId, setFinanceSourceClientId] = useState<UUID | null>(null);
-  const [choosingClient, setChoosingClient] = useState(false);
   const { hasPermission } = useAuth();
   const { colors } = useAppTheme();
   const canLoadFinancials = hasPermission('financials.view');
@@ -142,9 +148,12 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
   const canEditCollaborators = hasPermission('clients.update') && hasPermission('collaborators.view');
   const canManageCollaboratorPayments = hasPermission('collaborators.manage');
   const { showToast } = useToast();
+  const estimateTouchedRef = useRef(false);
+  const financeTouchedRef = useRef(false);
 
   const applyClientFinance = useCallback((overview: ClientFinancialOverview, selectedClientId: UUID) => {
     setFinanceValue({ ...emptyFinance, ...overview.financials });
+    if (!sheet && !estimateTouchedRef.current) setEstimatedCosts(estimatedCostsFromFinance({ ...emptyFinance, ...overview.financials }));
     setForm((current) => current.clientId !== selectedClientId ? current : {
       ...current,
       partsCost: String(overview.financials.displayedPartsCost ?? 0),
@@ -152,7 +161,7 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
       actualPartsCost: String(overview.financials.actualPartsCost ?? 0),
     });
     setFinanceSourceClientId(selectedClientId);
-  }, []);
+  }, [sheet]);
 
   useEffect(() => {
     clientRepository.list(propertyId).then((result) => setClients(result.data)).catch(() => undefined);
@@ -217,7 +226,6 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
     if (key === 'clientId') {
       const nextClientId = value as Form['clientId'];
       if (form.clientId === nextClientId) {
-        setChoosingClient(false);
         return;
       }
       setForm((current) => ({
@@ -229,9 +237,11 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
       }));
       setClient(clients.find((item) => item.id === nextClientId) ?? null);
       setFinanceValue({ ...emptyFinance });
+      setEstimatedCosts(calculateEstimatedCosts({ currencyCode: 'RON' }));
+      estimateTouchedRef.current = false;
+      financeTouchedRef.current = false;
       setFinanceOverview(null);
       setFinanceSourceClientId(null);
-      setChoosingClient(false);
       return;
     }
     setForm((current) => {
@@ -240,6 +250,17 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
       if (key === 'repairRefused' && value === true) next.approveRepair = false;
       return next;
     });
+  };
+
+  const updateEstimatedCosts = (next: EstimatedCosts) => {
+    estimateTouchedRef.current = true;
+    setEstimatedCosts(next);
+    if (!financeTouchedRef.current) setFinanceValue((current) => financeFromEstimatedCosts(current, next));
+  };
+
+  const updateFinance = (next: ClientFinanceValue) => {
+    financeTouchedRef.current = true;
+    setFinanceValue(next);
   };
 
   const collaborators = financeOverview?.collaborators ?? (financeOverview?.collaborator ? [financeOverview.collaborator] : []);
@@ -292,6 +313,13 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
     if (!form.clientId || form.reportedIssue.trim().length < 5) {
       return showToast('Alege clientul și completează problema declarată.', 'error');
     }
+    const estimatedRepairDays = form.estimatedRepairDays.trim() === '' ? undefined : Number(form.estimatedRepairDays);
+    if (!sheet && (estimatedRepairDays === undefined || !Number.isInteger(estimatedRepairDays) || estimatedRepairDays < 0 || estimatedRepairDays > 730)) {
+      return showToast('Completează termenul estimativ cu un număr între 0 și 730 de zile lucrătoare.', 'error');
+    }
+    if (!sheet && !/^[A-Z]{3}$/.test(estimatedCosts.currencyCode)) {
+      return showToast('Moneda costurilor estimative trebuie să aibă 3 litere, de exemplu RON.', 'error');
+    }
 
     const editableFields = {
       equipment: form.equipment.trim(),
@@ -322,7 +350,9 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
       completedAt: form.completedAt || undefined,
       status: form.status,
       internalNotes: form.internalNotes.trim(),
-      estimatedAt: form.estimatedAt || undefined,
+      estimatedAt: sheet
+        ? form.estimatedAt || undefined
+        : estimatedDateFromWorkingDays(form.receivedAt || new Date().toISOString(), estimatedRepairDays ?? 0),
     };
 
     setLoading(true);
@@ -338,11 +368,13 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
           currencyCode: financeValue.currencyCode,
         });
       if (!sheet) {
-        const receivedAt = new Date(form.receivedAt).getTime();
-        const estimatedAt = form.estimatedAt ? new Date(form.estimatedAt).getTime() : Number.NaN;
-        const estimatedRepairDays = Number.isFinite(receivedAt) && Number.isFinite(estimatedAt) && estimatedAt > receivedAt ? Math.max(1, Math.ceil((estimatedAt - receivedAt) / 86_400_000)) : undefined;
         try {
-          await serviceSheetRepository.generateDocument(saved.id, 'INTAKE', { agreementAt: form.intakeAgreementAt || new Date().toISOString(), agreementStatus: form.repairRefused ? 'REFUSED' : 'ACCEPTED', estimatedRepairDays });
+          await serviceSheetRepository.generateDocument(saved.id, 'INTAKE', {
+            agreementAt: form.intakeAgreementAt,
+            agreementStatus: form.repairRefused ? 'REFUSED' : 'ACCEPTED',
+            estimatedRepairDays,
+            estimatedCosts,
+          });
         } catch (documentError) {
           documentWarning = documentError instanceof Error ? `Fișa a fost salvată, dar documentul de intrare nu a putut fi generat: ${documentError.message}` : 'Fișa a fost salvată, dar documentul de intrare nu a putut fi generat.';
         }
@@ -364,18 +396,91 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
     }
   };
 
+  const timelineStep: 1 | 2 | 3 = sheet?.status === 'DELIVERED'
+    ? 3
+    : sheet && ['VERIFYING', 'IN_PROGRESS', 'WAITING_PARTS', 'COMPLETED'].includes(sheet.status)
+      ? 2
+      : 1;
+
   return <View style={styles.form}>
+    <ServiceDocumentTimeline activeStep={timelineStep} />
     <Card style={styles.section}>
-      <AppText variant="heading">Client</AppText>
-      {client && !choosingClient ? <View style={styles.clientSummary}>
+      <DocumentStageHeader step={1} title="Client asociat" description="Clientul este ales o singură dată și rămâne fix pe această reparație." />
+      {client ? <View style={styles.clientSummary}>
         <View style={styles.clientCopy}><AppText variant="label">{client.firstName} {client.lastName}</AppText><AppText variant="caption" muted>{client.phone} · {client.email || 'fără email'}</AppText></View>
-        {sheet ? null : <Button compact variant="outline" label="Schimbă clientul" icon="swap-horizontal-outline" onPress={() => setChoosingClient(true)} />}
       </View> : prefilling ? <AppText variant="caption" muted>Se încarcă datele clientului…</AppText> : sheet ? <AppText variant="caption" muted>Clientul asociat nu a putut fi încărcat.</AppText> : <View style={styles.clientGrid}>
         {clients.map((item) => <Button key={item.id} compact variant={form.clientId === item.id ? 'primary' : 'outline'} label={item.firstName + ' ' + item.lastName} onPress={() => update('clientId', item.id)} />)}
       </View>}
       {prefilling ? null : sheet ? <AppText variant="caption" muted>Clientul asociat și istoricul fișei rămân neschimbate.</AppText> : clientId === form.clientId ? <AppText variant="caption" style={{ color: '#14A83B' }}>Datele disponibile din formularul QR au fost precompletate.</AppText> : null}
-      {financePrefilling ? <AppText variant="caption" muted>Se încarcă valorile financiare ale clientului…</AppText> : financeSourceClientId === form.clientId ? <AppText variant="caption" style={styles.financeHint}>Costurile și moneda sunt sincronizate automat cu finanțele clientului.</AppText> : null}
+      {financePrefilling ? <AppText variant="caption" muted>Se încarcă valorile financiare ale clientului…</AppText> : financeSourceClientId === form.clientId ? <AppText variant="caption" style={styles.financeHint}>Estimarea a fost precompletată din finanțele clientului și rămâne separată după generarea fișei de intrare.</AppText> : null}
     </Card>
+
+    <Card style={styles.section}>
+      <DocumentStageHeader step={1} title="Echipamentul primit" description="Aceste informații apar în prima pagină a fișei de intrare." />
+      <View style={styles.row}>
+        <View style={styles.field}><Input label="Tip echipament" value={form.equipment} onChangeText={(value) => update('equipment', value)} /></View>
+        <View style={styles.field}><Input label="Marcă" value={form.brand} onChangeText={(value) => update('brand', value)} /></View>
+      </View>
+      <View style={styles.row}>
+        <View style={styles.field}><Input label="Model" value={form.model} onChangeText={(value) => update('model', value)} /></View>
+        <View style={styles.field}><Input label="Serie" value={form.serialNumber} onChangeText={(value) => update('serialNumber', value)} /></View>
+      </View>
+      <AccessoriesField value={form.accessories} onChange={(value) => update('accessories', value)} />
+    </Card>
+
+    <Card style={styles.section}>
+      <DocumentStageHeader step={1} title="Problema declarată" description="Notează exact simptomele comunicate de client la predare." />
+      <Input label="Problemă declarată *" multiline numberOfLines={4} textAlignVertical="top" style={{ minHeight: 90 }} value={form.reportedIssue} onChangeText={(value) => update('reportedIssue', value)} />
+    </Card>
+
+    <Card style={styles.section}>
+      <DocumentStageHeader step={2} title="Constatarea pentru deviz" description="Poți lăsa gol acum și completa după diagnosticare, înainte de generarea devizului final." />
+      <Input label="Constatare tehnică" multiline value={form.technicalAssessment} onChangeText={(value) => update('technicalAssessment', value)} />
+      <Input label="Piese utilizate / necesare" multiline value={form.partsUsed} onChangeText={(value) => update('partsUsed', value)} />
+    </Card>
+
+    <Card style={styles.section}>
+      <DocumentStageHeader step={3} title="Rezultatul reparației" description="Se completează la final și va fi preluat în fișa de ieșire." />
+      <Input label="Lucrări efectuate" multiline value={form.workPerformed} onChangeText={(value) => update('workPerformed', value)} />
+    </Card>
+
+    <Card style={styles.section}>
+      <DocumentStageHeader step={1} title="Primire și acord inițial" description="Datele opționale pot fi șterse și lăsate necompletate." />
+      <View style={styles.row}>
+        <View style={styles.field}><DateTimeField label="Data primirii" value={form.receivedAt} onChange={(value) => update('receivedAt', value)} allowClear showNow /></View>
+        {!sheet ? <View style={styles.field}><DateTimeField label="Data acordului" value={form.intakeAgreementAt} onChange={(value) => update('intakeAgreementAt', value)} allowClear showNow /></View> : null}
+        {sheet ? <View style={styles.field}><DateTimeField label="Termen estimat" value={form.estimatedAt} onChange={(value) => update('estimatedAt', value)} allowClear /></View> : null}
+      </View>
+      <Input label="Numele tehnicianului" placeholder="ex. Andrei Popescu" value={form.technicianName} onChangeText={(value) => update('technicianName', value)} />
+      <Input label="Observații interne (nu apar în PDF)" multiline value={form.internalNotes} onChangeText={(value) => update('internalNotes', value)} />
+    </Card>
+
+    <Card style={styles.section}>
+      <DocumentStageHeader step={1} title="Acordul pentru fișa de intrare" description="Bifele completează automat declarația și condițiile din document." />
+      <View style={styles.toggleGrid}>
+        <ToggleOption label="Aprobă diagnosticarea" icon="search-outline" active={form.approveDiagnostics} onPress={() => update('approveDiagnostics', !form.approveDiagnostics)} />
+        <ToggleOption label="Aprobă reparația" icon="construct-outline" active={form.approveRepair} onPress={() => update('approveRepair', !form.approveRepair)} />
+        <ToggleOption label="Refuză reparația" icon="close-circle-outline" active={form.repairRefused} tone="danger" onPress={() => update('repairRefused', !form.repairRefused)} />
+      </View>
+    </Card>
+
+    <Card style={styles.section}>
+      <DocumentStageHeader step={3} title="Predare și închidere" description="Completează aceste date doar când produsul este gata de predare." />
+      <View style={styles.toggleGrid}><ToggleOption label="Produs predat" icon="checkmark-done-outline" active={form.productDelivered} onPress={() => update('productDelivered', !form.productDelivered)} /></View>
+      <View style={styles.row}><View style={styles.field}><DateTimeField label="Data finalizării" value={form.completedAt} onChange={(value) => update('completedAt', value)} allowClear showNow /></View></View>
+      <View style={styles.row}><View style={styles.field}><Input label="Garanție" placeholder="ex. 90 zile" value={form.warranty} onChangeText={(value) => update('warranty', value)} /></View><View style={styles.field}><Input label="Depozitare după termen" placeholder="ex. 5 RON / zi" value={form.storageAfter} onChangeText={(value) => update('storageAfter', value)} /></View></View>
+      <Input label="Observații client / service" multiline numberOfLines={4} textAlignVertical="top" style={{ minHeight: 90 }} value={form.handoverNotes} onChangeText={(value) => update('handoverNotes', value)} />
+      <AppText variant="label">Statusul fișei</AppText>
+      <View style={styles.statusGrid}>{(Object.keys(SERVICE_STATUS_LABELS) as ServiceSheetStatus[]).map((status) => <Pressable key={status} accessibilityRole="button" accessibilityState={{ selected: form.status === status }} onPress={() => update('status', status)} style={({ pressed }) => [styles.statusButton, { borderColor: form.status === status ? colors.primary : colors.border, backgroundColor: form.status === status ? colors.primary : colors.surfaceMuted, opacity: pressed ? 0.75 : 1 }]}><AppText variant="caption" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82} style={[styles.statusButtonLabel, { color: form.status === status ? '#FFFFFF' : colors.text }]}>{SERVICE_STATUS_LABELS[status]}</AppText></Pressable>)}</View>
+    </Card>
+
+    {!sheet ? <IntakeEstimateSection
+      value={estimatedCosts}
+      estimatedRepairDays={form.estimatedRepairDays}
+      onChange={updateEstimatedCosts}
+      onEstimatedRepairDaysChange={(estimatedRepairDays) => update('estimatedRepairDays', estimatedRepairDays)}
+      description="Aceste valori intră în PDF-ul inițial și nu se modifică atunci când actualizezi mai târziu costurile reale sau devizul final."
+    /> : null}
 
     {canLoadFinancials && form.clientId ? <ClientFinanceSection
       value={financeValue}
@@ -383,7 +488,7 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
       collaboratorCost={collaboratorCost}
       collaboratorPaid={collaboratorPaid}
       disabled={!canEditFinancials || financePrefilling}
-      onChange={setFinanceValue}
+      onChange={updateFinance}
       onAddExpense={canEditFinancials && !financePrefilling ? addExpense : undefined}
       onUpdateExpense={canEditFinancials && !financePrefilling ? updateExpense : undefined}
       onDeleteExpense={canEditFinancials && !financePrefilling ? deleteExpense : undefined}
@@ -398,53 +503,6 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
       canManagePayment={canManageCollaboratorPayments}
       onRefresh={refreshCollaborators}
     /> : null}
-
-    <Card style={styles.section}>
-      <AppText variant="heading">Echipament</AppText>
-      <View style={styles.row}>
-        <View style={styles.field}><Input label="Tip echipament" value={form.equipment} onChangeText={(value) => update('equipment', value)} /></View>
-        <View style={styles.field}><Input label="Marcă" value={form.brand} onChangeText={(value) => update('brand', value)} /></View>
-      </View>
-      <View style={styles.row}>
-        <View style={styles.field}><Input label="Model" value={form.model} onChangeText={(value) => update('model', value)} /></View>
-        <View style={styles.field}><Input label="Serie" value={form.serialNumber} onChangeText={(value) => update('serialNumber', value)} /></View>
-      </View>
-      <AccessoriesField value={form.accessories} onChange={(value) => update('accessories', value)} />
-    </Card>
-
-    <Card style={styles.section}>
-      <AppText variant="heading">Diagnostic și lucrări</AppText>
-      <Input label="Problemă declarată *" multiline numberOfLines={4} textAlignVertical="top" style={{ minHeight: 90 }} value={form.reportedIssue} onChangeText={(value) => update('reportedIssue', value)} />
-      <Input label="Constatare tehnică" multiline value={form.technicalAssessment} onChangeText={(value) => update('technicalAssessment', value)} />
-      <Input label="Lucrări efectuate" multiline value={form.workPerformed} onChangeText={(value) => update('workPerformed', value)} />
-      <Input label="Piese utilizate / necesare" multiline value={form.partsUsed} onChangeText={(value) => update('partsUsed', value)} />
-    </Card>
-
-    <Card style={styles.section}>
-      <AppText variant="heading">Planificare și observații</AppText>
-      <View style={styles.row}>
-        <View style={styles.field}><DateTimeField label="Data primirii" value={form.receivedAt} onChange={(value) => update('receivedAt', value)} /></View>
-        {!sheet ? <View style={styles.field}><DateTimeField label="Data acordului" value={form.intakeAgreementAt} onChange={(value) => update('intakeAgreementAt', value)} showNow /></View> : null}
-        <View style={styles.field}><DateTimeField label="Termen estimat" value={form.estimatedAt} onChange={(value) => update('estimatedAt', value)} allowClear /></View>
-        <View style={styles.field}><DateTimeField label="Data finalizării" value={form.completedAt} onChange={(value) => update('completedAt', value)} allowClear /></View>
-      </View>
-      <Input label="Numele tehnicianului" placeholder="ex. Andrei Popescu" value={form.technicianName} onChangeText={(value) => update('technicianName', value)} />
-      <Input label="Observații client / service" multiline numberOfLines={4} textAlignVertical="top" style={{ minHeight: 90 }} value={form.handoverNotes} onChangeText={(value) => update('handoverNotes', value)} />
-      <Input label="Observații interne (nu apar în PDF)" multiline value={form.internalNotes} onChangeText={(value) => update('internalNotes', value)} />
-    </Card>
-
-    <Card style={styles.section}>
-      <View style={styles.sectionHeading}><View style={[styles.sectionIcon, { backgroundColor: `${palette.purple}16` }]}><Ionicons name="shield-checkmark-outline" size={21} color={palette.purple} /></View><View style={styles.documentCopy}><AppText variant="heading">Acord, predare și garanție</AppText><AppText variant="caption" muted>Completează toate câmpurile care vor apărea pe pagina a doua a PDF-ului.</AppText></View></View>
-      <View style={styles.toggleGrid}>
-        <ToggleOption label="Aprobă diagnosticarea" icon="search-outline" active={form.approveDiagnostics} onPress={() => update('approveDiagnostics', !form.approveDiagnostics)} />
-        <ToggleOption label="Aprobă reparația" icon="construct-outline" active={form.approveRepair} onPress={() => update('approveRepair', !form.approveRepair)} />
-        <ToggleOption label="Refuză reparația" icon="close-circle-outline" active={form.repairRefused} tone="danger" onPress={() => update('repairRefused', !form.repairRefused)} />
-        <ToggleOption label="Produs predat" icon="checkmark-done-outline" active={form.productDelivered} onPress={() => update('productDelivered', !form.productDelivered)} />
-      </View>
-      <View style={styles.row}><View style={styles.field}><Input label="Garanție" placeholder="ex. 90 zile" value={form.warranty} onChangeText={(value) => update('warranty', value)} /></View><View style={styles.field}><Input label="Depozitare după termen" placeholder="ex. 5 RON / zi" value={form.storageAfter} onChangeText={(value) => update('storageAfter', value)} /></View></View>
-      <AppText variant="label">Statusul fișei</AppText>
-      <View style={styles.statusGrid}>{(Object.keys(SERVICE_STATUS_LABELS) as ServiceSheetStatus[]).map((status) => <Pressable key={status} accessibilityRole="button" accessibilityState={{ selected: form.status === status }} onPress={() => update('status', status)} style={({ pressed }) => [styles.statusButton, { borderColor: form.status === status ? colors.primary : colors.border, backgroundColor: form.status === status ? colors.primary : colors.surfaceMuted, opacity: pressed ? 0.75 : 1 }]}><AppText variant="caption" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82} style={[styles.statusButtonLabel, { color: form.status === status ? '#FFFFFF' : colors.text }]}>{SERVICE_STATUS_LABELS[status]}</AppText></Pressable>)}</View>
-    </Card>
 
     <Button label={sheet ? 'Salvează modificările' : 'Creează fișa de service'} icon={sheet ? 'save-outline' : 'document-text-outline'} loading={loading} onPress={() => void submit()} />
   </View>;

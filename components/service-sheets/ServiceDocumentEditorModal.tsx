@@ -7,6 +7,7 @@ import { useAppTheme } from '@/contexts/ThemeContext';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { ClientFinancialOverview, EstimatedCosts, GenerateServiceDocumentInput, ServiceDocument, ServiceDocumentItem, ServiceDocumentType, ServiceSheet } from '@/types';
 import { formatFinanceMoney } from '@/utils/client-finance';
+import { calculateEstimatedCosts } from '@/utils/estimated-costs';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -32,24 +33,6 @@ const TITLES: Record<ServiceDocumentType, { title: string; description: string; 
 let itemSequence = 0;
 const draftKey = () => `document-item-${Date.now()}-${itemSequence++}`;
 const roundMoney = (value: number) => Math.round(Math.max(0, value) * 100) / 100;
-
-function calculateEstimatedCosts(value: Partial<EstimatedCosts>): EstimatedCosts {
-  const diagnosticFee = roundMoney(value.diagnosticFee ?? 0);
-  const partsCost = roundMoney(value.partsCost ?? 0);
-  const laborCost = roundMoney(value.laborCost ?? 0);
-  const advancePaid = roundMoney(value.advancePaid ?? 0);
-  const discountPercent = Math.min(100, roundMoney(value.discountPercent ?? 0));
-  const subtotal = roundMoney(diagnosticFee + partsCost + laborCost);
-  const discountAmount = roundMoney(subtotal * discountPercent / 100);
-  const totalDue = roundMoney(Math.max(0, subtotal - discountAmount));
-  const receivedAmount = roundMoney(Math.min(advancePaid, totalDue));
-  return {
-    diagnosticFee, partsCost, laborCost, advancePaid, discountPercent,
-    currencyCode: value.currencyCode?.toUpperCase() || 'RON',
-    subtotal, discountAmount, totalDue, receivedAmount,
-    remainingDue: roundMoney(Math.max(0, totalDue - receivedAmount)),
-  };
-}
 
 function currentEstimatedCosts(sheet: ServiceSheet, overview?: ClientFinancialOverview): EstimatedCosts {
   const financials = overview?.financials;
@@ -114,8 +97,8 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
   const submit = async () => {
     const cleanParts = cleanItems(parts);
     const cleanLabor = cleanItems(labor);
-    if (type !== 'EXIT' && !validDate(agreementAt)) return setError('Completează o dată validă pentru acordul clientului.');
-    if (type === 'EXIT' && !validDate(documentAt)) return setError('Completează data și ora predării.');
+    if (type !== 'EXIT' && agreementAt.trim() && !validDate(agreementAt)) return setError('Data acordului nu este validă. Șterge valoarea sau alege o dată corectă.');
+    if (type === 'EXIT' && documentAt.trim() && !validDate(documentAt)) return setError('Data predării nu este validă. Șterge valoarea sau alege o dată corectă.');
     const days = estimatedRepairDays.trim() === '' ? undefined : Number(estimatedRepairDays);
     if (type === 'INTAKE' && (days === undefined || !Number.isInteger(days) || days < 0 || days > 730)) return setError('Termenul estimat trebuie să fie un număr între 0 și 730 de zile.');
     if (type === 'INTAKE' && !/^[A-Z]{3}$/.test(estimatedCosts.currencyCode)) return setError('Moneda trebuie să fie un cod din 3 litere, de exemplu RON.');
@@ -156,7 +139,7 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
           <View style={[styles.autoNotice, { backgroundColor: colors.primarySoft, borderColor: `${colors.primary}30` }]}><Ionicons name="sparkles-outline" size={20} color={colors.primary} /><AppText variant="caption" style={styles.noticeCopy}>Firma, clientul, echipamentul, numărul fișei, valorile financiare și semnătura se preiau automat.</AppText></View>
 
           {type === 'INTAKE' ? <View style={styles.section}>
-            <DateTimeField label="Data acordului pentru costul estimativ" value={agreementAt} onChange={setAgreementAt} showNow />
+            <DateTimeField label="Data acordului pentru costul estimativ" value={agreementAt} onChange={setAgreementAt} allowClear showNow />
             <Input label="Termen estimat (zile lucrătoare)" value={estimatedRepairDays} keyboardType="number-pad" inputMode="numeric" onChangeText={(value) => setEstimatedRepairDays(value.replace(/\D/g, '').slice(0, 3))} placeholder="ex. 3" />
             <View style={styles.agreementChoice}>
               <AppText variant="label">Acord pentru costul estimativ</AppText>
@@ -188,7 +171,7 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
           </View> : null}
 
           {type === 'FINAL_ESTIMATE' ? <View style={styles.section}>
-            <DateTimeField label="Data acordului final" value={agreementAt} onChange={setAgreementAt} showNow />
+            <DateTimeField label="Data acordului final" value={agreementAt} onChange={setAgreementAt} allowClear showNow />
             <View style={styles.agreementChoice}>
               <AppText variant="label">Acordul clientului</AppText>
               <AppText variant="caption" muted>Textul și bifa din deviz se completează automat.</AppText>
@@ -215,7 +198,7 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
               <Segment label="Reparat" icon="checkmark-circle-outline" selected={productState === 'REPAIRED'} onPress={() => setProductState('REPAIRED')} />
               <Segment label="Stare inițială" icon="return-down-back-outline" selected={productState === 'INITIAL'} onPress={() => setProductState('INITIAL')} />
             </View>
-            <DateTimeField label="Data și ora predării" value={documentAt} onChange={setDocumentAt} showNow />
+            <DateTimeField label="Data și ora predării" value={documentAt} onChange={setDocumentAt} allowClear showNow />
           </View> : null}
 
           {error ? <View accessibilityRole="alert" style={[styles.error, { backgroundColor: `${palette.danger}12`, borderColor: `${palette.danger}35` }]}><Ionicons name="alert-circle-outline" size={19} color={palette.danger} /><AppText variant="caption" style={[styles.noticeCopy, { color: palette.danger }]}>{error}</AppText></View> : null}

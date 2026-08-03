@@ -78,7 +78,7 @@ export function DateTimeField({ label, value, onChange, allowClear = false, show
           onBlur: () => setWebFocused(false),
           style: {
             ...webInputStyle,
-            right: (showNow ? 66 : 0) + (allowClear && selectedDate ? 40 : 0),
+            right: (showNow ? 66 : 0) + (allowClear && selectedDate ? 78 : 0),
             width: 'auto',
           },
         })}
@@ -180,7 +180,8 @@ function ClearButton({ label, onPress }: { label: string; onPress: () => void })
     }}
     style={styles.clearButton}
   >
-    <Ionicons name="close-circle" size={22} color={colors.textMuted} />
+    <Ionicons name="close-circle" size={18} color={colors.textMuted} />
+    <AppText variant="caption" style={{ color: colors.textMuted, fontWeight: '800' }}>Șterge</AppText>
   </Pressable>;
 }
 
@@ -256,7 +257,7 @@ const styles = StyleSheet.create({
   valueCopy: { minWidth: 0, flex: 1, paddingVertical: spacing.md },
   fieldActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, zIndex: 2 },
   nowButton: { minWidth: 58, height: 32, paddingHorizontal: spacing.sm, borderRadius: radius.pill, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3 },
-  clearButton: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
+  clearButton: { minWidth: 72, height: 32, paddingHorizontal: spacing.xs, flexDirection: 'row', gap: 3, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
   modalRoot: { flex: 1, justifyContent: 'flex-end', padding: spacing.lg },
   pickerPanel: { borderWidth: 1, borderRadius: radius.xl, padding: spacing.md, paddingBottom: spacing.xxl },
   pickerHeader: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
