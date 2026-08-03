@@ -1,5 +1,6 @@
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
+import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { Ionicons } from '@expo/vector-icons';
@@ -63,7 +64,7 @@ export function ScanResultActionsModal({
   };
 
   return <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={close}>
-    <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
+    <ModalSafeBottom style={[styles.overlay, { backgroundColor: colors.overlay }]}>
       <Pressable accessibilityRole="button" accessibilityLabel="Închide acțiunile scanării" style={StyleSheet.absoluteFill} onPress={close} />
       <View style={[styles.sheet, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
         <View style={[styles.handle, { backgroundColor: colors.border }]} />
@@ -100,7 +101,7 @@ export function ScanResultActionsModal({
           <Button variant="ghost" label="Scanează alt cod" icon="scan-outline" onPress={close} />
         </>}
       </View>
-    </View>
+    </ModalSafeBottom>
   </Modal>;
 }
 

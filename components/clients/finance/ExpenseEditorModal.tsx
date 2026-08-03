@@ -2,6 +2,7 @@ import { FinanceNumberField } from '@/components/clients/finance/FinanceNumberFi
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { ClientFinanceExpense } from '@/utils/client-finance';
@@ -50,7 +51,8 @@ export function ExpenseEditorModal({ visible, currencyCode, expense, onSubmit, o
   };
 
   return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-    <KeyboardAvoidingView style={[styles.overlay, { backgroundColor: colors.overlay }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <ModalSafeBottom style={{ backgroundColor: colors.overlay }}>
+    <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
       <View style={[styles.modal, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <View style={styles.header}>
@@ -67,6 +69,7 @@ export function ExpenseEditorModal({ visible, currencyCode, expense, onSubmit, o
         </View>
       </View>
     </KeyboardAvoidingView>
+    </ModalSafeBottom>
   </Modal>;
 }
 

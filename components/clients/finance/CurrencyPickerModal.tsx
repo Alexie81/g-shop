@@ -1,5 +1,6 @@
 import { AppText } from '@/components/ui/AppText';
 import { Input } from '@/components/ui/Input';
+import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { DEFAULT_CURRENCY_CODE, findCurrency, ISO_CURRENCIES, IsoCurrency } from '@/constants/currencies';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { palette, radius, spacing } from '@/theme/tokens';
@@ -53,7 +54,7 @@ export function CurrencyPickerModal({ visible, value, onSelect, onClose }: Curre
   };
 
   return <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-    <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
+    <ModalSafeBottom style={[styles.overlay, { backgroundColor: colors.overlay }]}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
       <View style={[styles.sheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <View style={[styles.handle, { backgroundColor: colors.border }]} />
@@ -74,7 +75,7 @@ export function CurrencyPickerModal({ visible, value, onSelect, onClose }: Curre
           ListEmptyComponent={<View style={styles.empty}><Ionicons name="search-outline" size={32} color={palette.warning} /><AppText variant="heading">Nicio monedă găsită</AppText><AppText muted>Încearcă un alt cod sau o altă denumire.</AppText></View>}
         />
       </View>
-    </View>
+    </ModalSafeBottom>
   </Modal>;
 }
 

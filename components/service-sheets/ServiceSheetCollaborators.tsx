@@ -3,6 +3,7 @@ import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
+import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { clientRepository, collaboratorRepository } from '@/repositories/api-repositories';
@@ -166,7 +167,8 @@ export function ServiceSheetCollaborators({ propertyId, clientId, overview, hasS
     />}
 
     <Modal visible={editorOpen} transparent animationType="slide" statusBarTranslucent onRequestClose={() => !saving && setEditorOpen(false)}>
-      <KeyboardAvoidingView style={[styles.overlay, { backgroundColor: colors.overlay }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <ModalSafeBottom style={{ backgroundColor: colors.overlay }}>
+      <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Pressable accessibilityLabel="Închide editorul" style={StyleSheet.absoluteFill} onPress={() => !saving && setEditorOpen(false)} />
         <Card style={[styles.sheet, { borderColor: colors.border }]} elevated>
           <View style={styles.handleWrap}><View style={[styles.handle, { backgroundColor: colors.border }]} /></View>
@@ -207,6 +209,7 @@ export function ServiceSheetCollaborators({ propertyId, clientId, overview, hasS
           <Button label="Salvează colaboratorii" icon="checkmark-circle-outline" loading={saving} disabled={loading} onPress={() => void save()} />
         </Card>
       </KeyboardAvoidingView>
+      </ModalSafeBottom>
     </Modal>
   </>;
 }

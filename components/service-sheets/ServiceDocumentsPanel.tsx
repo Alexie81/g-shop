@@ -1,4 +1,5 @@
 import { ServiceDocumentEditorModal } from '@/components/service-sheets/ServiceDocumentEditorModal';
+import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -184,7 +185,7 @@ export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style }
     />
 
     <Modal visible={deleteTarget !== null} transparent animationType="fade" statusBarTranslucent onRequestClose={() => { if (!deleting) setDeleteTarget(null); }}>
-      <View style={[styles.deleteOverlay, { backgroundColor: colors.overlay }]}>
+      <ModalSafeBottom style={[styles.deleteOverlay, { backgroundColor: colors.overlay }]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Închide confirmarea" disabled={deleting} style={StyleSheet.absoluteFill} onPress={() => setDeleteTarget(null)} />
         {deleteTarget ? <View style={[styles.deleteCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
           <View style={[styles.deleteIcon, { backgroundColor: `${palette.danger}16` }]}><Ionicons name="trash-outline" size={28} color={palette.danger} /></View>
@@ -195,7 +196,7 @@ export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style }
             <Button variant="danger" label="Șterge documentul" icon="trash-outline" loading={deleting} onPress={() => void removeDocument()} style={styles.deleteButton} />
           </View>
         </View> : null}
-      </View>
+      </ModalSafeBottom>
     </Modal>
   </>;
 }

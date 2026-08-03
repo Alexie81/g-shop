@@ -1,4 +1,5 @@
 import { AppText } from '@/components/ui/AppText';
+import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { Button } from '@/components/ui/Button';
 import { LoadingExperience } from '@/components/ui/LoadingExperience';
 import { Card } from '@/components/ui/Card';
@@ -98,7 +99,7 @@ export function CollaboratorFinanceSheet({ visible, propertyId, collaboratorId, 
   const groups = collaboratorId ? data?.collaborators.filter((item) => item.collaboratorId === collaboratorId) ?? [] : data?.collaborators ?? [];
   const summary = collaboratorId ? groups.reduce<CollaboratorFinanceSummary>((result, group) => ({ paid: result.paid + group.paid, due: result.due + group.due, total: result.total + group.total, collaborators: [...result.collaborators, group] }), { paid: 0, due: 0, total: 0, collaborators: [] }) : data ?? { paid: 0, due: 0, total: 0, collaborators: [] };
   return <Modal visible={visible} transparent animationType="fade" onRequestClose={closeByDrag} statusBarTranslucent>
-    <View style={styles.overlay}>
+    <ModalSafeBottom style={styles.overlay}>
       <Pressable accessibilityRole="button" accessibilityLabel="Închide panoul" style={[styles.backdrop, { backgroundColor: colors.overlay }]} onPress={closeByDrag} />
       <Animated.View style={[styles.sheet, { height: sheetHeight, backgroundColor: colors.background, borderColor: colors.border }]}>
       <View style={styles.sheetBody}>
@@ -146,7 +147,7 @@ export function CollaboratorFinanceSheet({ visible, propertyId, collaboratorId, 
         </ScrollView>
       </View>
       </Animated.View>
-    </View>
+    </ModalSafeBottom>
   </Modal>;
 }
 

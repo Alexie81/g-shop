@@ -3,6 +3,7 @@ import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { DateTimeField } from '@/components/ui/DateTimeField';
 import { Input } from '@/components/ui/Input';
+import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { ClientFinancialOverview, EstimatedCosts, GenerateServiceDocumentInput, ServiceDocument, ServiceDocumentItem, ServiceDocumentType, ServiceSheet } from '@/types';
@@ -142,7 +143,8 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
   };
 
   return <Modal visible={visible} transparent animationType="slide" statusBarTranslucent onRequestClose={close}>
-    <KeyboardAvoidingView style={[styles.overlay, { backgroundColor: colors.overlay }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <ModalSafeBottom style={{ backgroundColor: colors.overlay }}>
+    <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <Pressable accessibilityRole="button" accessibilityLabel="Închide editorul documentului" style={StyleSheet.absoluteFill} onPress={close} />
       <View style={[styles.sheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <View style={styles.handleWrap}><View style={[styles.handle, { backgroundColor: colors.border }]} /></View>
@@ -242,6 +244,7 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
         </View>
       </View>
     </KeyboardAvoidingView>
+    </ModalSafeBottom>
   </Modal>;
 }
 

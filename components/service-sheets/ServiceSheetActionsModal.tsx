@@ -1,6 +1,7 @@
 import { AppText } from '@/components/ui/AppText';
 import { LoadingGlyph } from '@/components/ui/LoadingExperience';
 import { Button } from '@/components/ui/Button';
+import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { ServiceSheet } from '@/types';
@@ -81,7 +82,7 @@ export function ServiceSheetActionsModal({ visible, sheet, onClose, onView, onEd
   };
 
   return <Modal transparent visible={visible} animationType="fade" statusBarTranslucent onRequestClose={confirmingDelete ? cancelDelete : close}>
-    <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
+    <ModalSafeBottom style={[styles.overlay, { backgroundColor: colors.overlay }]}>
       <Pressable accessibilityRole="button" accessibilityLabel="Închide meniul fișei" style={StyleSheet.absoluteFill} onPress={confirmingDelete ? cancelDelete : close} />
       <Animated.View style={[styles.sheet, { backgroundColor: colors.surfaceElevated, borderColor: colors.border, transform: [{ translateY }] }]}>
         {confirmingDelete ? <>
@@ -125,7 +126,7 @@ export function ServiceSheetActionsModal({ visible, sheet, onClose, onView, onEd
           </View>
         </>}
       </Animated.View>
-    </View>
+    </ModalSafeBottom>
   </Modal>;
 }
 

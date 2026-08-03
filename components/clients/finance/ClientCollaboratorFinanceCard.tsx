@@ -1,6 +1,7 @@
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { ClientFinancialCollaborator } from '@/types';
@@ -101,7 +102,7 @@ export function ClientCollaboratorFinanceCard({
     </Card>
 
     <Modal visible={removeOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setRemoveOpen(false)}>
-      <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
+      <ModalSafeBottom style={[styles.overlay, { backgroundColor: colors.overlay }]}>
         <Pressable accessibilityLabel="Închide confirmarea" style={StyleSheet.absoluteFill} onPress={() => setRemoveOpen(false)} />
         <Card style={styles.modal} elevated>
           <View style={[styles.modalIcon, { backgroundColor: `${palette.danger}14` }]}><Ionicons name="person-remove-outline" size={30} color={palette.danger} /></View>
@@ -109,7 +110,7 @@ export function ClientCollaboratorFinanceCard({
           {collaborator?.status === 'PAID' ? <View style={[styles.notice, { backgroundColor: `${palette.warning}14` }]}><Ionicons name="alert-circle-outline" size={19} color={palette.warning} /><AppText variant="caption" style={styles.noticeCopy}>Un comision achitat trebuie marcat mai întâi Neachitat pentru a putea elimina atribuirea.</AppText></View> : null}
           <View style={styles.modalActions}><Button variant="outline" label="Păstrează" disabled={busy === 'remove'} onPress={() => setRemoveOpen(false)} style={styles.modalButton} /><Button variant="danger" icon="person-remove-outline" label="Elimină atribuirea" loading={busy === 'remove'} onPress={() => void remove()} style={styles.modalButton} /></View>
         </Card>
-      </View>
+      </ModalSafeBottom>
     </Modal>
   </>;
 }

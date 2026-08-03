@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ClientFinanceSection, type ExpenseInput } from '@/components/clients/finance';
 import { Input } from '@/components/ui/Input';
+import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -493,7 +494,7 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
       </Card>
 
       <Modal visible={collaboratorPickerOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setCollaboratorPickerOpen(false)}>
-        <View style={[styles.pickerOverlay, { backgroundColor: colors.overlay }]}>
+        <ModalSafeBottom style={[styles.pickerOverlay, { backgroundColor: colors.overlay }]}>
           <Pressable accessibilityLabel="Închide selectorul" style={StyleSheet.absoluteFill} onPress={() => setCollaboratorPickerOpen(false)} />
           <View style={[styles.pickerModal, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.pickerHeader}><View style={styles.pickerCopy}><AppText variant="title">Alege colaboratorii</AppText><AppText variant="caption" muted>Selectează oricâți colaboratori sunt necesari.</AppText></View><Pressable accessibilityRole="button" accessibilityLabel="Închide" onPress={() => setCollaboratorPickerOpen(false)} style={[styles.closeButton, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={22} color={colors.text} /></Pressable></View>
@@ -507,7 +508,7 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
             </ScrollView>
             <Button label={`Confirmă selecția (${assignments.length})`} icon="checkmark-circle-outline" onPress={() => setCollaboratorPickerOpen(false)} />
           </View>
-        </View>
+        </ModalSafeBottom>
       </Modal>
 
       <Card style={styles.section}>

@@ -1,4 +1,5 @@
 import { AppText } from '@/components/ui/AppText';
+import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { Button } from '@/components/ui/Button';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -72,7 +73,7 @@ export function WhatsAppQuickMessagesModal({ visible, client, propertyName, mess
   };
 
   return <Modal visible={visible} transparent animationType="slide" statusBarTranslucent onRequestClose={onClose}>
-    <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
+    <ModalSafeBottom style={[styles.overlay, { backgroundColor: colors.overlay }]}>
       <Pressable accessibilityLabel="Închide mesajele WhatsApp" style={StyleSheet.absoluteFill} onPress={onClose} />
       <Animated.View style={[styles.sheet, mobile && styles.sheetMobile, { backgroundColor: colors.surface, borderColor: colors.border, transform: [{ translateY }] }]}>
         <View {...panResponder.panHandlers} accessibilityRole="adjustable" accessibilityLabel="Trage în jos pentru a închide" style={styles.draggableHeader}>
@@ -104,7 +105,7 @@ export function WhatsAppQuickMessagesModal({ visible, client, propertyName, mess
 
         <Button label="Deschide WhatsApp" icon="logo-whatsapp" onPress={() => void openWhatsApp()} style={styles.sendButton} />
       </Animated.View>
-    </View>
+    </ModalSafeBottom>
   </Modal>;
 }
 
