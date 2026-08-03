@@ -808,6 +808,30 @@ function require_service_document_write(bool $existing = false): array {
     return$user;
 }
 function stream_service_document_row(array $row): void {
+    try {
+        $snapshot=json_decode((string)($row['snapshot_json']??''),true);
+        if(is_array($snapshot)&&!empty($row['service_sheet_id'])){
+            $sheet=get_sheet((string)$row['service_sheet_id']);
+            $company=company_for_service_sheet($sheet);
+            $signaturePath=service_document_signature_path((string)$row['service_sheet_id']);
+            require_once __DIR__.'/src/service_document_pdf.php';
+            $rendered=generate_service_document_pdf((string)$row['type'],[
+                'id'=>$row['id'],
+                'number'=>$row['number'],
+                'documentAt'=>iso_date($row['document_at']??null),
+                'agreementAt'=>iso_date($row['agreement_at']??null),
+            ],$snapshot,$signaturePath,$company['stampPath']??null);
+            if(($rendered['filePath']??null)!==($row['file_path']??null)||($rendered['sha256']??null)!==($row['file_sha256']??null)){
+                db()->prepare('UPDATE service_documents SET signature_path=?,file_path=?,file_sha256=?,generated_at=?,updated_at=? WHERE id=?')->execute([
+                    $signaturePath,$rendered['filePath'],$rendered['sha256'],service_document_db_date($rendered['generatedAt']??null,now_utc()),now_utc(),uuid_bin((string)$row['id'])
+                ]);
+                remove_obsolete_service_document_file($row['file_path']??null,$rendered['filePath']);
+                $row['signature_path']=$signaturePath;
+                $row['file_path']=$rendered['filePath'];
+                $row['file_sha256']=$rendered['sha256'];
+            }
+        }
+    }catch(Throwable $error){error_log('Service document lazy refresh failed: '.$error->getMessage());}
     $path=service_document_absolute_path($row['file_path']??null);if($path===null)fail('Documentul nu este disponibil.',404);
     $definition=service_document_definitions()[$row['type']]??['slug'=>'document'];$safeNumber=preg_replace('/[^A-Za-z0-9_-]+/','-',(string)($row['number']??''))?:$definition['slug'];
     header('Content-Type: application/pdf');header('Content-Disposition: inline; filename="'.strtolower($safeNumber).'.pdf"');header('Content-Length: '.filesize($path));header('Cache-Control: private, no-store, no-cache, must-revalidate, max-age=0');header('Pragma: no-cache');header('Expires: 0');header('X-Content-Type-Options: nosniff');readfile($path);exit;
