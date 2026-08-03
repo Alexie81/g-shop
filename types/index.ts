@@ -135,6 +135,8 @@ export interface Client extends BaseEntity {
   county?: string;
   postalCode?: string;
   notes?: string;
+  signatureUrl?: string;
+  signedAt?: ISODate;
   status: 'ACTIVE' | 'INACTIVE' | 'NEW' | 'REVIEW_REQUIRED' | 'FINALIZED';
   collaboratorId?: UUID;
   commissionType?: CommissionType;

@@ -153,6 +153,8 @@ CREATE TABLE IF NOT EXISTS clients (
   county VARCHAR(80) NULL,
   postal_code VARCHAR(12) NULL,
   notes TEXT NULL,
+  signature_path VARCHAR(255) NULL,
+  signed_at DATETIME NULL,
   status ENUM('ACTIVE','INACTIVE','NEW','REVIEW_REQUIRED','FINALIZED') NOT NULL DEFAULT 'NEW',
   collaborator_id BINARY(16) NULL,
   commission_type ENUM('PERCENT_NET','PERCENT_TOTAL','FIXED') NULL,

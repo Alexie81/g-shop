@@ -6,6 +6,7 @@ import { ClientCollaboratorFinanceCard } from '@/components/clients/finance/Clie
 import { ClientFinanceOverviewCard, ClientFinanceSection } from '@/components/clients/finance';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { ServiceDocumentsPanel } from '@/components/service-sheets/ServiceDocumentsPanel';
+import { QuickSignatureModal } from '@/components/service-sheets/ScanServiceSheetModal';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -27,9 +28,9 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Linking, Modal, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Image, Linking, Modal, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
-type Tab = 'Detalii' | 'Finanțe' | 'QR' | 'Istoric';
+type Tab = 'Detalii' | 'Finanțe' | 'Semnătură' | 'QR' | 'Istoric';
 
 export default function ClientDetailsScreen() {
   const { clientId } = useLocalSearchParams<{ clientId: string }>();
@@ -39,16 +40,20 @@ export default function ClientDetailsScreen() {
   const { colors } = useAppTheme(); const { showToast } = useToast(); const [tab, setTab] = useState<Tab>('Detalii');
   const [financeSaving, setFinanceSaving] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
+  const [signatureOpen, setSignatureOpen] = useState(false);
+  const [signatureSaving, setSignatureSaving] = useState(false);
   const [whatsAppOpen, setWhatsAppOpen] = useState(false);
   const isAdmin = user?.role === 'ADMIN';
   const compactLayout = width <= 390;
   const canViewFinancials = hasPermission('financials.view');
   const canEditClients = hasPermission('clients.update');
+  const canSignClient = hasPermission('service_sheets.sign');
   const canManageCollaborators = hasPermission('collaborators.manage');
   const canEditFinancials = canViewFinancials && hasPermission('clients.update');
   const tabs: Tab[] = [
     'Detalii',
     ...(canViewFinancials ? ['Finanțe' as const] : []),
+    'Semnătură',
     'QR',
     ...(isAdmin ? ['Istoric' as const] : []),
   ];
@@ -122,6 +127,24 @@ export default function ClientDetailsScreen() {
       setStatusSaving(false);
     }
   };
+  const saveClientSignature = async (signature: string) => {
+    if (!canSignClient || signatureSaving) return;
+    setSignatureSaving(true);
+    try {
+      const updated = await clientRepository.saveSignature(client.id, signature);
+      state.setData((current) => current ? {
+        ...current,
+        client: updated,
+        sheets: current.sheets.map((item) => ({ ...item, signedAt: updated.signedAt, signatureUrl: updated.signatureUrl })),
+      } : current);
+      setSignatureOpen(false);
+      showToast('Semnătura clientului a fost salvată și va fi folosită automat în documente.', 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Semnătura clientului nu a putut fi salvată.', 'error');
+    } finally {
+      setSignatureSaving(false);
+    }
+  };
   const setCollaboratorPaid = async (collaboratorId: string, paid: boolean) => {
     if (!canManageCollaborators) return;
     try {
@@ -170,7 +193,7 @@ export default function ClientDetailsScreen() {
       const selected = tab === item;
       return <Pressable key={item} accessibilityRole="tab" accessibilityLabel={`Fila ${item}`} accessibilityState={{ selected }} onPress={() => selectTab(item)} style={({ pressed }) => [styles.tab, selected && { backgroundColor: colors.primarySoft }, pressed && styles.tabPressed]}><AppText variant="caption" numberOfLines={1} style={{ color: selected ? colors.primary : colors.textMuted, fontWeight: '800' }}>{item}</AppText></Pressable>;
     })}</View>
-    {tab === 'Detalii' ? <><Details client={client} financials={financials} onOpenFinancials={canViewFinancials ? () => selectTab('Finanțe') : undefined} />{serviceSheet ? <ServiceDocumentsPanel sheet={serviceSheet} /> : null}{canEditClients ? <ClientLifecycleAction finalized={client.status === 'FINALIZED'} loading={statusSaving} onConfirm={changeClientStatus} /> : null}</> : tab === 'QR' ? <ClientQRPanel client={client} /> : tab === 'Finanțe' && financials ? <>
+    {tab === 'Detalii' ? <><Details client={client} financials={financials} onOpenFinancials={canViewFinancials ? () => selectTab('Finanțe') : undefined} />{serviceSheet ? <ServiceDocumentsPanel sheet={serviceSheet} /> : null}{canEditClients ? <ClientLifecycleAction finalized={client.status === 'FINALIZED'} loading={statusSaving} onConfirm={changeClientStatus} /> : null}</> : tab === 'Semnătură' ? <ClientSignaturePanel client={client} canSign={canSignClient} onSign={() => setSignatureOpen(true)} /> : tab === 'QR' ? <ClientQRPanel client={client} /> : tab === 'Finanțe' && financials ? <>
       <ClientFinanceSection
       value={financials.financials}
       expenses={financials.expenses}
@@ -207,6 +230,7 @@ export default function ClientDetailsScreen() {
       />}
     </> : <History items={history} />}
     <WhatsAppQuickMessagesModal visible={whatsAppOpen} client={client} propertyName={activeProperty?.name ?? 'G-Shop'} messages={whatsAppMessages} onClose={() => setWhatsAppOpen(false)} />
+    <QuickSignatureModal visible={signatureOpen} clientName={fullName(client)} saving={signatureSaving} onClose={() => setSignatureOpen(false)} onConfirm={(signature) => void saveClientSignature(signature)} />
   </Screen>;
 }
 
@@ -246,6 +270,24 @@ function Details({ client, financials, onOpenFinancials }: { client: Client; fin
 
 function History({ items }: { items: AuditLog[] }) {
   return <ClientAuditHistory items={items} />;
+}
+
+function ClientSignaturePanel({ client, canSign, onSign }: { client: Client; canSign: boolean; onSign: () => void }) {
+  const { colors } = useAppTheme();
+  const signatureUrl = client.signatureUrl && client.signedAt && !/[?&]v=/.test(client.signatureUrl)
+    ? `${client.signatureUrl}${client.signatureUrl.includes('?') ? '&' : '?'}v=${encodeURIComponent(client.signedAt)}`
+    : client.signatureUrl;
+  return <Card style={styles.signatureCard} elevated>
+    <View style={styles.signatureHeader}>
+      <View style={[styles.signatureIcon, { backgroundColor: `${palette.purple}16` }]}><Ionicons name="pencil-outline" size={24} color={palette.purple} /></View>
+      <View style={styles.signatureCopy}><AppText variant="heading">Semnătura clientului</AppText><AppText variant="caption" muted>Se salvează acum și se preia automat când creezi mai târziu fișa de service și documentele.</AppText></View>
+    </View>
+    {signatureUrl ? <>
+      <View style={[styles.signaturePreview, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}><Image source={{ uri: signatureUrl }} resizeMode="contain" style={styles.signatureImage} /></View>
+      <View style={styles.signatureStatus}><Ionicons name="checkmark-circle" size={19} color={palette.success} /><AppText variant="caption" muted>Semnat la {formatDate(client.signedAt, true)}</AppText></View>
+    </> : <View style={[styles.signatureEmpty, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}><Ionicons name="create-outline" size={28} color={colors.textMuted} /><View style={styles.signatureCopy}><AppText variant="label">Client nesemnat</AppText><AppText variant="caption" muted>Nu este necesară existența unei fișe sau a unui PDF.</AppText></View></View>}
+    {canSign ? <Button label={signatureUrl ? 'Resemnează clientul' : 'Semnează clientul'} icon="pencil-outline" onPress={onSign} /> : <AppText variant="caption" muted>Ai nevoie de permisiunea de semnare a fișelor pentru a salva semnătura.</AppText>}
+  </Card>;
 }
 
 function ClientLifecycleAction({ finalized, loading, onConfirm }: { finalized: boolean; loading: boolean; onConfirm: () => Promise<void> | void }) {
@@ -299,6 +341,14 @@ const styles = StyleSheet.create({
   quickAction: { minWidth: 0, maxWidth: 150, minHeight: 58, flex: 1, borderWidth: 1, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 2 },
   tabs: { width: '100%', maxWidth: 600, minHeight: 52, padding: 4, borderWidth: 1, borderRadius: radius.md, flexDirection: 'row', alignItems: 'stretch', gap: 3 },
   tab: { minWidth: 0, minHeight: 44, flex: 1, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  signatureCard: { width: '100%', maxWidth: 760, gap: spacing.lg },
+  signatureHeader: { minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  signatureIcon: { width: 48, height: 48, flexShrink: 0, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  signatureCopy: { minWidth: 0, flex: 1, gap: 3 },
+  signaturePreview: { width: '100%', height: 220, borderWidth: 1, borderRadius: radius.lg, overflow: 'hidden', padding: spacing.md },
+  signatureImage: { width: '100%', height: '100%' },
+  signatureStatus: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  signatureEmpty: { minHeight: 118, borderWidth: 1, borderRadius: radius.lg, padding: spacing.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   tabPressed: { opacity: 0.68 },
   additionalCard: { gap: spacing.md },
   additionalHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

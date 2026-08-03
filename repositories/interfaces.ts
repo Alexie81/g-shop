@@ -31,6 +31,7 @@ export interface ClientRepository {
   ensureQr(id: UUID): Promise<Client>;
   markQrUsed(id: UUID): Promise<Client>;
   recordQrShare(id: UUID, method: string): Promise<void>;
+  saveSignature(id: UUID, signature: string): Promise<Client>;
   getFinancials(id: UUID): Promise<ClientFinancialOverview>;
   updateFinancials(id: UUID, input: UpdateClientFinancialsPayload): Promise<ClientFinancialOverview>;
   addExpense(id: UUID, input: CreateClientExpensePayload): Promise<ClientExpense>;

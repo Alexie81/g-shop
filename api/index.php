@@ -398,6 +398,20 @@ function ensure_service_warranty_fields(PDO $pdo): void {
     }
     $ready = true;
 }
+function ensure_client_signature_fields(PDO $pdo): void {
+    static $ready = false;
+    if ($ready) return;
+    $columns = [
+        'signature_path' => 'VARCHAR(255) NULL AFTER notes',
+        'signed_at' => 'DATETIME NULL AFTER signature_path',
+    ];
+    $lookup = $pdo->prepare("SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='clients' AND column_name=? LIMIT 1");
+    foreach ($columns as $column => $definition) {
+        $lookup->execute([$column]);
+        if (!$lookup->fetchColumn()) $pdo->exec('ALTER TABLE clients ADD COLUMN ' . $column . ' ' . $definition);
+    }
+    $ready = true;
+}
 function validated_whatsapp_message_text(mixed $value, string $label, int $minimum, int $maximum): string {
     if (!is_string($value)) fail($label . ' este obligatoriu.',422);
     $text = trim(str_replace(["\r\n","\r"],"\n",$value));
@@ -577,13 +591,17 @@ function company_details_snapshot(array $details): array {
     return $details;
 }
 function client_select(): string {
-    return 'SELECT ' . uuid_sql('c.id') . ' id,' . uuid_sql('c.property_id') . ' property_id,c.first_name,c.last_name,c.phone,c.secondary_phone,c.email,c.address,c.city,c.county,c.postal_code,c.notes,c.status,' . uuid_sql('c.collaborator_id') . ' collaborator_id,c.commission_type,c.commission_value,c.is_active,c.created_at,c.updated_at,' . uuid_sql('c.created_by') . ' created_by,' . uuid_sql('c.updated_by') . ' updated_by,(SELECT COUNT(*) FROM service_sheets ss WHERE ss.client_id=c.id AND ss.is_active=1) service_sheets_count,c.updated_at last_activity_at,' . uuid_sql('q.id') . ' qr_id,' . uuid_sql('q.token') . ' qr_token,q.status qr_status,q.generated_at qr_generated_at,q.sent_at qr_sent_at,q.opened_at qr_opened_at,q.used_at qr_used_at,q.expires_at qr_expires_at,q.invalidated_at qr_invalidated_at,' . uuid_sql('q.generated_by') . ' qr_generated_by FROM clients c LEFT JOIN client_qr q ON q.client_id=c.id AND q.is_active=1';
+    ensure_client_signature_fields(db());
+    return 'SELECT ' . uuid_sql('c.id') . ' id,' . uuid_sql('c.property_id') . ' property_id,c.first_name,c.last_name,c.phone,c.secondary_phone,c.email,c.address,c.city,c.county,c.postal_code,c.notes,c.signature_path,c.signed_at,c.status,' . uuid_sql('c.collaborator_id') . ' collaborator_id,c.commission_type,c.commission_value,c.is_active,c.created_at,c.updated_at,' . uuid_sql('c.created_by') . ' created_by,' . uuid_sql('c.updated_by') . ' updated_by,(SELECT COUNT(*) FROM service_sheets ss WHERE ss.client_id=c.id AND ss.is_active=1) service_sheets_count,c.updated_at last_activity_at,' . uuid_sql('q.id') . ' qr_id,' . uuid_sql('q.token') . ' qr_token,q.status qr_status,q.generated_at qr_generated_at,q.sent_at qr_sent_at,q.opened_at qr_opened_at,q.used_at qr_used_at,q.expires_at qr_expires_at,q.invalidated_at qr_invalidated_at,' . uuid_sql('q.generated_by') . ' qr_generated_by FROM clients c LEFT JOIN client_qr q ON q.client_id=c.id AND q.is_active=1';
 }
 function map_client(array $row): array {
     $qrId = $row['qr_id'] ?? null;
     $clientFields = $row;
     foreach (array_keys($clientFields) as $key) if (str_starts_with($key, 'qr_')) unset($clientFields[$key]);
     $client = entity_base($clientFields);
+    $signaturePath = (string)($client['signaturePath'] ?? '');
+    $client['signatureUrl'] = $signaturePath !== '' ? public_base_url() . '/' . ltrim($signaturePath, '/') . ($client['signedAt'] ? '?v=' . rawurlencode((string)$client['signedAt']) : '') : null;
+    unset($client['signaturePath']);
     $client['serviceSheetsCount'] = (int)$client['serviceSheetsCount'];
     $client['commissionValue'] = $client['commissionValue'] !== null ? (float)$client['commissionValue'] : null;
     $client['collaborators'] = client_collaborator_assignments($client['id']);
@@ -611,8 +629,11 @@ function create_client_qr(PDO $pdo, string $clientId, string $propertyId, string
 }
 function client_audit_snapshot(array $client): array {
     $hasQr = !empty($client['qr']);
+    $hasSignature = !empty($client['signatureUrl']);
     unset($client['qr']);
+    unset($client['signatureUrl']);
     $client['qrGenerated'] = $hasQr;
+    $client['signatureSaved'] = $hasSignature;
     return $client;
 }
 function user_has_permission(array $user, string $permission): bool {
@@ -739,6 +760,43 @@ function service_document_signature_path(string $sheetId): ?string {
 }
 function validate_service_document_signature(string $relativePath): void {
     require_once __DIR__.'/src/service_sheet_pdf.php';$normalized=gshop_pdf_signature_image($relativePath);if(!$normalized)fail('Imaginea semnăturii nu poate fi inclusă în documentele PDF.',422);$temporary=$normalized['path']??null;if(is_string($temporary)&&str_starts_with($temporary,sys_get_temp_dir())&&is_file($temporary))@unlink($temporary);
+}
+function client_signature_source(string $clientId): array {
+    ensure_client_signature_fields(db());
+    $stmt=db()->prepare('SELECT signature_path,signed_at FROM clients WHERE id=? LIMIT 1');
+    $stmt->execute([uuid_bin($clientId)]);
+    $row=$stmt->fetch();
+    return ['path'=>$row['signature_path']??null,'signedAt'=>$row['signed_at']??null];
+}
+function save_client_signature_data(array $client, string $data, array $user): array {
+    ensure_client_signature_fields(db());
+    if(!preg_match('#^data:image/png;base64,(.+)$#',$data,$match))fail('Formatul semnăturii nu este valid.',422);
+    $binary=base64_decode($match[1],true);
+    if($binary===false||strlen($binary)<100||strlen($binary)>1500000)fail('Semnătura este invalidă sau prea mare.',422);
+    $directory=__DIR__.'/uploads/client-signatures';
+    if(!is_dir($directory)&&!mkdir($directory,0755,true)&&!is_dir($directory))throw new RuntimeException('Directorul pentru semnături nu poate fi creat.');
+    $filename=$client['id'].'.png';$target=$directory.'/'.$filename;$temporary=tempnam($directory,'.signature-');
+    if($temporary===false)throw new RuntimeException('Semnătura nu poate fi pregătită.');
+    try{
+        if(file_put_contents($temporary,$binary,LOCK_EX)===false)throw new RuntimeException('Semnătura nu poate fi salvată.');
+        validate_service_document_signature('uploads/client-signatures/'.basename($temporary));
+        if(!@rename($temporary,$target)){
+            if(!is_file($target)||!@unlink($target)||!@rename($temporary,$target))throw new RuntimeException('Semnătura nu poate fi publicată.');
+        }
+        @chmod($target,0640);
+    }finally{if(is_file($temporary))@unlink($temporary);}
+    clearstatcache(true,$target);
+    $pathValue='uploads/client-signatures/'.$filename;$now=now_utc();$pdo=db();
+    $sheetStmt=$pdo->prepare('SELECT '.uuid_sql('id').' id FROM service_sheets WHERE client_id=? AND is_active=1');
+    $sheetStmt->execute([uuid_bin($client['id'])]);$sheetIds=array_values(array_filter(array_column($sheetStmt->fetchAll(),'id')));
+    $pdo->beginTransaction();
+    try{
+        $pdo->prepare('UPDATE clients SET signature_path=?,signed_at=?,updated_at=?,updated_by=? WHERE id=?')->execute([$pathValue,$now,$now,uuid_bin($user['id']),uuid_bin($client['id'])]);
+        $pdo->prepare('UPDATE service_sheets SET signature_path=?,signed_at=?,updated_at=?,updated_by=? WHERE client_id=? AND is_active=1')->execute([$pathValue,$now,$now,uuid_bin($user['id']),uuid_bin($client['id'])]);
+        $pdo->commit();
+    }catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}
+    foreach($sheetIds as$sheetId){regenerate_existing_service_documents((string)$sheetId,$user);gshop_queue_service_sheet_pdf((string)$sheetId);}
+    return['signedAt'=>$now,'path'=>$pathValue,'updatedSheets'=>count($sheetIds)];
 }
 function service_document_reference(string $sheetId, string $type): ?array {
     $row=service_document_existing_row($sheetId,$type);return$row?['number'=>$row['number'],'date'=>iso_date($row['document_at'])]:null;
@@ -1413,6 +1471,11 @@ try {
         $countSql='SELECT COUNT(DISTINCT c.id) FROM clients c LEFT JOIN client_qr q ON q.client_id=c.id AND q.is_active=1 WHERE '.implode(' AND ',$where);$count=db()->prepare($countSql);$count->execute($args);$total=(int)$count->fetchColumn();respond(['data'=>$data,'page'=>$page,'pageSize'=>$pageSize,'total'=>$total,'totalPages'=>(int)ceil($total/$pageSize)]);
     }
     if ($method === 'GET' && path_match('/clients/{id}', $path, $params)) { $user=require_permission('clients.view');$client=get_client($params['id']);ensure_property($client['propertyId'],$user);respond(client_for_user($client,$user)); }
+    if ($method === 'POST' && path_match('/clients/{id}/signature', $path, $params)) {
+        $user=require_permission('service_sheets.sign');$client=get_client(validated_uuid($params['id'],'Clientul'));ensure_property($client['propertyId'],$user);$result=save_client_signature_data($client,(string)(json_body()['signature']??''),$user);
+        audit_log('CLIENT_SIGNED','clients','Semnătura clientului a fost salvată pentru utilizare în documentele viitoare','Client',$client['id'],$client['propertyId'],['signedAt'=>$client['signedAt']??null],['signedAt'=>$result['signedAt'],'updatedSheets'=>$result['updatedSheets']],$user);
+        respond(client_for_user(get_client($client['id']),$user));
+    }
     if ($method === 'GET' && path_match('/clients/{id}/financials',$path,$params)) {
         $user=require_permission('financials.view');$client=get_client(validated_uuid($params['id'],'Clientul'));ensure_property($client['propertyId'],$user);respond(client_financial_bundle($client));
     }
@@ -1736,12 +1799,12 @@ try {
         $id=uuid_v4();$now=now_utc();$pdo=db();$pdo->beginTransaction();$commissionCreated=false;$financeSync=null;
         try{
             $clientLock=$pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE');$clientLock->execute([uuid_bin($clientId)]);
-            $client=get_client($clientId);$financial=client_financial_record($client);$expenses=client_expenses($clientId);$financeSummary=financial_summary($client,$financial,$expenses);$collaboratorId=!empty($client['collaboratorId'])?(string)$client['collaboratorId']:null;$commissionValue=$collaboratorId!==null?(float)$financeSummary['collaboratorCost']:null;
+            $client=get_client($clientId);$clientSignature=client_signature_source($clientId);$financial=client_financial_record($client);$expenses=client_expenses($clientId);$financeSummary=financial_summary($client,$financial,$expenses);$collaboratorId=!empty($client['collaboratorId'])?(string)$client['collaboratorId']:null;$commissionValue=$collaboratorId!==null?(float)$financeSummary['collaboratorCost']:null;
             $existingStmt=$pdo->prepare('SELECT '.uuid_sql('id').' id FROM service_sheets WHERE client_id=? AND is_active=1 ORDER BY updated_at DESC,created_at DESC LIMIT 1 FOR UPDATE');$existingStmt->execute([uuid_bin($clientId)]);$existingId=$existingStmt->fetchColumn();
             if($existingId){$pdo->rollBack();fail('Clientul are deja o fișă de service.',409,['code'=>'SERVICE_SHEET_ALREADY_EXISTS','serviceSheetId'=>$existingId]);}
             $seq=(int)$pdo->query("SELECT COUNT(*)+1 FROM service_sheets WHERE YEAR(created_at)=YEAR(UTC_TIMESTAMP())")->fetchColumn();$number='GS-'.gmdate('Y').'-'.str_pad((string)$seq,5,'0',STR_PAD_LEFT);
-            $insertColumns=['id','property_id','client_id','number','equipment','brand','model','serial_number','accessories','reported_issue','technical_assessment','work_performed','parts_used','parts_cost','labor_cost','total_cost','direct_costs','net_value','technician_id','technician_name','collaborator_id','collaborator_commission','show_company_details','company_id','company_snapshot','warranty','warranty_start_at','warranty_end_at','warranty_remediation','storage_after','handover_notes','identity_document','approve_diagnostics','approve_repair','repair_refused','product_delivered','internal_notes','received_at','estimated_at','status','is_active','created_at','updated_at','created_by','updated_by'];
-            $insertValues=[uuid_bin($id),uuid_bin($propertyId),uuid_bin($clientId),$number,trim((string)($body['equipment']??'')),$body['brand']??null,$body['model']??null,$body['serialNumber']??null,$body['accessories']??null,$body['reportedIssue'],$body['technicalAssessment']??null,$body['workPerformed']??null,$body['partsUsed']??null,$partsCost,$laborCost,$totalCost,$directCosts,$netValue,!empty($body['technicianId'])?uuid_bin((string)$body['technicianId']):uuid_bin($user['id']),$technicianName,$collaboratorId?uuid_bin($collaboratorId):null,$commissionValue,1,$activeCompanyId?uuid_bin($activeCompanyId):null,$activeCompanySnapshot?json_encode($activeCompanySnapshot,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES):null,$body['warranty']??null,service_document_optional_db_date($body['warrantyStartAt']??null),service_document_optional_db_date($body['warrantyEndAt']??null),$body['warrantyRemediation']??null,$body['storageAfter']??null,$body['handoverNotes']??null,$body['identityDocument']??null,!empty($body['approveDiagnostics'])?1:0,!empty($body['approveRepair'])?1:0,!empty($body['repairRefused'])?1:0,!empty($body['productDelivered'])?1:0,$body['internalNotes']??null,!empty($body['receivedAt'])?gmdate('Y-m-d H:i:s',strtotime((string)$body['receivedAt'])):$now,!empty($body['estimatedAt'])?gmdate('Y-m-d H:i:s',strtotime((string)$body['estimatedAt'])):null,'NEW',1,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])];
+            $insertColumns=['id','property_id','client_id','number','equipment','brand','model','serial_number','accessories','reported_issue','technical_assessment','work_performed','parts_used','parts_cost','labor_cost','total_cost','direct_costs','net_value','technician_id','technician_name','collaborator_id','collaborator_commission','show_company_details','company_id','company_snapshot','warranty','warranty_start_at','warranty_end_at','warranty_remediation','storage_after','handover_notes','identity_document','approve_diagnostics','approve_repair','repair_refused','product_delivered','internal_notes','signature_path','signed_at','received_at','estimated_at','status','is_active','created_at','updated_at','created_by','updated_by'];
+            $insertValues=[uuid_bin($id),uuid_bin($propertyId),uuid_bin($clientId),$number,trim((string)($body['equipment']??'')),$body['brand']??null,$body['model']??null,$body['serialNumber']??null,$body['accessories']??null,$body['reportedIssue'],$body['technicalAssessment']??null,$body['workPerformed']??null,$body['partsUsed']??null,$partsCost,$laborCost,$totalCost,$directCosts,$netValue,!empty($body['technicianId'])?uuid_bin((string)$body['technicianId']):uuid_bin($user['id']),$technicianName,$collaboratorId?uuid_bin($collaboratorId):null,$commissionValue,1,$activeCompanyId?uuid_bin($activeCompanyId):null,$activeCompanySnapshot?json_encode($activeCompanySnapshot,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES):null,$body['warranty']??null,service_document_optional_db_date($body['warrantyStartAt']??null),service_document_optional_db_date($body['warrantyEndAt']??null),$body['warrantyRemediation']??null,$body['storageAfter']??null,$body['handoverNotes']??null,$body['identityDocument']??null,!empty($body['approveDiagnostics'])?1:0,!empty($body['approveRepair'])?1:0,!empty($body['repairRefused'])?1:0,!empty($body['productDelivered'])?1:0,$body['internalNotes']??null,$clientSignature['path']??null,$clientSignature['signedAt']??null,!empty($body['receivedAt'])?gmdate('Y-m-d H:i:s',strtotime((string)$body['receivedAt'])):$now,!empty($body['estimatedAt'])?gmdate('Y-m-d H:i:s',strtotime((string)$body['estimatedAt'])):null,'NEW',1,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])];
             $stmt=$pdo->prepare('INSERT INTO service_sheets ('.implode(',',$insertColumns).') VALUES ('.implode(',',array_fill(0,count($insertColumns),'?')).')');
             $stmt->execute($insertValues);
             $pdo->prepare("INSERT INTO service_sheet_status_history (id,service_sheet_id,old_status,new_status,changed_by,created_at) VALUES (?,?,NULL,'NEW',?,?)")->execute([uuid_bin(uuid_v4()),uuid_bin($id),uuid_bin($user['id']),$now]);
@@ -1799,15 +1862,14 @@ try {
         $safeNumber=preg_replace('/[^A-Za-z0-9_-]+/','-',(string)$before['number'])?:'fisa-service';$fileStem=strtolower($safeNumber);$pdfDirectory=__DIR__.'/uploads/service-sheets';
         $files=array_merge([$pdfDirectory.'/'.$fileStem.'.pdf',$pdfDirectory.'/'.$fileStem.'.pdf.sha256'],glob($pdfDirectory.'/'.$fileStem.'-*.pdf')?:[]);
         foreach($documentPaths as$relativePath){$candidate=service_document_absolute_path((string)$relativePath);if($candidate!==null){$files[]=$candidate;$files[]=$candidate.'.sha256';}}
-        if($signaturePath){$candidate=realpath(__DIR__.'/'.ltrim((string)$signaturePath,'/\\'));$apiRoot=realpath(__DIR__);if($candidate!==false&&$apiRoot!==false&&str_starts_with($candidate,$apiRoot))$files[]=$candidate;}
+        if($signaturePath&&!str_starts_with(str_replace('\\','/',(string)$signaturePath),'uploads/client-signatures/')){$candidate=realpath(__DIR__.'/'.ltrim((string)$signaturePath,'/\\'));$apiRoot=realpath(__DIR__);if($candidate!==false&&$apiRoot!==false&&str_starts_with($candidate,$apiRoot))$files[]=$candidate;}
         $removedFiles=0;foreach(array_unique($files)as$file)if(is_file($file)&&@unlink($file))$removedFiles++;
         audit_log('SERVICE_SHEET_DELETED','service_sheets','Fișă ștearsă definitiv: '.$before['number'],'ServiceSheet',$before['id'],$before['propertyId'],$before,['deleted'=>true,'removedFiles'=>$removedFiles],$user);
         respond(['deleted'=>true,'id'=>$before['id']]);
     }
     if ($method==='POST'&&path_match('/service-sheets/{id}/signature',$path,$params)) {
-        $user=require_permission('service_sheets.sign');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);$body=json_body();$data=(string)($body['signature']??'');if(!preg_match('#^data:image/png;base64,(.+)$#',$data,$match))fail('Formatul semnăturii nu este valid.',422);$binary=base64_decode($match[1],true);if($binary===false||strlen($binary)<100||strlen($binary)>1500000)fail('Semnătura este invalidă sau prea mare.',422);
-        $directory=__DIR__.'/uploads/signatures';if(!is_dir($directory)&&!mkdir($directory,0755,true)&&!is_dir($directory))throw new RuntimeException('Directorul pentru semnături nu poate fi creat.');$filename=$sheet['id'].'.png';$target=$directory.'/'.$filename;$temporary=tempnam($directory,'.signature-');if($temporary===false)throw new RuntimeException('Semnătura nu poate fi pregătită.');try{if(file_put_contents($temporary,$binary,LOCK_EX)===false)throw new RuntimeException('Semnătura nu poate fi salvată.');validate_service_document_signature('uploads/signatures/'.basename($temporary));if(!@rename($temporary,$target)){if(!is_file($target)||!@unlink($target)||!@rename($temporary,$target))throw new RuntimeException('Semnătura nu poate fi publicată.');}@chmod($target,0640);}finally{if(is_file($temporary))@unlink($temporary);}clearstatcache(true,$target);$pathValue='uploads/signatures/'.$filename;$now=now_utc();db()->prepare('UPDATE service_sheets SET signature_path=?,signed_at=?,updated_at=?,updated_by=? WHERE id=?')->execute([$pathValue,$now,$now,uuid_bin($user['id']),uuid_bin($sheet['id'])]);
-        regenerate_existing_service_documents($sheet['id'],$user);audit_log('SERVICE_SHEET_SIGNED','service_sheets','Semnătură client salvată și reutilizată în documentele reparației '.$sheet['number'],'ServiceSheet',$sheet['id'],$sheet['propertyId'],null,['signedAt'=>$now,'documentsRegenerated'=>true],$user);gshop_queue_service_sheet_pdf($sheet['id']);respond(get_sheet($sheet['id']));
+        $user=require_permission('service_sheets.sign');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);$client=get_client((string)$sheet['clientId']);$result=save_client_signature_data($client,(string)(json_body()['signature']??''),$user);
+        audit_log('SERVICE_SHEET_SIGNED','service_sheets','Semnătură client salvată și reutilizată în documentele reparației '.$sheet['number'],'ServiceSheet',$sheet['id'],$sheet['propertyId'],null,['signedAt'=>$result['signedAt'],'documentsRegenerated'=>true,'savedAtClient'=>true],$user);respond(get_sheet($sheet['id']));
     }
     if ($method==='POST'&&path_match('/service-sheets/{id}/pdf',$path,$params)) {
         current_user();$sheet=get_sheet($params['id']);$existingDocument=service_document_record($sheet['id'],'INTAKE',false);$user=require_service_document_write($existingDocument!==null);ensure_property($sheet['propertyId'],$user);

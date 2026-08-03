@@ -416,7 +416,7 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
             {canSign ? <View style={[styles.signaturePrompt, { borderColor: pendingSignature || signatureSaved ? palette.success : colors.border, backgroundColor: pendingSignature || signatureSaved ? `${palette.success}10` : colors.surfaceMuted }]}>
               <View style={[styles.signaturePromptIcon, { backgroundColor: pendingSignature || signatureSaved ? `${palette.success}18` : `${palette.purple}16` }]}><Ionicons name={pendingSignature || signatureSaved ? 'checkmark-circle-outline' : 'pencil-outline'} size={24} color={pendingSignature || signatureSaved ? palette.success : palette.purple} /></View>
               <View style={styles.signaturePromptCopy}><AppText variant="label">{signatureSaved ? 'Semnătura a fost actualizată' : pendingSignature ? 'Semnătura este pregătită' : existingSheet?.signatureUrl ? 'Fișa are deja o semnătură' : 'Semnătura clientului'}</AppText><AppText variant="caption" muted>{signatureSaved ? 'Este salvată online și a actualizat toate documentele deja generate.' : pendingSignature ? 'Va fi salvată împreună cu fișa de intrare.' : 'Deschide cadrul dedicat pentru ca persoana să poată semna fără conflict cu scrollul.'}</AppText></View>
-              <Button compact label={pendingSignature || signatureSaved || existingSheet?.signatureUrl ? 'Resemnează' : 'Semnează clientul'} icon="pencil-outline" disabled={signatureSaving} onPress={() => setSignatureOpen(true)} style={styles.signaturePromptButton} />
+              <Button compact label="Semnează clientul" icon="pencil-outline" disabled={signatureSaving} onPress={() => setSignatureOpen(true)} style={styles.signaturePromptButton} />
             </View> : null}
 
             <Button
@@ -443,7 +443,7 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
   </>;
 }
 
-function QuickSignatureModal({ visible, clientName, saving, onClose, onConfirm }: { visible: boolean; clientName: string; saving: boolean; onClose: () => void; onConfirm: (signature: string) => void }) {
+export function QuickSignatureModal({ visible, clientName, saving, onClose, onConfirm }: { visible: boolean; clientName: string; saving: boolean; onClose: () => void; onConfirm: (signature: string) => void }) {
   const { colors } = useAppTheme();
   const signatureRef = useRef<SignatureViewRef>(null);
   const [hasStroke, setHasStroke] = useState(false);

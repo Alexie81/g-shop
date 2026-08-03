@@ -32,6 +32,7 @@ export const clientRepository: ClientRepository = {
   ensureQr: (id) => apiRequest(`/clients/${id}/qr`, { method: 'POST' }),
   markQrUsed: (id) => apiRequest(`/clients/${id}/qr/use`, { method: 'POST' }),
   recordQrShare: (id, method) => apiRequest(`/clients/${id}/qr/share`, { method: 'POST', body: JSON.stringify({ method }) }),
+  saveSignature: (id, signature) => apiRequest(`/clients/${id}/signature`, { method: 'POST', body: JSON.stringify({ signature }) }),
   getFinancials: (id) => apiRequest(`/clients/${id}/financials`),
   updateFinancials: (id, input) => apiRequest(`/clients/${id}/financials`, { method: 'PUT', body: JSON.stringify(input) }),
   addExpense: (id, input) => apiRequest(`/clients/${id}/expenses`, { method: 'POST', body: JSON.stringify(input) }),

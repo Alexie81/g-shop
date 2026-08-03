@@ -16,10 +16,13 @@ type Props = {
   hasIntake: boolean;
   hasFinalEstimate: boolean;
   hasExit: boolean;
+  hasSignature: boolean;
+  canSign: boolean;
   onClient: () => void;
   onIntake: () => void;
   onFinalEstimate: () => void;
   onExit: () => void;
+  onSignature: () => void;
   onCancel: () => void;
 };
 
@@ -30,10 +33,13 @@ export function ScanResultActionsModal({
   hasIntake,
   hasFinalEstimate,
   hasExit,
+  hasSignature,
+  canSign,
   onClient,
   onIntake,
   onFinalEstimate,
   onExit,
+  onSignature,
   onCancel,
 }: Props) {
   const { colors } = useAppTheme();
@@ -89,6 +95,7 @@ export function ScanResultActionsModal({
             <ActionTile label="Fișă de intrare" status={hasIntake ? 'Creată' : 'De creat'} icon="enter-outline" color={palette.cyan} ready={hasIntake} onPress={onIntake} />
             <ActionTile label="Deviz final" status={hasFinalEstimate ? 'Creat' : 'De creat'} icon="receipt-outline" color={palette.purple} ready={hasFinalEstimate} onPress={chooseFinalEstimate} />
             <ActionTile label="Fișă de ieșire" status={hasExit ? 'Creată' : 'De creat'} icon="exit-outline" color={palette.success} ready={hasExit} onPress={chooseExit} />
+            {canSign ? <ActionTile label="Semnează clientul" status={hasSignature ? 'Semnat' : 'De semnat'} icon="pencil-outline" color={palette.purple} ready={hasSignature} onPress={onSignature} /> : null}
           </View>
           <Button variant="ghost" label="Scanează alt cod" icon="scan-outline" onPress={close} />
         </>}

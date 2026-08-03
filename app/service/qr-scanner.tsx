@@ -1,14 +1,15 @@
 import { AppHeader } from '@/components/layout/AppHeader';
 import { ScanResultActionsModal } from '@/components/service-sheets/ScanResultActionsModal';
-import { ScanServiceSheetModal } from '@/components/service-sheets/ScanServiceSheetModal';
+import { QuickSignatureModal, ScanServiceSheetModal } from '@/components/service-sheets/ScanServiceSheetModal';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Screen } from '@/components/ui/Screen';
 import { useProperty } from '@/contexts/PropertyContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
-import { serviceSheetRepository } from '@/repositories/api-repositories';
+import { clientRepository, serviceSheetRepository } from '@/repositories/api-repositories';
 import { apiRequest } from '@/services/api';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { ServiceDocument, ServiceDocumentType, ServiceSheet, UUID } from '@/types';
@@ -21,7 +22,7 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Platform, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
-type ScanTarget = { clientId: UUID; clientName: string; existingSheet: ServiceSheet | null; documents: ServiceDocument[] };
+type ScanTarget = { clientId: UUID; clientName: string; existingSheet: ServiceSheet | null; documents: ServiceDocument[]; signatureUrl?: string; signedAt?: string };
 
 export default function QRScannerScreen() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -29,6 +30,9 @@ export default function QRScannerScreen() {
   const [busy, setBusy] = useState(false);
   const [scanTarget, setScanTarget] = useState<ScanTarget | null>(null);
   const [intakeOpen, setIntakeOpen] = useState(false);
+  const [signatureOpen, setSignatureOpen] = useState(false);
+  const [signatureSaving, setSignatureSaving] = useState(false);
+  const { hasPermission } = useAuth();
   const { colors, isDark } = useAppTheme();
   const { activeProperty } = useProperty();
   const { showToast } = useToast();
@@ -44,6 +48,8 @@ export default function QRScannerScreen() {
     setBusy(false);
     setScanTarget(null);
     setIntakeOpen(false);
+    setSignatureOpen(false);
+    setSignatureSaving(false);
   }, []));
 
   useEffect(() => {
@@ -70,13 +76,12 @@ export default function QRScannerScreen() {
         method: 'POST',
         body: JSON.stringify({ data, action: 'OPEN_PROFILE', propertyId: activeProperty?.id, device: `${Platform.OS} ${Platform.Version}` }),
       });
-      const existingSheet = activeProperty?.id
-        ? await serviceSheetRepository.list(activeProperty.id).then((response) => response.data.find((sheet) => sheet.clientId === result.clientId) ?? null)
-        : null;
+      const client = await clientRepository.get(result.clientId);
+      const existingSheet = activeProperty?.id ? await serviceSheetRepository.list(activeProperty.id).then((response) => response.data.find((sheet) => sheet.clientId === result.clientId) ?? null) : null;
       const documents = existingSheet ? await serviceSheetRepository.listDocuments(existingSheet.id) : [];
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       showToast(`${result.clientName}: alege acțiunea dorită.`, 'success');
-      setScanTarget({ clientId: result.clientId, clientName: result.clientName, existingSheet, documents });
+      setScanTarget({ clientId: result.clientId, clientName: result.clientName, existingSheet, documents, signatureUrl: client.signatureUrl, signedAt: client.signedAt });
     } catch (error) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
       showToast(error instanceof Error ? error.message : 'Codul nu este valid.', 'error');
@@ -87,7 +92,7 @@ export default function QRScannerScreen() {
   };
 
   const hasScannedDocument = (type: ServiceDocumentType) => scanTarget?.documents.some((document) => document.type === type && document.available) === true;
-  const closeScanResult = () => { setIntakeOpen(false); setScanTarget(null); setScanned(false); };
+  const closeScanResult = () => { setIntakeOpen(false); setSignatureOpen(false); setScanTarget(null); setScanned(false); };
   const openClient = () => {
     if (!scanTarget) return;
     const clientId = scanTarget.clientId;
@@ -99,6 +104,20 @@ export default function QRScannerScreen() {
     if (!sheetId) return;
     setScanTarget(null);
     router.replace((`/service/service-sheets/${sheetId}?document=${type}`) as never);
+  };
+  const saveScannedClientSignature = async (signature: string) => {
+    if (!scanTarget || signatureSaving) return;
+    setSignatureSaving(true);
+    try {
+      const updated = await clientRepository.saveSignature(scanTarget.clientId, signature);
+      setScanTarget((current) => current ? { ...current, signatureUrl: updated.signatureUrl, signedAt: updated.signedAt } : current);
+      setSignatureOpen(false);
+      showToast('Semnătura clientului a fost salvată pentru documentele create acum sau mai târziu.', 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Semnătura clientului nu a putut fi salvată.', 'error');
+    } finally {
+      setSignatureSaving(false);
+    }
   };
 
   if (!permission) {
@@ -152,18 +171,22 @@ export default function QRScannerScreen() {
         </View>
       </ScrollView>
       {scanTarget ? <ScanResultActionsModal
-        visible={!intakeOpen}
+        visible={!intakeOpen && !signatureOpen}
         clientName={scanTarget.clientName}
         hasSheet={Boolean(scanTarget.existingSheet)}
         hasIntake={hasScannedDocument('INTAKE')}
         hasFinalEstimate={hasScannedDocument('FINAL_ESTIMATE')}
         hasExit={hasScannedDocument('EXIT')}
+        hasSignature={Boolean(scanTarget.signatureUrl)}
+        canSign={hasPermission('service_sheets.sign')}
         onClient={openClient}
         onIntake={() => setIntakeOpen(true)}
         onFinalEstimate={() => openDocument('FINAL_ESTIMATE')}
         onExit={() => openDocument('EXIT')}
+        onSignature={() => setSignatureOpen(true)}
         onCancel={closeScanResult}
       /> : null}
+      {scanTarget ? <QuickSignatureModal visible={signatureOpen} clientName={scanTarget.clientName} saving={signatureSaving} onClose={() => setSignatureOpen(false)} onConfirm={(signature) => void saveScannedClientSignature(signature)} /> : null}
       {scanTarget && intakeOpen && activeProperty?.id ? <ScanServiceSheetModal
         visible
         propertyId={activeProperty.id}
