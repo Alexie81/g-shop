@@ -59,6 +59,7 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
   const [documentAt, setDocumentAt] = useState('');
   const [estimatedRepairDays, setEstimatedRepairDays] = useState('');
   const [productState, setProductState] = useState<'REPAIRED' | 'INITIAL'>('REPAIRED');
+  const [technicalAssessment, setTechnicalAssessment] = useState('');
   const [defectCause, setDefectCause] = useState('');
   const [finalNotes, setFinalNotes] = useState('');
   const [parts, setParts] = useState<DraftItem[]>([]);
@@ -78,6 +79,7 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
     setDocumentAt(document?.documentAt ?? sheet.completedAt ?? now);
     setEstimatedRepairDays(estimatedDays ? String(estimatedDays) : '');
     setProductState(document?.productState ?? (sheet.workPerformed?.trim() ? 'REPAIRED' : 'INITIAL'));
+    setTechnicalAssessment(document?.technicalAssessment ?? sheet.technicalAssessment ?? '');
     setDefectCause(document?.defectCause ?? '');
     setFinalNotes(document?.finalNotes ?? '');
     setParts(toDraftItems(document?.parts?.length ? document.parts : defaultParts(sheet, financialOverview?.financials.actualPartsCost)));
@@ -109,7 +111,7 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
     const input: GenerateServiceDocumentInput = type === 'INTAKE'
       ? { agreementAt, agreementStatus, estimatedRepairDays: days, estimatedCosts }
       : type === 'FINAL_ESTIMATE'
-        ? { agreementAt, agreementStatus, defectCause: defectCause.trim() || undefined, finalNotes: finalNotes.trim() || undefined, parts: cleanParts, labor: cleanLabor }
+        ? { agreementAt, agreementStatus, technicalAssessment: technicalAssessment.trim(), defectCause: defectCause.trim() || undefined, finalNotes: finalNotes.trim() || undefined, parts: cleanParts, labor: cleanLabor }
         : { documentAt, productState };
 
     setSaving(true);
@@ -171,6 +173,10 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
           </View> : null}
 
           {type === 'FINAL_ESTIMATE' ? <View style={styles.section}>
+            <View style={styles.fieldWithHint}>
+              <Input label="Diagnosticare / constatare tehnică" value={technicalAssessment} onChangeText={setTechnicalAssessment} maxLength={2000} multiline numberOfLines={5} textAlignVertical="top" style={styles.textArea} placeholder="Descrie diagnosticul care trebuie să apară în devizul final" />
+              <AppText variant="caption" muted>Precompletată din fișa de service. Modificarea de aici este păstrată în devizul final.</AppText>
+            </View>
             <DateTimeField label="Data acordului final" value={agreementAt} onChange={setAgreementAt} allowClear showNow />
             <View style={styles.agreementChoice}>
               <AppText variant="label">Acordul clientului</AppText>
@@ -334,6 +340,7 @@ const styles = StyleSheet.create({
   estimateMetricCopy: { minWidth: 0, flex: 1, gap: 2 },
   estimateMetricLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 0.35 },
   textArea: { minHeight: 94, paddingTop: spacing.md },
+  fieldWithHint: { gap: spacing.xs },
   segments: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   segment: { minHeight: 50, minWidth: 180, flex: 1, borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   itemsSection: { borderTopWidth: 1, paddingTop: spacing.lg, gap: spacing.md },

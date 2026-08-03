@@ -378,6 +378,7 @@ export interface ServiceDocument {
   generatedAt?: ISODate;
   estimatedRepairDays?: number;
   productState?: 'REPAIRED' | 'INITIAL';
+  technicalAssessment?: string;
   defectCause?: string;
   finalNotes?: string;
   estimatedCosts?: EstimatedCosts;
@@ -392,6 +393,7 @@ export interface GenerateServiceDocumentInput {
   agreementStatus?: 'ACCEPTED' | 'REFUSED';
   estimatedRepairDays?: number;
   productState?: 'REPAIRED' | 'INITIAL';
+  technicalAssessment?: string;
   defectCause?: string;
   finalNotes?: string;
   estimatedCosts?: EstimatedCosts;
