@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#07152d">
+  <meta name="description" content="Descarcă aplicația G-Shop pentru Android.">
+  <title>Descarcă G-Shop</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" defer></script>
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <div class="page-glow page-glow-one"></div>
+  <div class="page-glow page-glow-two"></div>
+  <header class="nav shell">
+    <a class="brand" href="/download-app/" aria-label="G-Shop">
+      <img src="https://reparatiicalculatoare-bucuresti.ro/app-api/assets/logo.png" alt="Logo G-Shop">
+      <span>G-Shop</span>
+    </a>
+    <span class="secure"><i></i> Descărcare oficială</span>
+  </header>
+
+  <main class="shell">
+    <section class="hero">
+      <div class="hero-copy">
+        <span class="eyebrow">APLICAȚIA G-SHOP</span>
+        <h1>Service-ul tău,<br><span>mereu la îndemână.</span></h1>
+        <p>Gestionează clienții, fișele, documentele și registrul într-o aplicație rapidă, sigură și construită pentru munca de zi cu zi.</p>
+        <div class="hero-actions">
+          <a class="button button-primary" id="heroDownload" href="./g-shop-android.apk" download>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.6 9.5 19.4 6a.75.75 0 0 0-1.33-.68l-1.84 3.57a11.4 11.4 0 0 0-8.46 0L5.93 5.32A.75.75 0 0 0 4.6 6l1.8 3.5A6.17 6.17 0 0 0 3 15h18a6.17 6.17 0 0 0-3.4-5.5ZM8.5 13a1 1 0 1 1 0-2 1 1 0 0 1 0 2Zm7 0a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/></svg>
+            Descarcă pentru Android
+          </a>
+          <button class="button button-ghost desktop-coming" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v11H4V4Zm-2 13h20v2H2v-2Z"/></svg>
+            Versiunea pentru calculator
+          </button>
+        </div>
+        <div class="trust-row">
+          <span><b>✓</b> Fișier APK verificat</span>
+          <span><b>✓</b> Actualizări directe</span>
+          <span id="versionLabel"><b>✓</b> Versiunea 1.1.0</span>
+        </div>
+      </div>
+      <div class="hero-visual" aria-hidden="true">
+        <div class="logo-orbit">
+          <span class="orbit-ring ring-one"></span>
+          <span class="orbit-ring ring-two"></span>
+          <div class="logo-card"><img src="https://reparatiicalculatoare-bucuresti.ro/app-api/assets/logo.png" alt=""></div>
+          <div class="float-card float-top"><span>✓</span><div><strong>Document emis</strong><small>Sincronizat automat</small></div></div>
+          <div class="float-card float-bottom"><span>!</span><div><strong>Registru complet</strong><small>Notificări inteligente</small></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="platforms" aria-labelledby="platform-title">
+      <div class="section-heading">
+        <span class="eyebrow">ALEGE PLATFORMA</span>
+        <h2 id="platform-title">Instalează G-Shop pe dispozitivul tău</h2>
+      </div>
+      <div class="platform-grid">
+        <article class="platform-card available">
+          <div class="platform-top"><span class="platform-icon android">A</span><span class="status status-live">Disponibil acum</span></div>
+          <h3>Telefon Android</h3>
+          <p>Acces rapid la scanare QR, semnături, clienți, documente și notificări chiar dacă aplicația este închisă.</p>
+          <ul><li>Instalare directă prin APK</li><li>Notificări pentru documente lipsă</li><li>Actualizări din aplicație</li></ul>
+          <a class="button button-primary full" id="androidDownload" href="./g-shop-android.apk" download>Descarcă aplicația <span>↓</span></a>
+        </article>
+
+        <article class="platform-card soon">
+          <div class="platform-top"><span class="platform-icon windows">▦</span><span class="status status-soon">În pregătire</span></div>
+          <h3>Calculator</h3>
+          <p>Versiunea optimizată pentru Windows va aduce aceeași experiență G-Shop pe ecranul mare.</p>
+          <ul><li>Interfață pentru desktop</li><li>Sincronizare cu aplicația mobilă</li><li>Acces la toate modulele</li></ul>
+          <button class="button button-secondary full desktop-coming" type="button">Vezi disponibilitatea <span>→</span></button>
+        </article>
+      </div>
+    </section>
+
+    <section class="steps">
+      <div><span>1</span><strong>Descarcă APK-ul</strong><small>Folosește butonul pentru Android.</small></div>
+      <i></i>
+      <div><span>2</span><strong>Permite instalarea</strong><small>Confirmă instalarea din sursa oficială.</small></div>
+      <i></i>
+      <div><span>3</span><strong>Intră în G-Shop</strong><small>Autentifică-te și continuă lucrul.</small></div>
+    </section>
+  </main>
+
+  <footer class="shell"><span>© 2026 G-Shop</span><span>Aplicație securizată pentru service</span></footer>
+</body>
+</html>
