@@ -28,6 +28,7 @@ const TITLES: Record<ServiceDocumentType, { title: string; description: string; 
   INTAKE: { title: 'Fișă de intrare', description: 'Acordul inițial și termenul estimat', icon: 'enter-outline' },
   FINAL_ESTIMATE: { title: 'Deviz final', description: 'Constatarea, piesele, manopera și acordul final', icon: 'receipt-outline' },
   EXIT: { title: 'Fișă de ieșire', description: 'Starea produsului și momentul predării', icon: 'exit-outline' },
+  WARRANTY: { title: 'Certificat de garanție', description: 'Perioada, obiectul garanției și confirmarea predării', icon: 'shield-checkmark-outline' },
 };
 
 let itemSequence = 0;
@@ -65,6 +66,10 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
   const [parts, setParts] = useState<DraftItem[]>([]);
   const [labor, setLabor] = useState<DraftItem[]>([]);
   const [estimatedCosts, setEstimatedCosts] = useState<EstimatedCosts>(() => calculateEstimatedCosts({ currencyCode: 'RON' }));
+  const [warrantyPeriod, setWarrantyPeriod] = useState('');
+  const [warrantyStartAt, setWarrantyStartAt] = useState('');
+  const [warrantyEndAt, setWarrantyEndAt] = useState('');
+  const [warrantyRemediation, setWarrantyRemediation] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const definition = TITLES[type];
@@ -85,6 +90,10 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
     setParts(toDraftItems(document?.parts?.length ? document.parts : defaultParts(sheet, financialOverview?.financials.actualPartsCost)));
     setLabor(toDraftItems(document?.labor?.length ? document.labor : defaultLabor(sheet)));
     setEstimatedCosts(normalizeEstimatedCosts(document?.estimatedCosts ?? currentEstimatedCosts(sheet, financialOverview)));
+    setWarrantyPeriod(document?.warrantyPeriod ?? sheet.warranty ?? '');
+    setWarrantyStartAt(document?.warrantyStartAt ?? sheet.warrantyStartAt ?? sheet.completedAt ?? now);
+    setWarrantyEndAt(document?.warrantyEndAt ?? sheet.warrantyEndAt ?? '');
+    setWarrantyRemediation(document?.warrantyRemediation ?? sheet.warrantyRemediation ?? '');
     setSaving(false);
     setError('');
   }, [document, financialOverview, sheet, type, visible]);
@@ -101,6 +110,10 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
     const cleanLabor = cleanItems(labor);
     if (type !== 'EXIT' && agreementAt.trim() && !validDate(agreementAt)) return setError('Data acordului nu este validă. Șterge valoarea sau alege o dată corectă.');
     if (type === 'EXIT' && documentAt.trim() && !validDate(documentAt)) return setError('Data predării nu este validă. Șterge valoarea sau alege o dată corectă.');
+    if (type === 'WARRANTY' && documentAt.trim() && !validDate(documentAt)) return setError('Data certificatului nu este validă.');
+    if (type === 'WARRANTY' && warrantyStartAt.trim() && !validDate(warrantyStartAt)) return setError('Data de început a garanției nu este validă.');
+    if (type === 'WARRANTY' && warrantyEndAt.trim() && !validDate(warrantyEndAt)) return setError('Data de sfârșit a garanției nu este validă.');
+    if (type === 'WARRANTY' && warrantyPeriod.trim().length < 2) return setError('Completează perioada garanției, de exemplu „90 zile”.');
     const days = estimatedRepairDays.trim() === '' ? undefined : Number(estimatedRepairDays);
     if (type === 'INTAKE' && (days === undefined || !Number.isInteger(days) || days < 0 || days > 730)) return setError('Termenul estimat trebuie să fie un număr între 0 și 730 de zile.');
     if (type === 'INTAKE' && !/^[A-Z]{3}$/.test(estimatedCosts.currencyCode)) return setError('Moneda trebuie să fie un cod din 3 litere, de exemplu RON.');
@@ -112,7 +125,9 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
       ? { agreementAt, agreementStatus, estimatedRepairDays: days, estimatedCosts }
       : type === 'FINAL_ESTIMATE'
         ? { agreementAt, agreementStatus, technicalAssessment: technicalAssessment.trim(), defectCause: defectCause.trim() || undefined, finalNotes: finalNotes.trim() || undefined, parts: cleanParts, labor: cleanLabor }
-        : { documentAt, productState };
+        : type === 'EXIT'
+          ? { documentAt, productState }
+          : { documentAt, warrantyPeriod: warrantyPeriod.trim(), warrantyStartAt, warrantyEndAt, warrantyRemediation: warrantyRemediation.trim() };
 
     setSaving(true);
     setError('');
@@ -205,6 +220,17 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
               <Segment label="Stare inițială" icon="return-down-back-outline" selected={productState === 'INITIAL'} onPress={() => setProductState('INITIAL')} />
             </View>
             <DateTimeField label="Data și ora predării" value={documentAt} onChange={setDocumentAt} allowClear showNow />
+          </View> : null}
+
+          {type === 'WARRANTY' ? <View style={styles.section}>
+            <DateTimeField label="Data și ora certificatului" value={documentAt} onChange={setDocumentAt} allowClear showNow />
+            <Input label="Perioada garanției *" value={warrantyPeriod} onChangeText={setWarrantyPeriod} maxLength={120} placeholder="ex. 90 zile" />
+            <View style={styles.dateRow}>
+              <View style={styles.dateField}><DateTimeField label="Garanție de la" value={warrantyStartAt} onChange={setWarrantyStartAt} allowClear showNow /></View>
+              <View style={styles.dateField}><DateTimeField label="Garanție până la" value={warrantyEndAt} onChange={setWarrantyEndAt} allowClear /></View>
+            </View>
+            <Input label="Remediere estimată" value={warrantyRemediation} onChangeText={setWarrantyRemediation} maxLength={160} placeholder="ex. 10 zile lucrătoare" />
+            <View style={[styles.autoNotice, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}><Ionicons name="business-outline" size={20} color={colors.primary} /><AppText variant="caption" style={styles.noticeCopy}>Contactul service, firma, echipamentul, numerele documentelor, semnătura clientului și ștampila se completează automat.</AppText></View>
           </View> : null}
 
           {error ? <View accessibilityRole="alert" style={[styles.error, { backgroundColor: `${palette.danger}12`, borderColor: `${palette.danger}35` }]}><Ionicons name="alert-circle-outline" size={19} color={palette.danger} /><AppText variant="caption" style={[styles.noticeCopy, { color: palette.danger }]}>{error}</AppText></View> : null}
@@ -341,6 +367,8 @@ const styles = StyleSheet.create({
   estimateMetricLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 0.35 },
   textArea: { minHeight: 94, paddingTop: spacing.md },
   fieldWithHint: { gap: spacing.xs },
+  dateRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  dateField: { minWidth: 250, flex: 1 },
   segments: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   segment: { minHeight: 50, minWidth: 180, flex: 1, borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   itemsSection: { borderTopWidth: 1, paddingTop: spacing.lg, gap: spacing.md },

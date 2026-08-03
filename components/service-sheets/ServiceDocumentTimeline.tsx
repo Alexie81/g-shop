@@ -8,9 +8,10 @@ const steps = [
   { number: 1, title: 'Fișa de intrare', description: 'Client, echipament, problemă și estimare', icon: 'enter-outline' as const, color: palette.electric },
   { number: 2, title: 'Deviz final', description: 'Diagnostic, piese, manoperă și acord final', icon: 'receipt-outline' as const, color: palette.purple },
   { number: 3, title: 'Fișa de ieșire', description: 'Finalizare, stare produs și predare', icon: 'exit-outline' as const, color: palette.success },
+  { number: 4, title: 'Garanție', description: 'Perioadă, certificat și confirmarea clientului', icon: 'shield-checkmark-outline' as const, color: palette.cyan },
 ];
 
-export function ServiceDocumentTimeline({ activeStep = 1 }: { activeStep?: 1 | 2 | 3 }) {
+export function ServiceDocumentTimeline({ activeStep = 1 }: { activeStep?: 1 | 2 | 3 | 4 }) {
   const { colors } = useAppTheme();
   return <View style={[styles.timeline, { backgroundColor: colors.surface, borderColor: colors.border }]}>
     <View style={styles.titleRow}><Ionicons name="git-commit-outline" size={20} color={colors.primary} /><View style={styles.copy}><AppText variant="heading">Parcursul documentelor</AppText><AppText variant="caption" muted>Fiecare câmp este grupat după documentul în care va apărea.</AppText></View></View>
@@ -30,13 +31,24 @@ export function ServiceDocumentTimeline({ activeStep = 1 }: { activeStep?: 1 | 2
   </View>;
 }
 
-export function DocumentStageHeader({ step, title, description }: { step: 1 | 2 | 3; title: string; description: string }) {
+export function DocumentStageHeader({ step, title, description }: { step: 1 | 2 | 3 | 4; title: string; description: string }) {
   const { colors } = useAppTheme();
   const definition = steps[step - 1];
   return <View style={styles.titleRow}>
     <View style={[styles.stageNumber, { backgroundColor: definition.color }]}><AppText variant="label" style={styles.stageNumberText}>{step}</AppText></View>
     <View style={styles.copy}><View style={styles.stageTitleLine}><AppText variant="heading">{title}</AppText><View style={[styles.documentBadge, { backgroundColor: `${definition.color}14` }]}><AppText variant="caption" style={{ color: definition.color, fontWeight: '900' }}>{definition.title}</AppText></View></View><AppText variant="caption" muted>{description}</AppText></View>
     <Ionicons name={definition.icon} size={21} color={definition.color || colors.primary} />
+  </View>;
+}
+
+export function DocumentStageGroupHeader({ step }: { step: 1 | 2 | 3 | 4 }) {
+  const { colors } = useAppTheme();
+  const definition = steps[step - 1];
+  return <View style={[styles.groupHeader, { backgroundColor: `${definition.color}0D`, borderColor: `${definition.color}38` }]}>
+    <View style={[styles.groupRail, { backgroundColor: definition.color }]} />
+    <View style={[styles.groupIcon, { backgroundColor: `${definition.color}18` }]}><Ionicons name={definition.icon} size={22} color={definition.color} /></View>
+    <View style={styles.copy}><AppText variant="caption" style={{ color: definition.color, fontWeight: '900', letterSpacing: 0.6 }}>ETAPA {step}</AppText><AppText variant="title">{definition.title}</AppText><AppText variant="caption" muted>{definition.description}</AppText></View>
+    <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
   </View>;
 }
 
@@ -53,4 +65,7 @@ const styles = StyleSheet.create({
   stageNumberText: { color: '#FFFFFF', fontWeight: '900' },
   stageTitleLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
   documentBadge: { borderRadius: radius.pill, paddingHorizontal: spacing.sm, paddingVertical: 3 },
+  groupHeader: { position: 'relative', minHeight: 86, borderWidth: 1, borderRadius: radius.xl, padding: spacing.lg, paddingLeft: spacing.xl, flexDirection: 'row', alignItems: 'center', gap: spacing.md, overflow: 'hidden' },
+  groupRail: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 6 },
+  groupIcon: { width: 46, height: 46, flexShrink: 0, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
 });

@@ -37,7 +37,7 @@ export default function ServiceSheetDetails() {
   const [pdfAction, setPdfAction] = useState<'download' | 'whatsapp' | null>(null);
   const mobile = width < 520;
   const veryNarrow = width <= 360;
-  const initialDocumentType = (['INTAKE', 'FINAL_ESTIMATE', 'EXIT'] as ServiceDocumentType[]).includes(document as ServiceDocumentType) ? document as ServiceDocumentType : null;
+  const initialDocumentType = (['INTAKE', 'FINAL_ESTIMATE', 'EXIT', 'WARRANTY'] as ServiceDocumentType[]).includes(document as ServiceDocumentType) ? document as ServiceDocumentType : null;
   const canViewFinancials = hasPermission('financials.view');
   const returnToServiceSheets = () => router.replace('/service/service-sheets');
   const state = useAsyncData(async () => {

@@ -2,7 +2,7 @@ import { ClientFinanceSection, type ExpenseInput } from '@/components/clients/fi
 import { AccessoriesField, hasNoAccessories, NO_ACCESSORIES_VALUE } from '@/components/service-sheets/AccessoriesField';
 import { IntakeEstimateSection } from '@/components/service-sheets/IntakeEstimateSection';
 import { ServiceSheetCollaborators } from '@/components/service-sheets/ServiceSheetCollaborators';
-import { DocumentStageHeader, ServiceDocumentTimeline } from '@/components/service-sheets/ServiceDocumentTimeline';
+import { DocumentStageGroupHeader, DocumentStageHeader, ServiceDocumentTimeline } from '@/components/service-sheets/ServiceDocumentTimeline';
 import { SERVICE_STATUS_LABELS } from '@/components/service-sheets/ServiceSheetStatus';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
@@ -40,6 +40,9 @@ type Form = {
   actualPartsCost: string;
   technicianName: string;
   warranty: string;
+  warrantyStartAt: string;
+  warrantyEndAt: string;
+  warrantyRemediation: string;
   storageAfter: string;
   handoverNotes: string;
   identityDocument: string;
@@ -78,6 +81,9 @@ const blank: Form = {
   actualPartsCost: '0',
   technicianName: '',
   warranty: '',
+  warrantyStartAt: '',
+  warrantyEndAt: '',
+  warrantyRemediation: '',
   storageAfter: '',
   handoverNotes: '',
   identityDocument: '',
@@ -112,6 +118,9 @@ function formFromSheet(sheet: ServiceSheet): Form {
     actualPartsCost: '0',
     technicianName: sheet.technicianName ?? '',
     warranty: sheet.warranty ?? '',
+    warrantyStartAt: sheet.warrantyStartAt ?? '',
+    warrantyEndAt: sheet.warrantyEndAt ?? '',
+    warrantyRemediation: sheet.warrantyRemediation ?? '',
     storageAfter: sheet.storageAfter ?? '',
     handoverNotes: sheet.handoverNotes ?? '',
     identityDocument: sheet.identityDocument ?? '',
@@ -248,6 +257,7 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
       const next = { ...current, [key]: value };
       if (key === 'approveRepair' && value === true) next.repairRefused = false;
       if (key === 'repairRefused' && value === true) next.approveRepair = false;
+      if (key === 'completedAt' && value && !current.warrantyStartAt) next.warrantyStartAt = value as string;
       return next;
     });
   };
@@ -339,6 +349,9 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
       currencyCode: financeValue.currencyCode,
       technicianName: form.technicianName.trim(),
       warranty: form.warranty.trim(),
+      warrantyStartAt: form.warrantyStartAt || undefined,
+      warrantyEndAt: form.warrantyEndAt || undefined,
+      warrantyRemediation: form.warrantyRemediation.trim(),
       storageAfter: form.storageAfter.trim(),
       handoverNotes: form.handoverNotes.trim(),
       identityDocument: form.identityDocument.trim(),
@@ -396,14 +409,17 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
     }
   };
 
-  const timelineStep: 1 | 2 | 3 = sheet?.status === 'DELIVERED'
-    ? 3
-    : sheet && ['VERIFYING', 'IN_PROGRESS', 'WAITING_PARTS', 'COMPLETED'].includes(sheet.status)
+  const timelineStep: 1 | 2 | 3 | 4 = sheet?.status === 'DELIVERED'
+    ? 4
+    : sheet?.status === 'COMPLETED'
+      ? 3
+      : sheet && ['VERIFYING', 'IN_PROGRESS', 'WAITING_PARTS'].includes(sheet.status)
       ? 2
       : 1;
 
   return <View style={styles.form}>
     <ServiceDocumentTimeline activeStep={timelineStep} />
+    <DocumentStageGroupHeader step={1} />
     <Card style={styles.section}>
       <DocumentStageHeader step={1} title="Client asociat" description="Clientul este ales o singură dată și rămâne fix pe această reparație." />
       {client ? <View style={styles.clientSummary}>
@@ -434,17 +450,6 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
     </Card>
 
     <Card style={styles.section}>
-      <DocumentStageHeader step={2} title="Constatarea pentru deviz" description="Poți lăsa gol acum și completa după diagnosticare, înainte de generarea devizului final." />
-      <Input label="Constatare tehnică" multiline value={form.technicalAssessment} onChangeText={(value) => update('technicalAssessment', value)} />
-      <Input label="Piese utilizate / necesare" multiline value={form.partsUsed} onChangeText={(value) => update('partsUsed', value)} />
-    </Card>
-
-    <Card style={styles.section}>
-      <DocumentStageHeader step={3} title="Rezultatul reparației" description="Se completează la final și va fi preluat în fișa de ieșire." />
-      <Input label="Lucrări efectuate" multiline value={form.workPerformed} onChangeText={(value) => update('workPerformed', value)} />
-    </Card>
-
-    <Card style={styles.section}>
       <DocumentStageHeader step={1} title="Primire și acord inițial" description="Datele opționale pot fi șterse și lăsate necompletate." />
       <View style={styles.row}>
         <View style={styles.field}><DateTimeField label="Data primirii" value={form.receivedAt} onChange={(value) => update('receivedAt', value)} allowClear showNow /></View>
@@ -464,16 +469,6 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
       </View>
     </Card>
 
-    <Card style={styles.section}>
-      <DocumentStageHeader step={3} title="Predare și închidere" description="Completează aceste date doar când produsul este gata de predare." />
-      <View style={styles.toggleGrid}><ToggleOption label="Produs predat" icon="checkmark-done-outline" active={form.productDelivered} onPress={() => update('productDelivered', !form.productDelivered)} /></View>
-      <View style={styles.row}><View style={styles.field}><DateTimeField label="Data finalizării" value={form.completedAt} onChange={(value) => update('completedAt', value)} allowClear showNow /></View></View>
-      <View style={styles.row}><View style={styles.field}><Input label="Garanție" placeholder="ex. 90 zile" value={form.warranty} onChangeText={(value) => update('warranty', value)} /></View><View style={styles.field}><Input label="Depozitare după termen" placeholder="ex. 5 RON / zi" value={form.storageAfter} onChangeText={(value) => update('storageAfter', value)} /></View></View>
-      <Input label="Observații client / service" multiline numberOfLines={4} textAlignVertical="top" style={{ minHeight: 90 }} value={form.handoverNotes} onChangeText={(value) => update('handoverNotes', value)} />
-      <AppText variant="label">Statusul fișei</AppText>
-      <View style={styles.statusGrid}>{(Object.keys(SERVICE_STATUS_LABELS) as ServiceSheetStatus[]).map((status) => <Pressable key={status} accessibilityRole="button" accessibilityState={{ selected: form.status === status }} onPress={() => update('status', status)} style={({ pressed }) => [styles.statusButton, { borderColor: form.status === status ? colors.primary : colors.border, backgroundColor: form.status === status ? colors.primary : colors.surfaceMuted, opacity: pressed ? 0.75 : 1 }]}><AppText variant="caption" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82} style={[styles.statusButtonLabel, { color: form.status === status ? '#FFFFFF' : colors.text }]}>{SERVICE_STATUS_LABELS[status]}</AppText></Pressable>)}</View>
-    </Card>
-
     {!sheet ? <IntakeEstimateSection
       value={estimatedCosts}
       estimatedRepairDays={form.estimatedRepairDays}
@@ -481,6 +476,14 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
       onEstimatedRepairDaysChange={(estimatedRepairDays) => update('estimatedRepairDays', estimatedRepairDays)}
       description="Aceste valori intră în PDF-ul inițial și nu se modifică atunci când actualizezi mai târziu costurile reale sau devizul final."
     /> : null}
+
+    <DocumentStageGroupHeader step={2} />
+
+    <Card style={styles.section}>
+      <DocumentStageHeader step={2} title="Constatarea pentru deviz" description="Poți lăsa gol acum și completa după diagnosticare, înainte de generarea devizului final." />
+      <Input label="Constatare tehnică" multiline numberOfLines={4} textAlignVertical="top" style={{ minHeight: 90 }} value={form.technicalAssessment} onChangeText={(value) => update('technicalAssessment', value)} />
+      <Input label="Piese utilizate / necesare" multiline numberOfLines={3} textAlignVertical="top" value={form.partsUsed} onChangeText={(value) => update('partsUsed', value)} />
+    </Card>
 
     {canLoadFinancials && form.clientId ? <ClientFinanceSection
       value={financeValue}
@@ -493,6 +496,38 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
       onUpdateExpense={canEditFinancials && !financePrefilling ? updateExpense : undefined}
       onDeleteExpense={canEditFinancials && !financePrefilling ? deleteExpense : undefined}
     /> : null}
+
+    <DocumentStageGroupHeader step={3} />
+
+    <Card style={styles.section}>
+      <DocumentStageHeader step={3} title="Rezultatul reparației" description="Se completează la final și va fi preluat în fișa de ieșire și în certificat." />
+      <Input label="Lucrări efectuate" multiline numberOfLines={4} textAlignVertical="top" style={{ minHeight: 90 }} value={form.workPerformed} onChangeText={(value) => update('workPerformed', value)} />
+    </Card>
+
+    <Card style={styles.section}>
+      <DocumentStageHeader step={3} title="Predare și închidere" description="Completează aceste date doar când produsul este gata de predare." />
+      <View style={styles.toggleGrid}><ToggleOption label="Produs predat" icon="checkmark-done-outline" active={form.productDelivered} onPress={() => update('productDelivered', !form.productDelivered)} /></View>
+      <View style={styles.row}><View style={styles.field}><DateTimeField label="Data finalizării" value={form.completedAt} onChange={(value) => update('completedAt', value)} allowClear showNow /></View></View>
+      <Input label="Depozitare după termen" placeholder="ex. 5 RON / zi" value={form.storageAfter} onChangeText={(value) => update('storageAfter', value)} />
+      <Input label="Observații client / service" multiline numberOfLines={4} textAlignVertical="top" style={{ minHeight: 90 }} value={form.handoverNotes} onChangeText={(value) => update('handoverNotes', value)} />
+      <AppText variant="label">Statusul fișei</AppText>
+      <View style={styles.statusGrid}>{(Object.keys(SERVICE_STATUS_LABELS) as ServiceSheetStatus[]).map((status) => <Pressable key={status} accessibilityRole="button" accessibilityState={{ selected: form.status === status }} onPress={() => update('status', status)} style={({ pressed }) => [styles.statusButton, { borderColor: form.status === status ? colors.primary : colors.border, backgroundColor: form.status === status ? colors.primary : colors.surfaceMuted, opacity: pressed ? 0.75 : 1 }]}><AppText variant="caption" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82} style={[styles.statusButtonLabel, { color: form.status === status ? '#FFFFFF' : colors.text }]}>{SERVICE_STATUS_LABELS[status]}</AppText></Pressable>)}</View>
+    </Card>
+
+    <DocumentStageGroupHeader step={4} />
+
+    <Card style={styles.section}>
+      <DocumentStageHeader step={4} title="Datele certificatului" description="Se completează o singură dată și sunt preluate automat la generarea certificatului de garanție." />
+      <View style={styles.row}>
+        <View style={styles.field}><Input label="Perioada garanției" placeholder="ex. 90 zile" maxLength={120} value={form.warranty} onChangeText={(value) => update('warranty', value)} /></View>
+        <View style={styles.field}><Input label="Remediere estimată" placeholder="ex. 10 zile lucrătoare" maxLength={160} value={form.warrantyRemediation} onChangeText={(value) => update('warrantyRemediation', value)} /></View>
+      </View>
+      <View style={styles.row}>
+        <View style={styles.field}><DateTimeField label="Garanție de la" value={form.warrantyStartAt} onChange={(value) => update('warrantyStartAt', value)} allowClear showNow /></View>
+        <View style={styles.field}><DateTimeField label="Garanție până la" value={form.warrantyEndAt} onChange={(value) => update('warrantyEndAt', value)} allowClear /></View>
+      </View>
+      <View style={[styles.automationHint, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}><Ionicons name="sparkles-outline" size={20} color={colors.primary} /><AppText variant="caption" style={styles.documentCopy}>Firma, contactul service, numerele documentelor, semnătura și ștampila sunt completate automat.</AppText></View>
+    </Card>
 
     {financeOverview && form.clientId ? <ServiceSheetCollaborators
       propertyId={propertyId}
@@ -523,6 +558,7 @@ const styles = StyleSheet.create({
   clientSummary: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.md },
   clientCopy: { minWidth: 180, flex: 1, gap: 2 },
   documentCopy: { minWidth: 0, flex: 1, gap: 3 },
+  automationHint: { minHeight: 58, borderWidth: 1, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   sectionHeading: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   sectionIcon: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   toggleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },

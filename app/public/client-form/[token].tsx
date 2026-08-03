@@ -12,7 +12,7 @@ import { ActivityIndicator, Animated, Image, Linking, Pressable, RefreshControl,
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
-type PublicRepairDocumentType = 'INTAKE' | 'FINAL_ESTIMATE' | 'EXIT';
+type PublicRepairDocumentType = 'INTAKE' | 'FINAL_ESTIMATE' | 'EXIT' | 'WARRANTY';
 type PublicRepairDocument = {
   type: PublicRepairDocumentType;
   label: string;
@@ -44,6 +44,7 @@ const DOCUMENT_SLOTS: { type: PublicRepairDocumentType; label: string; icon: Ico
   { type: 'INTAKE', label: 'Fișă de intrare', icon: 'document-text-outline' },
   { type: 'FINAL_ESTIMATE', label: 'Deviz final', icon: 'receipt-outline' },
   { type: 'EXIT', label: 'Fișă de ieșire', icon: 'document-attach-outline' },
+  { type: 'WARRANTY', label: 'Certificat de garanție', icon: 'shield-checkmark-outline' },
 ];
 
 const STATUS: Record<ServiceSheetStatus, { label: string; description: string; icon: IconName; color: string; soft: string }> = {

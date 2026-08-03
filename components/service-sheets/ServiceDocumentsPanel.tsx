@@ -22,6 +22,7 @@ const DOCUMENTS: { type: ServiceDocumentType; label: string; description: string
   { type: 'INTAKE', label: 'Fișă de intrare', description: 'Primire, cost estimativ și acord inițial', icon: 'enter-outline', color: palette.electric },
   { type: 'FINAL_ESTIMATE', label: 'Deviz final', description: 'Diagnostic, piese, manoperă și acord final', icon: 'receipt-outline', color: palette.purple },
   { type: 'EXIT', label: 'Fișă de ieșire', description: 'Starea produsului și confirmarea predării', icon: 'exit-outline', color: palette.success },
+  { type: 'WARRANTY', label: 'Certificat de garanție', description: 'Perioadă, termene și confirmarea predării', icon: 'shield-checkmark-outline', color: palette.cyan },
 ];
 
 export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style }: Props) {
@@ -45,6 +46,19 @@ export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style }
   const allReady = state.data !== null && missing.length === 0;
   const selectedDocument = editorType ? state.data?.find((item) => item.type === editorType) : undefined;
   const openEditor = (type: ServiceDocumentType, document?: ServiceDocument) => {
+    const hasDocument = (requiredType: ServiceDocumentType) => state.data?.some((item) => item.type === requiredType && item.available) === true;
+    if (type !== 'INTAKE' && !hasDocument('INTAKE')) {
+      showToast('Creează mai întâi fișa de intrare.', 'info');
+      return;
+    }
+    if (['EXIT', 'WARRANTY'].includes(type) && !hasDocument('FINAL_ESTIMATE')) {
+      showToast('Creează mai întâi devizul final.', 'info');
+      return;
+    }
+    if (type === 'WARRANTY' && !hasDocument('EXIT')) {
+      showToast('Creează mai întâi fișa de ieșire.', 'info');
+      return;
+    }
     if (type === 'FINAL_ESTIMATE' && !document?.available && !financialState.data) {
       showToast(financialState.loading ? 'Se încarcă costurile interne ale pieselor. Încearcă din nou imediat.' : 'Costurile interne nu au putut fi încărcate. Reîncarcă dosarul înainte de deviz.', 'error');
       return;
@@ -109,7 +123,7 @@ export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style }
     <Card style={[styles.panel, style]} elevated>
       <View style={styles.header}>
         <View style={[styles.headerIcon, { backgroundColor: isDark ? `${colors.primary}25` : colors.primarySoft }]}><Ionicons name="folder-open-outline" size={23} color={colors.primary} /></View>
-        <View style={styles.headerCopy}><AppText variant="heading">Documentele reparației</AppText><AppText variant="caption" muted>Dosarul clientului conține exact trei documente.</AppText></View>
+        <View style={styles.headerCopy}><AppText variant="heading">Documentele reparației</AppText><AppText variant="caption" muted>Dosarul clientului urmează cele patru etape, de la primire la garanție.</AppText></View>
         <Pressable accessibilityRole="button" accessibilityLabel="Reîncarcă documentele" disabled={state.loading || state.refreshing} onPress={() => void state.reload(true)} style={[styles.refresh, { backgroundColor: colors.surfaceMuted }]}>{state.loading || state.refreshing ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="refresh-outline" size={20} color={colors.primary} />}</Pressable>
       </View>
 
@@ -153,8 +167,8 @@ export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style }
             style={styles.whatsappAction}
           />;
         })}</View>
-        <Button label="Trimite toate cele 3 documente" icon="logo-whatsapp" disabled={!phone || !state.data} onPress={() => void sendAll()} />
-        {!allReady ? <AppText variant="caption" muted style={styles.whatsappHint}>„Trimite toate” devine disponibil numai după generarea tuturor celor trei documente. Niciun document lipsă nu va fi prezentat ca trimis.</AppText> : null}
+        <Button label="Trimite toate cele 4 documente" icon="logo-whatsapp" disabled={!phone || !state.data} onPress={() => void sendAll()} />
+        {!allReady ? <AppText variant="caption" muted style={styles.whatsappHint}>„Trimite toate” devine disponibil numai după generarea tuturor celor patru documente. Niciun document lipsă nu va fi prezentat ca trimis.</AppText> : null}
       </View>
       </> : null}
     </Card>
