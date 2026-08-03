@@ -11,6 +11,7 @@ type Props = {
   value: string;
   onChange: (value: string) => void;
   allowClear?: boolean;
+  showNow?: boolean;
 };
 
 const webInputStyle: CSSProperties = {
@@ -24,7 +25,7 @@ const webInputStyle: CSSProperties = {
   cursor: 'pointer',
 };
 
-export function DateTimeField({ label, value, onChange, allowClear = false }: Props) {
+export function DateTimeField({ label, value, onChange, allowClear = false, showNow = false }: Props) {
   const { colors, isDark } = useAppTheme();
   const [draftDate, setDraftDate] = useState(() => dateFromValue(value));
   const [iosPickerVisible, setIosPickerVisible] = useState(false);
@@ -46,6 +47,7 @@ export function DateTimeField({ label, value, onChange, allowClear = false }: Pr
   };
 
   const clearValue = () => onChange('');
+  const setNow = () => onChange(new Date().toISOString());
 
   if (Platform.OS === 'web') {
     const handleWebChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -74,9 +76,16 @@ export function DateTimeField({ label, value, onChange, allowClear = false }: Pr
           onChange: handleWebChange,
           onFocus: () => setWebFocused(true),
           onBlur: () => setWebFocused(false),
-          style: { ...webInputStyle, right: allowClear && selectedDate ? 48 : 0 },
+          style: {
+            ...webInputStyle,
+            right: (showNow ? 66 : 0) + (allowClear && selectedDate ? 40 : 0),
+            width: 'auto',
+          },
         })}
-        {allowClear && selectedDate ? <ClearButton label={label} onPress={clearValue} /> : null}
+        <View style={styles.fieldActions}>
+          {showNow ? <NowButton onPress={setNow} /> : null}
+          {allowClear && selectedDate ? <ClearButton label={label} onPress={clearValue} /> : null}
+        </View>
       </View>
     </View>;
   }
@@ -98,7 +107,10 @@ export function DateTimeField({ label, value, onChange, allowClear = false }: Pr
       <View style={styles.valueCopy}>
         <AppText numberOfLines={1} style={{ color: selectedDate ? colors.text : colors.textMuted }}>{displayValue}</AppText>
       </View>
-      {allowClear && selectedDate ? <ClearButton label={label} onPress={clearValue} /> : <Ionicons name="time-outline" size={20} color={colors.textMuted} />}
+      <View style={styles.fieldActions}>
+        {showNow ? <NowButton onPress={setNow} /> : null}
+        {allowClear && selectedDate ? <ClearButton label={label} onPress={clearValue} /> : !showNow ? <Ionicons name="time-outline" size={20} color={colors.textMuted} /> : null}
+      </View>
     </Pressable>
 
     {Platform.OS === 'ios' ? <Modal
@@ -137,6 +149,23 @@ export function DateTimeField({ label, value, onChange, allowClear = false }: Pr
       </View>
     </Modal> : null}
   </View>;
+}
+
+function NowButton({ onPress }: { onPress: () => void }) {
+  const { colors } = useAppTheme();
+  return <Pressable
+    accessibilityRole="button"
+    accessibilityLabel="Setează data și ora curentă"
+    hitSlop={6}
+    onPress={(event) => {
+      event.stopPropagation();
+      onPress();
+    }}
+    style={({ pressed }) => [styles.nowButton, { backgroundColor: colors.primarySoft, opacity: pressed ? 0.7 : 1 }]}
+  >
+    <Ionicons name="flash-outline" size={14} color={colors.primary} />
+    <AppText variant="caption" style={{ color: colors.primary, fontWeight: '900' }}>Acum</AppText>
+  </Pressable>;
 }
 
 function ClearButton({ label, onPress }: { label: string; onPress: () => void }) {
@@ -225,6 +254,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   valueCopy: { minWidth: 0, flex: 1, paddingVertical: spacing.md },
+  fieldActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, zIndex: 2 },
+  nowButton: { minWidth: 58, height: 32, paddingHorizontal: spacing.sm, borderRadius: radius.pill, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3 },
   clearButton: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
   modalRoot: { flex: 1, justifyContent: 'flex-end', padding: spacing.lg },
   pickerPanel: { borderWidth: 1, borderRadius: radius.xl, padding: spacing.md, paddingBottom: spacing.xxl },

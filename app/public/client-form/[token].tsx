@@ -12,6 +12,15 @@ import { ActivityIndicator, Animated, Image, Linking, Pressable, RefreshControl,
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
+type PublicRepairDocumentType = 'INTAKE' | 'FINAL_ESTIMATE' | 'EXIT';
+type PublicRepairDocument = {
+  type: PublicRepairDocumentType;
+  label: string;
+  available: boolean;
+  url?: string;
+  generatedAt?: string;
+};
+
 type PublicRepairStatus = {
   propertyName: string;
   contact?: { phone?: string | null; email?: string | null };
@@ -27,8 +36,15 @@ type PublicRepairStatus = {
     estimatedAt?: string;
     completedAt?: string;
     updatedAt?: string;
+    documents: PublicRepairDocument[];
   };
 };
+
+const DOCUMENT_SLOTS: { type: PublicRepairDocumentType; label: string; icon: IconName }[] = [
+  { type: 'INTAKE', label: 'Fișă de intrare', icon: 'document-text-outline' },
+  { type: 'FINAL_ESTIMATE', label: 'Deviz final', icon: 'receipt-outline' },
+  { type: 'EXIT', label: 'Fișă de ieșire', icon: 'document-attach-outline' },
+];
 
 const STATUS: Record<ServiceSheetStatus, { label: string; description: string; icon: IconName; color: string; soft: string }> = {
   NEW: { label: 'Fișă creată', description: 'Am înregistrat echipamentul și fișa ta de service.', icon: 'document-text-outline', color: palette.electric, soft: '#EDF4FF' },
@@ -99,6 +115,8 @@ export default function PublicRepairTracking() {
             <View style={styles.equipmentBox}><AppText variant="label">{equipment || 'Echipament înregistrat'}</AppText>{repair.reportedIssue ? <AppText style={styles.equipmentIssue}>{repair.reportedIssue}</AppText> : null}</View>
             <View style={styles.metaGrid}><Meta label="PRIMIT ÎN SERVICE" value={formatDate(repair.receivedAt)} /><Meta label="TERMEN ESTIMAT" value={repair.estimatedAt ? formatDate(repair.estimatedAt) : 'În curs de stabilire'} /><Meta label="FINALIZAT" value={repair.completedAt ? formatDate(repair.completedAt) : '—'} /></View>
           </View>
+
+          {(repair.documents ?? []).some((document) => document.available && document.url?.trim()) ? <RepairDocuments documents={repair.documents ?? []} /> : null}
         </> : null}
 
         {phone || email ? <ContactCard propertyName={propertyName} phone={phone} email={email} /> : null}
@@ -141,6 +159,33 @@ function Meta({ label, value }: { label: string; value: string }) {
   return <View style={styles.meta}><AppText variant="caption" style={styles.metaLabel}>{label}</AppText><AppText variant="caption" style={styles.metaValue}>{value}</AppText></View>;
 }
 
+function RepairDocuments({ documents }: { documents: PublicRepairDocument[] }) {
+  const availableDocuments = DOCUMENT_SLOTS.flatMap((slot) => {
+    const document = documents.find((item) => item.type === slot.type);
+    return document?.available === true && document.url?.trim() ? [{ slot, document }] : [];
+  });
+  return <View style={styles.card}>
+    <SectionTitle icon="documents-outline" title="Documentele reparației" description="Documente disponibile pentru această reparație" />
+    <View style={styles.documentList}>{availableDocuments.map(({ slot, document }) => {
+      const url = document.url!.trim();
+      const label = document.label?.trim() || slot.label;
+      const meta = document.generatedAt ? `Disponibil · ${formatDate(document.generatedAt, true)}` : 'PDF disponibil';
+      return <Pressable
+        key={slot.type}
+        accessibilityRole="link"
+        accessibilityLabel={`${label}. ${meta}`}
+        onPress={() => void Linking.openURL(url)}
+        style={({ pressed }) => [styles.documentItem, pressed && styles.pressed]}
+      >
+        <View style={styles.documentIcon}><Ionicons name={slot.icon} size={21} color={palette.electric} /></View>
+        <View style={styles.documentCopy}><AppText variant="label" numberOfLines={1}>{label}</AppText><AppText variant="caption" style={styles.documentMeta}>{meta}</AppText></View>
+        <View style={styles.documentBadge}><AppText variant="caption" style={styles.documentBadgeText}>Deschide</AppText></View>
+        <Ionicons name="chevron-forward" size={18} color={palette.electric} />
+      </Pressable>;
+    })}</View>
+  </View>;
+}
+
 function ContactCard({ propertyName, phone, email }: { propertyName: string; phone: string; email: string }) {
   const call = () => phone && Linking.openURL(`tel:${phone.replace(/[^\d+]/g, '')}`);
   const whatsapp = () => {
@@ -170,6 +215,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#E3E9F2', borderRadius: radius.xl, padding: spacing.xl, shadowColor: '#182E54', shadowOpacity: 0.06, shadowRadius: 20, shadowOffset: { width: 0, height: 10 }, elevation: 3 }, sectionTitle: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg }, sectionIcon: { width: 44, height: 44, borderRadius: 15, backgroundColor: '#EDF4FF', alignItems: 'center', justifyContent: 'center' }, sectionCopy: { minWidth: 0, flex: 1 },
   timeline: {}, timelineStep: { minHeight: 92, flexDirection: 'row', gap: spacing.sm }, marker: { width: 40, alignItems: 'center' }, dot: { width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: '#E3E9F2', backgroundColor: '#F3F6FA', alignItems: 'center', justifyContent: 'center', zIndex: 2, shadowOpacity: 0.18, shadowRadius: 8 }, dotDone: { backgroundColor: palette.success, borderColor: palette.success }, line: { position: 'absolute', top: 30, bottom: -2, width: 2, backgroundColor: '#E3E9F2' }, lineDone: { backgroundColor: palette.success }, stepContent: { minWidth: 0, flex: 1, marginBottom: spacing.sm, padding: spacing.sm, paddingTop: spacing.xs, borderWidth: 1, borderColor: 'transparent', borderRadius: radius.lg }, future: { opacity: 0.62 }, stepTop: { minHeight: 27, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm }, stepBadge: { minHeight: 25, borderRadius: radius.pill, paddingHorizontal: spacing.sm, backgroundColor: '#F1F4F8', alignItems: 'center', justifyContent: 'center' }, stepBadgeText: { color: '#8694A8', fontSize: 9, fontWeight: '900', textTransform: 'uppercase' }, doneBadge: { backgroundColor: '#EAF9EF' }, doneBadgeText: { color: palette.success }, activeBadgeText: { color: '#fff' }, stepDescription: { color: '#67758D', lineHeight: 17, marginTop: spacing.xs }, cancelled: { flexDirection: 'row', gap: spacing.sm, borderRadius: radius.md, padding: spacing.md, backgroundColor: '#FFF0F2' }, cancelledText: { minWidth: 0, flex: 1, color: '#071534' },
   equipmentBox: { borderWidth: 1, borderColor: '#E3E9F2', backgroundColor: '#F8FAFD', borderRadius: radius.lg, padding: spacing.lg, gap: spacing.sm }, equipmentIssue: { color: '#67758D', lineHeight: 20 }, metaGrid: { marginTop: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, meta: { minWidth: 125, flex: 1, minHeight: 66, borderRadius: radius.md, backgroundColor: '#F5F7FB', padding: spacing.sm }, metaLabel: { color: '#7B8799', fontSize: 9, fontWeight: '800', marginBottom: spacing.xs }, metaValue: { color: '#071534', fontWeight: '900' },
+  documentList: { gap: spacing.sm }, documentItem: { minHeight: 66, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.sm, borderWidth: 1, borderColor: '#CFE1F6', borderRadius: radius.lg, backgroundColor: '#F2F8FF' }, documentItemUnavailable: { borderColor: '#E3E8EF', backgroundColor: '#F7F9FC' }, documentIcon: { width: 42, height: 42, flexShrink: 0, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' }, documentIconUnavailable: { backgroundColor: '#EEF2F6' }, documentCopy: { minWidth: 0, flex: 1 }, documentMeta: { marginTop: 3, color: '#718096', fontSize: 10 }, documentBadge: { minHeight: 26, borderRadius: radius.pill, paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' }, documentBadgeUnavailable: { backgroundColor: '#E9EDF2' }, documentBadgeText: { color: palette.electric, fontSize: 9, fontWeight: '900', textTransform: 'uppercase' }, documentBadgeTextUnavailable: { color: '#718096' },
   contact: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#DCE7F7', borderRadius: radius.xl, padding: spacing.xl, shadowColor: '#182E54', shadowOpacity: 0.06, shadowRadius: 20, shadowOffset: { width: 0, height: 10 }, elevation: 3 }, contactActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, callButton: { minHeight: 52, minWidth: 190, flexGrow: 1.35, borderRadius: radius.lg, backgroundColor: palette.electric, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.md }, callText: { color: '#fff' }, whatsappButton: { minHeight: 52, minWidth: 130, flexGrow: 1, borderRadius: radius.lg, backgroundColor: '#EAFBF1', borderWidth: 1, borderColor: '#CCEFDA', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.md }, whatsappText: { color: '#129748' }, emailButton: { minHeight: 50, width: '100%', borderRadius: radius.lg, backgroundColor: '#F0F4FA', borderWidth: 1, borderColor: '#E3E9F2', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm }, emailText: { color: '#315170' },
   quickContact: { padding: 5, borderWidth: 1, borderColor: '#E3E9F2', borderRadius: 20, backgroundColor: '#fff', flexDirection: 'row', gap: spacing.sm, shadowColor: '#182E54', shadowOpacity: 0.06, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 2 }, quickCall: { minWidth: 0, flex: 1, minHeight: 50, borderRadius: radius.lg, backgroundColor: palette.electric, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm }, quickWhatsApp: { minWidth: 0, flex: 1, minHeight: 50, borderRadius: radius.lg, backgroundColor: '#18B75B', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   refresh: { minHeight: 51, borderRadius: radius.lg, borderWidth: 1, borderColor: '#D8E5FA', backgroundColor: '#EEF4FF', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.md }, refreshText: { color: palette.electric }, pressed: { opacity: 0.78, transform: [{ scale: 0.985 }] }, footer: { color: '#8794A7', textAlign: 'center', lineHeight: 16, paddingHorizontal: spacing.lg, marginTop: spacing.xs },

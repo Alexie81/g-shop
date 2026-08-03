@@ -5,6 +5,7 @@ import { WhatsAppQuickMessagesModal } from '@/components/clients/WhatsAppQuickMe
 import { ClientCollaboratorFinanceCard } from '@/components/clients/finance/ClientCollaboratorFinanceCard';
 import { ClientFinanceOverviewCard, ClientFinanceSection } from '@/components/clients/finance';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { ServiceDocumentsPanel } from '@/components/service-sheets/ServiceDocumentsPanel';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -162,14 +163,14 @@ export default function ClientDetailsScreen() {
         <ClientQuickAction label="Sună" icon="call-outline" onPress={() => void contact(`tel:${client.phone}`)} />
         <ClientQuickAction label="WhatsApp" icon="logo-whatsapp" onPress={() => setWhatsAppOpen(true)} />
         <ClientQuickAction label="Email" icon="mail-outline" disabled={!client.email} onPress={() => void contact(`mailto:${client.email}`)} />
-        <ClientQuickAction label="Fișă" icon="document-text-outline" primary onPress={openServiceSheet} />
+        <ClientQuickAction label="Dosar" icon="folder-open-outline" primary onPress={openServiceSheet} />
       </View>
     </Card>
     <View accessibilityRole="tablist" style={[styles.tabs, { backgroundColor: colors.surface, borderColor: colors.border }]}>{tabs.map((item) => {
       const selected = tab === item;
       return <Pressable key={item} accessibilityRole="tab" accessibilityLabel={`Fila ${item}`} accessibilityState={{ selected }} onPress={() => selectTab(item)} style={({ pressed }) => [styles.tab, selected && { backgroundColor: colors.primarySoft }, pressed && styles.tabPressed]}><AppText variant="caption" numberOfLines={1} style={{ color: selected ? colors.primary : colors.textMuted, fontWeight: '800' }}>{item}</AppText></Pressable>;
     })}</View>
-    {tab === 'Detalii' ? <><Details client={client} financials={financials} onOpenFinancials={canViewFinancials ? () => selectTab('Finanțe') : undefined} />{canEditClients ? <ClientLifecycleAction finalized={client.status === 'FINALIZED'} loading={statusSaving} onConfirm={changeClientStatus} /> : null}</> : tab === 'QR' ? <ClientQRPanel client={client} /> : tab === 'Finanțe' && financials ? <>
+    {tab === 'Detalii' ? <><Details client={client} financials={financials} onOpenFinancials={canViewFinancials ? () => selectTab('Finanțe') : undefined} />{serviceSheet ? <ServiceDocumentsPanel sheet={serviceSheet} /> : null}{canEditClients ? <ClientLifecycleAction finalized={client.status === 'FINALIZED'} loading={statusSaving} onConfirm={changeClientStatus} /> : null}</> : tab === 'QR' ? <ClientQRPanel client={client} /> : tab === 'Finanțe' && financials ? <>
       <ClientFinanceSection
       value={financials.financials}
       expenses={financials.expenses}
@@ -214,7 +215,7 @@ function ClientQuickAction({ label, icon, onPress, disabled = false, primary = f
   const foreground = primary ? '#fff' : colors.primary;
   return <Pressable
     accessibilityRole="button"
-    accessibilityLabel={label === 'Fișă' ? 'Fișă de service' : label}
+    accessibilityLabel={label === 'Dosar' ? 'Dosarul reparației' : label}
     accessibilityState={{ disabled }}
     disabled={disabled}
     onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined); onPress(); }}

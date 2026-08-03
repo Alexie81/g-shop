@@ -1,5 +1,6 @@
 import { AppHeader } from '@/components/layout/AppHeader';
 import { ServiceSheetStatus, SERVICE_STATUS_LABELS } from '@/components/service-sheets/ServiceSheetStatus';
+import { ServiceDocumentsPanel } from '@/components/service-sheets/ServiceDocumentsPanel';
 import { SignatureModal } from '@/components/service-sheets/SignatureModal';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
@@ -173,6 +174,8 @@ export default function ServiceSheetDetails() {
         </Pressable>;
       })}</View>
     </Card> : null}
+
+    <ServiceDocumentsPanel sheet={sheet} style={mobile && styles.cardMobile} />
 
     {financials ? <FinanceSummary overview={financials} mobile={mobile} onOpenClient={() => router.push(`/service/clients/${sheet.clientId}`)} /> : null}
 

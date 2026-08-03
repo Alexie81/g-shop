@@ -326,6 +326,8 @@ export interface ServiceSheet extends BaseEntity {
   signedAt?: ISODate;
   receivedAt: ISODate;
   estimatedAt?: ISODate;
+  estimatedRepairDays?: number;
+  intakeAgreementAt?: ISODate;
   completedAt?: ISODate;
   status: ServiceSheetStatus;
   client?: Pick<Client, 'id' | 'firstName' | 'lastName' | 'phone'>;
@@ -335,6 +337,84 @@ export interface ServiceSheetPdf {
   url: string;
   fileName: string;
   generatedAt: ISODate;
+}
+
+export type ServiceDocumentType = 'INTAKE' | 'FINAL_ESTIMATE' | 'EXIT';
+export type ServiceDocumentStatus = 'MISSING' | 'PUBLISHED';
+
+export interface ServiceDocumentItem {
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  directCost?: number;
+}
+
+export interface EstimatedCosts {
+  diagnosticFee: number;
+  partsCost: number;
+  laborCost: number;
+  advancePaid: number;
+  discountPercent: number;
+  currencyCode: string;
+  subtotal: number;
+  discountAmount: number;
+  totalDue: number;
+  receivedAmount: number;
+  remainingDue: number;
+}
+
+export interface ServiceDocument {
+  id?: UUID;
+  serviceSheetId: UUID;
+  type: ServiceDocumentType;
+  label: string;
+  status: ServiceDocumentStatus;
+  available: boolean;
+  number?: string;
+  documentAt?: ISODate;
+  agreementAt?: ISODate;
+  agreementStatus?: 'ACCEPTED' | 'REFUSED';
+  generatedAt?: ISODate;
+  estimatedRepairDays?: number;
+  productState?: 'REPAIRED' | 'INITIAL';
+  defectCause?: string;
+  finalNotes?: string;
+  estimatedCosts?: EstimatedCosts;
+  parts: ServiceDocumentItem[];
+  labor: ServiceDocumentItem[];
+  url?: string;
+}
+
+export interface GenerateServiceDocumentInput {
+  documentAt?: ISODate;
+  agreementAt?: ISODate;
+  agreementStatus?: 'ACCEPTED' | 'REFUSED';
+  estimatedRepairDays?: number;
+  productState?: 'REPAIRED' | 'INITIAL';
+  defectCause?: string;
+  finalNotes?: string;
+  estimatedCosts?: EstimatedCosts;
+  parts?: ServiceDocumentItem[];
+  labor?: ServiceDocumentItem[];
+}
+
+export interface ServiceDocumentRegisterRow {
+  serviceSheetId: UUID;
+  serviceSheetNumber: string;
+  clientId?: UUID;
+  clientName: string;
+  equipment: string;
+  brand?: string;
+  model?: string;
+  status?: ServiceSheetStatus;
+  receivedAt?: ISODate;
+  intakeNumber?: string;
+  intakeAt?: ISODate;
+  finalEstimateNumber?: string;
+  finalEstimateAt?: ISODate;
+  exitNumber?: string;
+  exitAt?: ISODate;
 }
 
 export type CommissionType = 'PERCENT_NET' | 'PERCENT_TOTAL' | 'FIXED';

@@ -1,4 +1,4 @@
-import { AppUpdateInfo, AuditLog, AuthSession, Client, ClientExpense, ClientExpenseDeleteResult, ClientFinancialOverview, ClientParticipant, Collaborator, CompanyDetails, CreateClientExpensePayload, DashboardMetrics, Paginated, Permission, Property, ServiceSheet, ServiceSheetPdf, UpdateClientExpensePayload, UpdateClientFinancialsPayload, User, UUID, WhatsAppMessage } from '@/types';
+import { AppUpdateInfo, AuditLog, AuthSession, Client, ClientExpense, ClientExpenseDeleteResult, ClientFinancialOverview, ClientParticipant, Collaborator, CompanyDetails, CreateClientExpensePayload, DashboardMetrics, GenerateServiceDocumentInput, Paginated, Permission, Property, ServiceDocument, ServiceDocumentRegisterRow, ServiceDocumentType, ServiceSheet, ServiceSheetPdf, UpdateClientExpensePayload, UpdateClientFinancialsPayload, User, UUID, WhatsAppMessage } from '@/types';
 
 export interface AuthRepository {
   login(username: string, password: string, device: string): Promise<AuthSession>;
@@ -47,6 +47,9 @@ export interface ServiceSheetRepository {
   remove(id: UUID): Promise<void>;
   saveSignature(id: UUID, signature: string): Promise<ServiceSheet>;
   generatePdf(id: UUID): Promise<ServiceSheetPdf>;
+  listDocuments(id: UUID): Promise<ServiceDocument[]>;
+  generateDocument(id: UUID, type: ServiceDocumentType, input?: GenerateServiceDocumentInput): Promise<ServiceDocument>;
+  listRegister(propertyId: UUID): Promise<ServiceDocumentRegisterRow[]>;
 }
 export interface CollaboratorRepository {
   list(propertyId: UUID): Promise<Collaborator[]>;

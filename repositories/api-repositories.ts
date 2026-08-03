@@ -48,6 +48,9 @@ export const serviceSheetRepository: ServiceSheetRepository = {
   remove: (id) => apiRequest(`/service-sheets/${id}`, { method: 'DELETE' }),
   saveSignature: (id, signature) => apiRequest(`/service-sheets/${id}/signature`, { method: 'POST', body: JSON.stringify({ signature }) }),
   generatePdf: (id) => apiRequest(`/service-sheets/${id}/pdf`, { method: 'POST' }),
+  listDocuments: (id) => apiRequest(`/service-sheets/${id}/documents`),
+  generateDocument: (id, type, input = {}) => apiRequest(`/service-sheets/${id}/documents/${type}`, { method: 'POST', body: JSON.stringify(input) }),
+  listRegister: (propertyId) => apiRequest(`/service-documents/register?propertyId=${encodeURIComponent(propertyId)}`),
 };
 export const collaboratorRepository: CollaboratorRepository = {
   list: (propertyId) => apiRequest(`/collaborators?propertyId=${propertyId}`),

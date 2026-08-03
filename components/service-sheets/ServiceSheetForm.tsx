@@ -1,4 +1,5 @@
 import { ClientFinanceSection, type ExpenseInput } from '@/components/clients/finance';
+import { AccessoriesField, hasNoAccessories, NO_ACCESSORIES_VALUE } from '@/components/service-sheets/AccessoriesField';
 import { ServiceSheetCollaborators } from '@/components/service-sheets/ServiceSheetCollaborators';
 import { SERVICE_STATUS_LABELS } from '@/components/service-sheets/ServiceSheetStatus';
 import { AppText } from '@/components/ui/AppText';
@@ -44,6 +45,7 @@ type Form = {
   repairRefused: boolean;
   productDelivered: boolean;
   receivedAt: string;
+  intakeAgreementAt: string;
   estimatedAt: string;
   completedAt: string;
   status: ServiceSheetStatus;
@@ -80,6 +82,7 @@ const blank: Form = {
   repairRefused: false,
   productDelivered: false,
   receivedAt: '',
+  intakeAgreementAt: '',
   estimatedAt: '',
   completedAt: '',
   status: 'NEW',
@@ -87,6 +90,7 @@ const blank: Form = {
 };
 
 function formFromSheet(sheet: ServiceSheet): Form {
+  const repairRefused = sheet.repairRefused ?? false;
   return {
     clientId: sheet.clientId,
     equipment: sheet.equipment,
@@ -107,10 +111,11 @@ function formFromSheet(sheet: ServiceSheet): Form {
     handoverNotes: sheet.handoverNotes ?? '',
     identityDocument: sheet.identityDocument ?? '',
     approveDiagnostics: sheet.approveDiagnostics ?? false,
-    approveRepair: sheet.approveRepair ?? false,
-    repairRefused: sheet.repairRefused ?? false,
+    approveRepair: repairRefused ? false : sheet.approveRepair ?? false,
+    repairRefused,
     productDelivered: sheet.productDelivered ?? false,
     receivedAt: sheet.receivedAt || new Date().toISOString(),
+    intakeAgreementAt: sheet.intakeAgreementAt ?? sheet.signedAt ?? sheet.receivedAt ?? '',
     estimatedAt: sheet.estimatedAt ?? '',
     completedAt: sheet.completedAt ?? '',
     status: sheet.status,
@@ -120,7 +125,7 @@ function formFromSheet(sheet: ServiceSheet): Form {
 
 export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
   const associatedClientId = sheet?.clientId ?? clientId;
-  const [form, setForm] = useState<Form>(() => sheet ? formFromSheet(sheet) : { ...blank, clientId: clientId ?? '', receivedAt: new Date().toISOString() });
+  const [form, setForm] = useState<Form>(() => { const now = new Date().toISOString(); return sheet ? formFromSheet(sheet) : { ...blank, clientId: clientId ?? '', receivedAt: now, intakeAgreementAt: now }; });
   const [client, setClient] = useState<Client | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(false);
@@ -229,7 +234,12 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
       setChoosingClient(false);
       return;
     }
-    setForm((current) => ({ ...current, [key]: value }));
+    setForm((current) => {
+      const next = { ...current, [key]: value };
+      if (key === 'approveRepair' && value === true) next.repairRefused = false;
+      if (key === 'repairRefused' && value === true) next.approveRepair = false;
+      return next;
+    });
   };
 
   const collaborators = financeOverview?.collaborators ?? (financeOverview?.collaborator ? [financeOverview.collaborator] : []);
@@ -288,7 +298,7 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
       brand: form.brand.trim(),
       model: form.model.trim(),
       serialNumber: form.serialNumber.trim(),
-      accessories: form.accessories.trim(),
+      accessories: hasNoAccessories(form.accessories) ? NO_ACCESSORIES_VALUE : form.accessories.trim(),
       reportedIssue: form.reportedIssue.trim(),
       technicalAssessment: form.technicalAssessment.trim(),
       workPerformed: form.workPerformed.trim(),
@@ -317,6 +327,7 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
 
     setLoading(true);
     try {
+      let documentWarning: string | null = null;
       if (canEditFinancials) await clientRepository.updateFinancials(form.clientId, financeValue);
       const saved = sheet
         ? await serviceSheetRepository.update(sheet.id, editableFields)
@@ -326,7 +337,17 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
           clientId: form.clientId,
           currencyCode: financeValue.currencyCode,
         });
-      showToast(sheet ? 'Fișa de service a fost actualizată.' : 'Fișa de service a fost creată.', 'success');
+      if (!sheet) {
+        const receivedAt = new Date(form.receivedAt).getTime();
+        const estimatedAt = form.estimatedAt ? new Date(form.estimatedAt).getTime() : Number.NaN;
+        const estimatedRepairDays = Number.isFinite(receivedAt) && Number.isFinite(estimatedAt) && estimatedAt > receivedAt ? Math.max(1, Math.ceil((estimatedAt - receivedAt) / 86_400_000)) : undefined;
+        try {
+          await serviceSheetRepository.generateDocument(saved.id, 'INTAKE', { agreementAt: form.intakeAgreementAt || new Date().toISOString(), agreementStatus: form.repairRefused ? 'REFUSED' : 'ACCEPTED', estimatedRepairDays });
+        } catch (documentError) {
+          documentWarning = documentError instanceof Error ? `Fișa a fost salvată, dar documentul de intrare nu a putut fi generat: ${documentError.message}` : 'Fișa a fost salvată, dar documentul de intrare nu a putut fi generat.';
+        }
+      }
+      showToast(documentWarning ?? (sheet ? 'Fișa de service a fost actualizată.' : 'Fișa de service și documentul de intrare au fost create.'), documentWarning ? 'error' : 'success');
       router.replace(('/service/service-sheets/' + saved.id) as never);
     } catch (error) {
       if (!sheet && error instanceof ApiError && error.status === 409) {
@@ -388,7 +409,7 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
         <View style={styles.field}><Input label="Model" value={form.model} onChangeText={(value) => update('model', value)} /></View>
         <View style={styles.field}><Input label="Serie" value={form.serialNumber} onChangeText={(value) => update('serialNumber', value)} /></View>
       </View>
-      <Input label="Accesorii predate" value={form.accessories} onChangeText={(value) => update('accessories', value)} />
+      <AccessoriesField value={form.accessories} onChange={(value) => update('accessories', value)} />
     </Card>
 
     <Card style={styles.section}>
@@ -403,6 +424,7 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
       <AppText variant="heading">Planificare și observații</AppText>
       <View style={styles.row}>
         <View style={styles.field}><DateTimeField label="Data primirii" value={form.receivedAt} onChange={(value) => update('receivedAt', value)} /></View>
+        {!sheet ? <View style={styles.field}><DateTimeField label="Data acordului" value={form.intakeAgreementAt} onChange={(value) => update('intakeAgreementAt', value)} showNow /></View> : null}
         <View style={styles.field}><DateTimeField label="Termen estimat" value={form.estimatedAt} onChange={(value) => update('estimatedAt', value)} allowClear /></View>
         <View style={styles.field}><DateTimeField label="Data finalizării" value={form.completedAt} onChange={(value) => update('completedAt', value)} allowClear /></View>
       </View>

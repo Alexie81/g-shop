@@ -1,13 +1,17 @@
+import { FinanceNumberField } from '@/components/clients/finance/FinanceNumberField';
+import { AccessoriesField, hasNoAccessories, NO_ACCESSORIES_VALUE } from '@/components/service-sheets/AccessoriesField';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
+import { DateTimeField } from '@/components/ui/DateTimeField';
 import { Input } from '@/components/ui/Input';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
-import { serviceSheetRepository } from '@/repositories/api-repositories';
+import { clientRepository, serviceSheetRepository } from '@/repositories/api-repositories';
 import { ApiError } from '@/services/api';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { ServiceSheet, UUID } from '@/types';
+import { calculateClientFinance, ClientFinanceValue, formatFinanceMoney } from '@/utils/client-finance';
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -33,6 +37,14 @@ type QuickSheetForm = {
   reportedIssue: string;
   technicalAssessment: string;
   technicianName: string;
+  diagnosticFee: number;
+  partsCost: number;
+  laborCost: number;
+  advancePaid: number;
+  discountPercent: number;
+  currencyCode: string;
+  estimatedRepairDays: string;
+  intakeAgreementAt: string;
   approveDiagnostics: boolean;
   approveRepair: boolean;
   repairRefused: boolean;
@@ -58,6 +70,14 @@ const emptyForm: QuickSheetForm = {
   reportedIssue: '',
   technicalAssessment: '',
   technicianName: '',
+  diagnosticFee: 0,
+  partsCost: 0,
+  laborCost: 0,
+  advancePaid: 0,
+  discountPercent: 0,
+  currencyCode: 'RON',
+  estimatedRepairDays: '',
+  intakeAgreementAt: '',
   approveDiagnostics: false,
   approveRepair: false,
   repairRefused: false,
@@ -66,6 +86,7 @@ const emptyForm: QuickSheetForm = {
 
 function formFromSheet(sheet?: ServiceSheet | null): QuickSheetForm {
   if (!sheet) return { ...emptyForm };
+  const repairRefused = sheet.repairRefused ?? false;
   return {
     equipment: sheet.equipment ?? '',
     brand: sheet.brand ?? '',
@@ -75,9 +96,17 @@ function formFromSheet(sheet?: ServiceSheet | null): QuickSheetForm {
     reportedIssue: sheet.reportedIssue ?? '',
     technicalAssessment: sheet.technicalAssessment ?? '',
     technicianName: sheet.technicianName ?? '',
+    diagnosticFee: 0,
+    partsCost: sheet.partsCost ?? 0,
+    laborCost: sheet.laborCost ?? 0,
+    advancePaid: 0,
+    discountPercent: 0,
+    currencyCode: sheet.currencyCode ?? 'RON',
+    estimatedRepairDays: '',
+    intakeAgreementAt: sheet.signedAt ?? '',
     approveDiagnostics: sheet.approveDiagnostics ?? false,
-    approveRepair: sheet.approveRepair ?? false,
-    repairRefused: sheet.repairRefused ?? false,
+    approveRepair: repairRefused ? false : sheet.approveRepair ?? false,
+    repairRefused,
     productDelivered: sheet.productDelivered ?? false,
   };
 }
@@ -88,6 +117,7 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
   const { showToast } = useToast();
   const [form, setForm] = useState<QuickSheetForm>(() => formFromSheet(existingSheet));
   const [saving, setSaving] = useState(false);
+  const [financeLoading, setFinanceLoading] = useState(false);
   const [signatureOpen, setSignatureOpen] = useState(false);
   const [pendingSignature, setPendingSignature] = useState<string | null>(null);
   const [signatureSaving, setSignatureSaving] = useState(false);
@@ -96,10 +126,23 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
   const translateY = useRef(new Animated.Value(640)).current;
   const canSign = hasPermission('service_sheets.sign');
   const canSave = existingSheet ? hasPermission('service_sheets.update') : hasPermission('service_sheets.create');
+  const estimate = useMemo(() => calculateClientFinance({
+    currencyCode: form.currencyCode || 'RON',
+    exchangeRateToRon: 1,
+    workPrice: form.partsCost + form.laborCost,
+    diagnosticFee: form.diagnosticFee,
+    advancePaid: form.advancePaid,
+    discountPercent: form.discountPercent,
+    actualPartsCost: 0,
+    displayedPartsCost: form.partsCost,
+    displayedLaborCost: form.laborCost,
+    paymentStatus: 'UNPAID',
+  } satisfies ClientFinanceValue, []), [form.advancePaid, form.currencyCode, form.diagnosticFee, form.discountPercent, form.laborCost, form.partsCost]);
 
   useEffect(() => {
     if (!visible) return;
-    setForm(formFromSheet(existingSheet));
+    const nextForm = formFromSheet(existingSheet);
+    setForm({ ...nextForm, intakeAgreementAt: nextForm.intakeAgreementAt || new Date().toISOString() });
     setSignatureOpen(false);
     setPendingSignature(null);
     setSignatureSaving(false);
@@ -109,6 +152,30 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
     translateY.setValue(640);
     Animated.spring(translateY, { toValue: 0, damping: 24, stiffness: 230, mass: 0.9, useNativeDriver: true }).start();
   }, [clientId, existingSheet, translateY, visible]);
+
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    setFinanceLoading(true);
+    clientRepository.getFinancials(clientId).then((overview) => {
+      if (cancelled) return;
+      const financials = overview.financials;
+      setForm((current) => ({
+        ...current,
+        diagnosticFee: financials.diagnosticFee ?? 0,
+        partsCost: financials.displayedPartsCost ?? current.partsCost,
+        laborCost: financials.displayedLaborCost ?? current.laborCost,
+        advancePaid: financials.advancePaid ?? 0,
+        discountPercent: financials.discountPercent ?? 0,
+        currencyCode: financials.currencyCode || current.currencyCode || 'RON',
+      }));
+    }).catch((error) => {
+      if (!cancelled) showToast(error instanceof Error ? error.message : 'Costurile clientului nu au putut fi încărcate.', 'error');
+    }).finally(() => {
+      if (!cancelled) setFinanceLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [clientId, showToast, visible]);
 
   const dismiss = useCallback(() => {
     if (savingRef.current) return;
@@ -134,7 +201,12 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
   }), [dismiss, translateY]);
 
   const update = <K extends keyof QuickSheetForm>(key: K, value: QuickSheetForm[K]) => {
-    setForm((current) => ({ ...current, [key]: value }));
+    setForm((current) => {
+      const next = { ...current, [key]: value };
+      if (key === 'approveRepair' && value === true) next.repairRefused = false;
+      if (key === 'repairRefused' && value === true) next.approveRepair = false;
+      return next;
+    });
   };
 
   const persist = useCallback(async (signature: string | null) => {
@@ -143,8 +215,16 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
       showToast('Completează problema reclamată de client.', 'error');
       return;
     }
+    if (form.discountPercent > 100) {
+      showToast('Reducerea nu poate depăși 100%.', 'error');
+      return;
+    }
+    if (!/^[A-Z]{3}$/.test(form.currencyCode.trim().toUpperCase())) {
+      showToast('Moneda trebuie completată cu un cod din 3 litere, de exemplu RON.', 'error');
+      return;
+    }
     if (!canSave) {
-      showToast(existingSheet ? 'Nu ai permisiunea de a actualiza fișa.' : 'Nu ai permisiunea de a crea fișe.', 'error');
+      showToast(existingSheet ? 'Nu ai permisiunea de a actualiza fișa de intrare.' : 'Nu ai permisiunea de a crea fișa de intrare.', 'error');
       return;
     }
 
@@ -155,10 +235,14 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
       brand: form.brand.trim(),
       model: form.model.trim(),
       serialNumber: form.serialNumber.trim(),
-      accessories: form.accessories.trim(),
+      accessories: hasNoAccessories(form.accessories) ? NO_ACCESSORIES_VALUE : form.accessories.trim(),
       reportedIssue: form.reportedIssue.trim(),
       technicalAssessment: form.technicalAssessment.trim(),
       technicianName: form.technicianName.trim(),
+      partsCost: form.partsCost,
+      laborCost: form.laborCost,
+      totalCost: estimate.totalDue,
+      currencyCode: form.currencyCode.trim().toUpperCase(),
       approveDiagnostics: form.approveDiagnostics,
       approveRepair: form.approveRepair,
       repairRefused: form.repairRefused,
@@ -166,6 +250,16 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
     };
 
     try {
+      await clientRepository.updateFinancials(clientId, {
+        currencyCode: form.currencyCode.trim().toUpperCase(),
+        workPrice: form.partsCost + form.laborCost,
+        diagnosticFee: form.diagnosticFee,
+        advancePaid: form.advancePaid,
+        discountPercent: form.discountPercent,
+        displayedPartsCost: form.partsCost,
+        displayedLaborCost: form.laborCost,
+      });
+
       let saved: ServiceSheet;
       let updatedExisting = Boolean(existingSheet);
       try {
@@ -190,14 +284,32 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
       }
 
       if (signature && canSign) saved = await serviceSheetRepository.saveSignature(saved.id, signature);
-      showToast(updatedExisting ? 'Fișa de service a fost actualizată.' : 'Fișa de service a fost creată.', 'success');
+      await serviceSheetRepository.generateDocument(saved.id, 'INTAKE', {
+        agreementAt: form.intakeAgreementAt,
+        agreementStatus: form.repairRefused ? 'REFUSED' : 'ACCEPTED',
+        estimatedRepairDays: form.estimatedRepairDays.trim() ? Number(form.estimatedRepairDays) : undefined,
+        estimatedCosts: {
+          diagnosticFee: form.diagnosticFee,
+          partsCost: form.partsCost,
+          laborCost: form.laborCost,
+          advancePaid: form.advancePaid,
+          discountPercent: form.discountPercent,
+          currencyCode: form.currencyCode.trim().toUpperCase(),
+          subtotal: estimate.subtotal,
+          discountAmount: estimate.discountAmount,
+          totalDue: estimate.totalDue,
+          receivedAmount: estimate.receivedAmount,
+          remainingDue: estimate.remainingDue,
+        },
+      });
+      showToast(updatedExisting ? 'Fișa de intrare a fost actualizată.' : 'Fișa de intrare a fost creată.', 'success');
       onCompleted(saved);
     } catch (error) {
       savingRef.current = false;
       setSaving(false);
-      showToast(error instanceof Error ? error.message : 'Fișa nu a putut fi salvată.', 'error');
+      showToast(error instanceof Error ? error.message : 'Fișa de intrare nu a putut fi salvată.', 'error');
     }
-  }, [canSave, canSign, clientId, existingSheet, form, hasPermission, onCompleted, propertyId, showToast]);
+  }, [canSave, canSign, clientId, estimate.discountAmount, estimate.receivedAmount, estimate.remainingDue, estimate.subtotal, estimate.totalDue, existingSheet, form, hasPermission, onCompleted, propertyId, showToast]);
 
   const submit = () => {
     if (savingRef.current) return;
@@ -221,7 +333,7 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
       setPendingSignature(null);
       setSignatureSaved(true);
       setSignatureOpen(false);
-      showToast('Semnătura a fost actualizată și fișa a fost regenerată.', 'success');
+      showToast('Semnătura a fost actualizată. Salvează fișa de intrare pentru regenerare.', 'success');
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Semnătura nu a putut fi actualizată.', 'error');
     } finally {
@@ -231,7 +343,7 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
 
   return <><Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={dismiss}>
     <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
-      <Pressable accessibilityLabel="Anulează fișa rapidă" style={StyleSheet.absoluteFill} onPress={dismiss} />
+      <Pressable accessibilityLabel="Anulează fișa de intrare" style={StyleSheet.absoluteFill} onPress={dismiss} />
       <KeyboardAvoidingView style={styles.positioner} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Animated.View style={[styles.sheet, { backgroundColor: colors.surfaceElevated, borderColor: colors.border, transform: [{ translateY }] }]}>
           <View style={styles.dragHeader}>
@@ -240,8 +352,8 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
               <View style={styles.headerRow}>
                 <View style={[styles.headerIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="document-text-outline" size={25} color={colors.primary} /></View>
                 <View style={styles.headerCopy}>
-                  <AppText variant="title">Fișă rapidă</AppText>
-                  <AppText variant="caption" muted>{clientName} · completează, semnează și generează</AppText>
+                  <AppText variant="title">Fișă de intrare</AppText>
+                  <AppText variant="caption" muted>{clientName} · recepție, cost estimativ și acord</AppText>
                 </View>
               </View>
             </View>
@@ -266,10 +378,31 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
               <View style={styles.field}><Input label="Model" value={form.model} onChangeText={(value) => update('model', value)} /></View>
               <View style={styles.field}><Input label="Serie" value={form.serialNumber} onChangeText={(value) => update('serialNumber', value)} /></View>
             </View>
-            <Input label="Accesorii predate" value={form.accessories} onChangeText={(value) => update('accessories', value)} placeholder="Încărcător, husă, cablu…" />
+            <AccessoriesField value={form.accessories} onChange={(value) => update('accessories', value)} />
             <Input label="Problema reclamată *" value={form.reportedIssue} onChangeText={(value) => update('reportedIssue', value)} multiline numberOfLines={4} style={styles.multiline} placeholder="Descrie pe scurt problema semnalată de client" />
             <Input label="Constatare inițială" value={form.technicalAssessment} onChangeText={(value) => update('technicalAssessment', value)} multiline numberOfLines={3} style={styles.multiline} />
             <Input label="Tehnician" value={form.technicianName} onChangeText={(value) => update('technicianName', value)} />
+
+            <View style={styles.sectionTitle}><Ionicons name="calculator-outline" size={20} color={palette.cyan} /><AppText variant="heading">Cost estimativ</AppText></View>
+            <AppText variant="caption" muted>Valorile sunt salvate în finanțele clientului și apar în fișa de intrare.</AppText>
+            {financeLoading ? <View style={[styles.financeNotice, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="sync-outline" size={18} color={colors.primary} /><AppText variant="caption" muted>Se încarcă valorile financiare existente…</AppText></View> : null}
+            <View style={styles.estimateGrid}>
+              <FinanceNumberField label="Diagnostic" value={form.diagnosticFee} onChange={(value) => update('diagnosticFee', value)} disabled={financeLoading} style={styles.estimateField} />
+              <FinanceNumberField label="Piese estimate" value={form.partsCost} onChange={(value) => update('partsCost', value)} disabled={financeLoading} style={styles.estimateField} />
+              <FinanceNumberField label="Manoperă estimată" value={form.laborCost} onChange={(value) => update('laborCost', value)} disabled={financeLoading} style={styles.estimateField} />
+              <FinanceNumberField label="Avans încasat" value={form.advancePaid} onChange={(value) => update('advancePaid', value)} disabled={financeLoading} style={styles.estimateField} />
+              <FinanceNumberField label="Reducere" value={form.discountPercent} onChange={(value) => update('discountPercent', value)} disabled={financeLoading} percentage style={styles.estimateField} />
+            </View>
+            <View style={styles.row}>
+              <View style={styles.field}><Input label="Monedă" value={form.currencyCode} editable={!financeLoading} autoCapitalize="characters" maxLength={3} onChangeText={(value) => update('currencyCode', value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3))} placeholder="RON" /></View>
+              <View style={styles.field}><Input label="Termen estimat (zile lucrătoare)" value={form.estimatedRepairDays} keyboardType="number-pad" inputMode="numeric" onChangeText={(value) => update('estimatedRepairDays', value.replace(/\D/g, '').slice(0, 3))} placeholder="ex. 3" /></View>
+            </View>
+            <DateTimeField label="Data acordului pentru costul estimativ" value={form.intakeAgreementAt} onChange={(value) => update('intakeAgreementAt', value)} allowClear showNow />
+            <View style={[styles.estimateSummary, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
+              <EstimateMetric label="TOTAL ESTIMAT" value={formatFinanceMoney(estimate.totalDue, form.currencyCode || 'RON')} color={colors.primary} />
+              <EstimateMetric label="AVANS" value={formatFinanceMoney(Math.min(form.advancePaid, estimate.totalDue), form.currencyCode || 'RON')} color={palette.purple} />
+              <EstimateMetric label="REST ESTIMAT" value={formatFinanceMoney(estimate.remainingDue, form.currencyCode || 'RON')} color={estimate.remainingDue > 0 ? palette.warning : palette.success} />
+            </View>
 
             <View style={styles.sectionTitle}><Ionicons name="shield-checkmark-outline" size={20} color={palette.purple} /><AppText variant="heading">Acordul clientului</AppText></View>
             <AppText variant="caption" muted>Bifele sunt salvate în fișă împreună cu semnătura clientului.</AppText>
@@ -282,15 +415,15 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
 
             {canSign ? <View style={[styles.signaturePrompt, { borderColor: pendingSignature || signatureSaved ? palette.success : colors.border, backgroundColor: pendingSignature || signatureSaved ? `${palette.success}10` : colors.surfaceMuted }]}>
               <View style={[styles.signaturePromptIcon, { backgroundColor: pendingSignature || signatureSaved ? `${palette.success}18` : `${palette.purple}16` }]}><Ionicons name={pendingSignature || signatureSaved ? 'checkmark-circle-outline' : 'pencil-outline'} size={24} color={pendingSignature || signatureSaved ? palette.success : palette.purple} /></View>
-              <View style={styles.signaturePromptCopy}><AppText variant="label">{signatureSaved ? 'Semnătura a fost actualizată' : pendingSignature ? 'Semnătura este pregătită' : existingSheet?.signatureUrl ? 'Fișa are deja o semnătură' : 'Semnătura clientului'}</AppText><AppText variant="caption" muted>{signatureSaved ? 'Este salvată online și apare în PDF-ul regenerat.' : pendingSignature ? 'Va fi salvată împreună cu fișa de service.' : 'Deschide cadrul dedicat pentru ca persoana să poată semna fără conflict cu scrollul.'}</AppText></View>
+              <View style={styles.signaturePromptCopy}><AppText variant="label">{signatureSaved ? 'Semnătura a fost actualizată' : pendingSignature ? 'Semnătura este pregătită' : existingSheet?.signatureUrl ? 'Fișa are deja o semnătură' : 'Semnătura clientului'}</AppText><AppText variant="caption" muted>{signatureSaved ? 'Este salvată online și va apărea în fișa de intrare regenerată.' : pendingSignature ? 'Va fi salvată împreună cu fișa de intrare.' : 'Deschide cadrul dedicat pentru ca persoana să poată semna fără conflict cu scrollul.'}</AppText></View>
               <Button compact label={pendingSignature || signatureSaved || existingSheet?.signatureUrl ? 'Resemnează' : 'Semnează clientul'} icon="pencil-outline" disabled={signatureSaving} onPress={() => setSignatureOpen(true)} style={styles.signaturePromptButton} />
             </View> : null}
 
             <Button
-              label={existingSheet ? 'Actualizează și generează fișa' : 'Creează și generează fișa'}
+              label={existingSheet ? 'Actualizează fișa de intrare' : 'Creează fișa de intrare'}
               icon="checkmark-circle-outline"
               loading={saving}
-              disabled={!canSave}
+              disabled={!canSave || financeLoading}
               onPress={submit}
               style={styles.submit}
             />
@@ -388,6 +521,13 @@ function ConsentOption({ label, icon, active, danger = false, onPress }: { label
   </Pressable>;
 }
 
+function EstimateMetric({ label, value, color }: { label: string; value: string; color: string }) {
+  return <View style={styles.estimateMetric}>
+    <AppText variant="caption" muted style={styles.estimateMetricLabel}>{label}</AppText>
+    <AppText variant="label" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={{ color }}>{value}</AppText>
+  </View>;
+}
+
 const styles = StyleSheet.create({
   overlay: { flex: 1 },
   positioner: { flex: 1, justifyContent: 'flex-end' },
@@ -406,6 +546,12 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   field: { minWidth: 210, flex: 1 },
   multiline: { minHeight: 82, textAlignVertical: 'top' },
+  financeNotice: { minHeight: 42, borderRadius: radius.md, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  estimateGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  estimateField: { minWidth: 210, flexBasis: '45%', flexGrow: 1 },
+  estimateSummary: { minHeight: 78, borderWidth: 1, borderRadius: radius.lg, padding: spacing.sm, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  estimateMetric: { minWidth: 126, flex: 1, justifyContent: 'center', gap: 3, paddingHorizontal: spacing.sm },
+  estimateMetricLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 0.45 },
   consentGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   consentOption: { minHeight: 54, minWidth: 205, flexBasis: '46%', flexGrow: 1, borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   consentIcon: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
