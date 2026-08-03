@@ -85,12 +85,7 @@ export async function scheduleLocalMissingDocumentReminder(propertyId: string) {
     badge: incomplete.length,
     data: { route: '/service/register?filter=INCOMPLETE', propertyId },
   };
-  const noticeKey = `push.missing-documents.notice.${propertyId}`;
-  const fingerprint = `${new Date().toISOString().slice(0, 10)}:${incomplete.map(({ row, missing }) => `${row.serviceSheetNumber}:${missing.join(',')}`).join('|')}`;
-  if (await preferenceStorage.get(noticeKey) !== fingerprint) {
-    await Notifications.scheduleNotificationAsync({ content, trigger: null });
-    await preferenceStorage.set(noticeKey, fingerprint);
-  }
+  await Notifications.scheduleNotificationAsync({ content, trigger: null });
   const id = await Notifications.scheduleNotificationAsync({
     content,
     trigger: {

@@ -4,7 +4,7 @@ import { notificationRoute, refreshMissingDocumentNotifications } from '@/servic
 import * as Notifications from 'expo-notifications';
 import { Href, router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 export function NotificationCoordinator() {
   const { ready, user } = useAuth();
@@ -27,7 +27,12 @@ export function NotificationCoordinator() {
 
   useEffect(() => {
     if (Platform.OS === 'web' || !ready || loading || !user || !activeProperty || activeProperty.type !== 'SERVICE') return;
-    void refreshMissingDocumentNotifications(activeProperty.id).catch(() => undefined);
+    const refresh = () => void refreshMissingDocumentNotifications(activeProperty.id).catch(() => undefined);
+    refresh();
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refresh();
+    });
+    return () => subscription.remove();
   }, [activeProperty, loading, ready, user]);
 
   return null;
