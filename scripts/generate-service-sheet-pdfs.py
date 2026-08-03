@@ -692,7 +692,7 @@ def draw_signatures(c: canvas.Canvas, data: dict[str, Any], show_company: bool) 
     draw_line_field(c, left_x, y + 82, left_w, "Data / ora", date_time_display(text(data, "sheet", "signedAt")))
     c.setFillColor(SLATE)
     c.setFont("GShop-Bold", 6.0)
-    c.drawString(left_x, y + 60, "SEMNĂTURĂ CLIENT")
+    c.drawString(left_x, y + 68, "SEMNĂTURĂ CLIENT")
     signature = image_source(text(data, "sheet", "signatureUrl"))
     sheet = data.get("sheet", {}) if isinstance(data.get("sheet"), dict) else {}
     if signature:
@@ -724,7 +724,7 @@ def draw_signatures(c: canvas.Canvas, data: dict[str, Any], show_company: bool) 
     if show_company:
         c.setFillColor(SLATE)
         c.setFont("GShop-Bold", 5.8)
-        c.drawString(right_x, y + 66, "ȘTAMPILĂ")
+        c.drawString(right_x, y + 68, "ȘTAMPILĂ")
         stamp = image_source(text(data, "company", "stampUrl"))
         if stamp:
             c.drawImage(stamp, right_x, y + 16, width=right_w, height=38, preserveAspectRatio=True, mask="auto")

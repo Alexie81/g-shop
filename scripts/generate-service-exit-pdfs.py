@@ -374,9 +374,9 @@ def draw_pickup(pdf: canvas.Canvas, data: dict[str, Any]) -> None:
     )
     pdf.setFillColor(SLATE)
     pdf.setFont("GShop-Bold", 6.3)
-    pdf.drawString(inner_x, y + height - 112, "SEMNĂTURĂ CLIENT")
+    pdf.drawString(inner_x, y + height - 102, "SEMNĂTURĂ CLIENT")
     stamp_x = 401
-    pdf.drawString(stamp_x, y + height - 112, "ȘTAMPILĂ")
+    pdf.drawString(stamp_x, y + height - 102, "ȘTAMPILĂ")
     pdf.setStrokeColor(HexColor("#C8D3E3"))
     pdf.setLineWidth(0.85)
     pdf.line(inner_x, 145, inner_x + 102, 145)

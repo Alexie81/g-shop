@@ -777,9 +777,9 @@ def draw_acceptance(pdf: canvas.Canvas, data: dict[str, Any], y: float = 205, he
     )
     pdf.setFillColor(SLATE)
     pdf.setFont("GShop-Bold", 6.1)
-    pdf.drawString(inner_x, y + height - 91, "SEMNĂTURĂ CLIENT")
+    pdf.drawString(inner_x, y + height - 81, "SEMNĂTURĂ CLIENT")
     stamp_x = 403
-    pdf.drawString(stamp_x, y + height - 91, "ȘTAMPILĂ")
+    pdf.drawString(stamp_x, y + height - 81, "ȘTAMPILĂ")
     pdf.setStrokeColor(HexColor("#C8D3E3"))
     pdf.setLineWidth(0.85)
     pdf.line(inner_x, 220, inner_x + 102, 220)
