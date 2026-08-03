@@ -3,6 +3,7 @@ param(
   [Parameter(Mandatory = $true)][string]$FtpUser,
   [Parameter(Mandatory = $true)][string]$FtpPassword,
   [string]$RemotePath = 'public_html/app-api',
+  [string[]]$RelativeFiles,
   [switch]$SkipCertificateCheck
 )
 
@@ -50,11 +51,20 @@ function Send-FtpFile {
 
 $uploadsRoot = Join-Path $apiRoot 'uploads'
 $documentStorageRoot = Join-Path $apiRoot 'storage\service-documents'
-$files = Get-ChildItem -LiteralPath $apiRoot -File -Recurse | Where-Object {
-  $_.Name -ne '.env' -and
-  $_.Name -ne '.installed' -and
-  -not $_.FullName.StartsWith($uploadsRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase) -and
-  -not $_.FullName.StartsWith($documentStorageRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)
+$files = if ($RelativeFiles) {
+  foreach ($relativeFile in $RelativeFiles) {
+    $candidate = [System.IO.Path]::GetFullPath((Join-Path $apiRoot $relativeFile))
+    if (-not $candidate.StartsWith($apiRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) { throw "Fișier în afara API-ului: $relativeFile" }
+    if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { throw "Fișier API inexistent: $relativeFile" }
+    Get-Item -LiteralPath $candidate
+  }
+} else {
+  Get-ChildItem -LiteralPath $apiRoot -File -Recurse | Where-Object {
+    $_.Name -ne '.env' -and
+    $_.Name -ne '.installed' -and
+    -not $_.FullName.StartsWith($uploadsRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase) -and
+    -not $_.FullName.StartsWith($documentStorageRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)
+  }
 }
 foreach ($file in $files) {
   $relative = $file.FullName.Substring($apiRoot.Length).TrimStart('\').Replace('\', '/')
