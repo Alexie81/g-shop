@@ -688,46 +688,40 @@ def draw_signatures(c: canvas.Canvas, data: dict[str, Any], show_company: bool) 
 
     left_x = MARGIN + 12
     left_w = split - left_x - 12
+    right_x = split + 12
+    right_w = PAGE_W - MARGIN - right_x - 12
     draw_line_field(c, left_x, y + 106, left_w, "Nume client", full_name(data))
     draw_line_field(c, left_x, y + 82, left_w, "Data / ora", date_time_display(text(data, "sheet", "signedAt")))
+    draw_line_field(c, right_x, y + 106, right_w, "Tehnician", text(data, "sheet", "technicianName"))
     c.setFillColor(SLATE)
     c.setFont("GShop-Bold", 6.0)
-    c.drawString(left_x, y + 68, "SEMNĂTURĂ CLIENT")
+    if show_company:
+        c.drawString(left_x, y + 68, "ȘTAMPILĂ")
+        stamp = image_source(text(data, "company", "stampUrl"))
+        if stamp:
+            c.drawImage(stamp, left_x, y + 10, width=96, height=50, preserveAspectRatio=True, mask="auto")
+
+    c.drawString(right_x, y + 68, "SEMNĂTURĂ CLIENT")
     signature = image_source(text(data, "sheet", "signatureUrl"))
     sheet = data.get("sheet", {}) if isinstance(data.get("sheet"), dict) else {}
     if signature:
-        c.drawImage(signature, left_x, y + 16, width=left_w, height=38, preserveAspectRatio=True, mask="auto")
+        c.drawImage(signature, right_x, y + 16, width=right_w, height=38, preserveAspectRatio=True, mask="auto")
     elif sheet.get("demoSignature"):
         c.saveState()
         c.setStrokeColor(ELECTRIC_DARK)
         c.setLineWidth(1.35)
         signature_path = c.beginPath()
-        signature_path.moveTo(left_x + 40, y + 28)
-        signature_path.curveTo(left_x + 58, y + 48, left_x + 48, y + 18, left_x + 70, y + 37)
-        signature_path.curveTo(left_x + 82, y + 48, left_x + 78, y + 18, left_x + 92, y + 33)
-        signature_path.curveTo(left_x + 108, y + 48, left_x + 101, y + 17, left_x + 118, y + 30)
-        signature_path.curveTo(left_x + 135, y + 43, left_x + 142, y + 20, left_x + 154, y + 29)
-        signature_path.curveTo(left_x + 169, y + 41, left_x + 180, y + 22, left_x + 191, y + 28)
-        signature_path.curveTo(left_x + 205, y + 35, left_x + 220, y + 24, left_x + 236, y + 28)
+        signature_path.moveTo(right_x + 10, y + 28)
+        signature_path.curveTo(right_x + 28, y + 48, right_x + 30, y + 18, right_x + 48, y + 36)
+        signature_path.curveTo(right_x + 64, y + 48, right_x + 66, y + 18, right_x + 82, y + 32)
+        signature_path.curveTo(right_x + 98, y + 44, right_x + 110, y + 21, right_x + min(right_w - 8, 134), y + 29)
         c.drawPath(signature_path, fill=0, stroke=1)
         c.setLineWidth(0.8)
-        c.line(left_x + 31, y + 23, left_x + 245, y + 23)
+        c.line(right_x, y + 23, right_x + right_w, y + 23)
         c.restoreState()
     else:
         c.setStrokeColor(HexColor("#C8D3E3"))
-        c.line(left_x, y + 16, left_x + left_w, y + 16)
-
-    right_x = split + 12
-    right_w = PAGE_W - MARGIN - right_x - 12
-    draw_line_field(c, right_x, y + 106, right_w, "Tehnician", text(data, "sheet", "technicianName"))
-
-    if show_company:
-        c.setFillColor(SLATE)
-        c.setFont("GShop-Bold", 5.8)
-        c.drawString(right_x, y + 68, "ȘTAMPILĂ")
-        stamp = image_source(text(data, "company", "stampUrl"))
-        if stamp:
-            c.drawImage(stamp, right_x, y + 16, width=right_w, height=38, preserveAspectRatio=True, mask="auto")
+        c.line(right_x, y + 16, right_x + right_w, y + 16)
 
 
 def build_pdf(output: Path, data: dict[str, Any], variant: Variant, show_company: bool) -> Path:

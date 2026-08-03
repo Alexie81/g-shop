@@ -562,11 +562,11 @@ function gshop_document_overlay_intake(
         gshop_pdf_text($pdf, 365, 291, 'DATA ȘI ORA', 5.8, 'B', 62, 'L', gshop_document_color('slate'));
         gshop_document_source_line($pdf, 427, 288, 527, 288, 'lineDark', .8);
         gshop_document_shrink_text($pdf, 431, 290, gshop_document_date($document['agreementAt'] ?? $sheet['signedAt'] ?? ''), 93, 6.5, 5.1, '');
-        gshop_pdf_text($pdf, 33, 267, 'SEMNĂTURĂ CLIENT', 6.1, 'B', 150, 'L', gshop_document_color('slate'));
-        gshop_pdf_text($pdf, 365, 267, 'ȘTAMPILĂ', 6.1, 'B', 150, 'L', gshop_document_color('slate'));
-        gshop_document_source_line($pdf, 33, 220, 135, 220, 'lineDark', .85);
-        gshop_document_place_image($pdf, $signature['path'] ?? null, 35, 222, 98, 27, $signature);
-        gshop_document_place_image($pdf, $stampPath, 364, 158, 96, 96);
+        gshop_pdf_text($pdf, 33, 267, 'ȘTAMPILĂ', 6.1, 'B', 150, 'L', gshop_document_color('slate'));
+        gshop_pdf_text($pdf, 365, 267, 'SEMNĂTURĂ CLIENT', 6.1, 'B', 150, 'L', gshop_document_color('slate'));
+        gshop_document_source_line($pdf, 365, 220, 467, 220, 'lineDark', .85);
+        gshop_document_place_image($pdf, $stampPath, 32, 158, 96, 96);
+        gshop_document_place_image($pdf, $signature['path'] ?? null, 367, 222, 98, 27, $signature);
     }
     gshop_document_footer($pdf, $page, 2, 'G-SHOP | INTRARE SERVICE');
 }
@@ -887,11 +887,11 @@ function gshop_document_overlay_final_agreement(Fpdi $pdf, array $document, arra
     gshop_pdf_text($pdf, 370, 262, 'DATA / ORA', 5.7, 'B', 58, 'L', gshop_document_color('slate'));
     gshop_document_source_line($pdf, 428, 259, 528, 259, 'lineDark', .8);
     gshop_document_shrink_text($pdf, 432, 261, gshop_document_date($document['agreementAt'] ?? $agreement['date'] ?? ''), 93, 6.3, 5.0, '');
-    gshop_pdf_text($pdf, 44, 234, 'SEMNĂTURĂ CLIENT', 6.2, 'B', 150, 'L', gshop_document_color('slate'));
-    gshop_pdf_text($pdf, 370, 234, 'ȘTAMPILĂ', 6.2, 'B', 143, 'L', gshop_document_color('slate'));
-    gshop_document_source_line($pdf, 44, 195, 146, 195, 'lineDark', .85);
-    gshop_document_place_image($pdf, $signature['path'] ?? null, 46, 197, 98, 20, $signature);
-    gshop_document_place_image($pdf, $stampPath, 369, 126, 96, 96);
+    gshop_pdf_text($pdf, 44, 234, 'ȘTAMPILĂ', 6.2, 'B', 150, 'L', gshop_document_color('slate'));
+    gshop_pdf_text($pdf, 370, 234, 'SEMNĂTURĂ CLIENT', 6.2, 'B', 143, 'L', gshop_document_color('slate'));
+    gshop_document_source_line($pdf, 370, 195, 472, 195, 'lineDark', .85);
+    gshop_document_place_image($pdf, $stampPath, 43, 126, 96, 96);
+    gshop_document_place_image($pdf, $signature['path'] ?? null, 372, 197, 98, 20, $signature);
 }
 
 /** @param array{path:string,width:int,height:int}|null $signature */
@@ -969,11 +969,11 @@ function gshop_document_overlay_exit(Fpdi $pdf, array $document, array $snapshot
     gshop_pdf_text($pdf, 390, 211, 'DATA ȘI ORA', 5.7, 'B', 62, 'L', gshop_document_color('slate'));
     gshop_document_source_line($pdf, 452, 208, 552, 208, 'lineDark', .8);
     gshop_document_shrink_text($pdf, 456, 210, gshop_document_date($date), 93, 6.3, 4.9, '');
-    gshop_pdf_text($pdf, 38, 181, 'SEMNĂTURĂ CLIENT', 6.3, 'B', 150, 'L', gshop_document_color('slate'));
-    gshop_pdf_text($pdf, 390, 181, 'ȘTAMPILĂ', 6.3, 'B', 155, 'L', gshop_document_color('slate'));
-    gshop_document_source_line($pdf, 38, 145, 140, 145, 'lineDark', .85);
-    gshop_document_place_image($pdf, $signature['path'] ?? null, 40, 147, 98, 18, $signature);
-    gshop_document_place_image($pdf, $stampPath, 389, 73, 96, 96);
+    gshop_pdf_text($pdf, 38, 181, 'ȘTAMPILĂ', 6.3, 'B', 150, 'L', gshop_document_color('slate'));
+    gshop_pdf_text($pdf, 390, 181, 'SEMNĂTURĂ CLIENT', 6.3, 'B', 155, 'L', gshop_document_color('slate'));
+    gshop_document_source_line($pdf, 390, 145, 492, 145, 'lineDark', .85);
+    gshop_document_place_image($pdf, $stampPath, 37, 73, 96, 96);
+    gshop_document_place_image($pdf, $signature['path'] ?? null, 392, 147, 98, 18, $signature);
     gshop_document_footer($pdf, 1, 1, 'G-SHOP | IEȘIRE SERVICE');
 }
 
@@ -1021,11 +1021,11 @@ function gshop_document_overlay_warranty(Fpdi $pdf, array $document, array $snap
     gshop_pdf_text($pdf, 360, 237, 'DATA ȘI ORA', 5.7, 'B', 57, 'L', gshop_document_color('slate'));
     gshop_document_source_line($pdf, 417, 233, 517, 233, 'lineDark', .8);
     gshop_document_shrink_text($pdf, 421, 235, gshop_document_date($document['documentAt'] ?? $warranty['date'] ?? ''), 93, 6.3, 5.0, '');
-    gshop_pdf_text($pdf, 36, 208, 'SEMNĂTURĂ CLIENT', 5.8, 'B', 150, 'L', gshop_document_color('slate'));
-    gshop_pdf_text($pdf, 360, 208, 'ȘTAMPILĂ', 5.8, 'B', 150, 'L', gshop_document_color('slate'));
-    gshop_document_source_line($pdf, 36, 172, 138, 172, 'lineDark', .85);
-    gshop_document_place_image($pdf, $signature['path'] ?? null, 38, 174, 98, 18, $signature);
-    gshop_document_place_image($pdf, $stampPath, 359, 106, 90, 90);
+    gshop_pdf_text($pdf, 36, 208, 'ȘTAMPILĂ', 5.8, 'B', 150, 'L', gshop_document_color('slate'));
+    gshop_pdf_text($pdf, 360, 208, 'SEMNĂTURĂ CLIENT', 5.8, 'B', 150, 'L', gshop_document_color('slate'));
+    gshop_document_source_line($pdf, 360, 172, 462, 172, 'lineDark', .85);
+    gshop_document_place_image($pdf, $stampPath, 35, 106, 90, 90);
+    gshop_document_place_image($pdf, $signature['path'] ?? null, 362, 174, 98, 18, $signature);
     gshop_document_footer($pdf, 1, 1, 'G-SHOP | CERTIFICAT GARANȚIE');
 }
 
@@ -1118,7 +1118,7 @@ function generate_service_document_pdf(
         'hash' => hash_file('sha256', $template) ?: '',
     ];
     $fingerprint = hash('sha256', serialize([
-        'version' => 32,
+        'version' => 33,
         'type' => $normalizedType,
         'document' => $document,
         'snapshot' => $snapshot,

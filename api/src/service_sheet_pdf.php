@@ -507,9 +507,9 @@ function gshop_pdf_overlay_page_two(Fpdi $pdf, array $sheet, array $client, stri
 
     $signature = gshop_pdf_signature_image($signaturePath);
     if ($signature) {
-        $boxX = 34.0;
+        $boxX = 381.0;
         $boxY = 517.0;
-        $boxWidth = 323.0;
+        $boxWidth = 172.0;
         $boxHeight = 38.0;
         $scale = min($boxWidth / $signature['width'], $boxHeight / $signature['height']);
         $drawWidth = $signature['width'] * $scale;
@@ -526,13 +526,13 @@ function gshop_pdf_overlay_page_two(Fpdi $pdf, array $sheet, array $client, stri
     if (!empty($sheet['showCompanyDetails'])) {
         $pdf->SetFillColor(255, 255, 255);
         $pdf->SetDrawColor(255, 255, 255);
-        $pdf->Rect(378, 493, 187, 70, 'F');
-        gshop_pdf_text($pdf, 381, 339, 'ȘTAMPILĂ', 5.8, 'B', 150, 'L', [98, 113, 138]);
+        $pdf->Rect(32, 493, 110, 70, 'F');
+        gshop_pdf_text($pdf, 34, 339, 'ȘTAMPILĂ', 5.8, 'B', 100, 'L', [98, 113, 138]);
         $stamp = gshop_pdf_stamp_image($stampPath);
         if ($stamp) {
             $dimensions = @getimagesize($stamp);
             if (is_array($dimensions) && (int)$dimensions[0] > 0 && (int)$dimensions[1] > 0) {
-                $boxX = 380.0;
+                $boxX = 34.0;
                 $boxY = 513.0;
                 $boxWidth = 58.0;
                 $boxHeight = 58.0;
@@ -587,7 +587,7 @@ function generate_service_sheet_pdf(array $sheet, array $client, array $financia
     $output = $directory . '/' . $filename;
     $metadata = $output . '.sha256';
     $fingerprint = hash('sha256', serialize([
-        'version' => 7,
+        'version' => 8,
         'sheet' => $sheet,
         'client' => $client,
         'financial' => $financial,

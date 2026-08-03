@@ -672,7 +672,7 @@ def draw_estimated_costs(
     height: float = 234,
     number: int = 4,
 ) -> None:
-    section_title(pdf, section_y, number, "Cost estimativ și plată", "completat înainte de începerea reparației")
+    section_title(pdf, section_y, number, "Cost estimativ", "completat înainte de începerea reparației")
     y = box_y
     rounded_box(pdf, MARGIN, y, CONTENT_W, height)
     inner_x = MARGIN + 11
@@ -777,12 +777,12 @@ def draw_acceptance(pdf: canvas.Canvas, data: dict[str, Any], y: float = 205, he
     )
     pdf.setFillColor(SLATE)
     pdf.setFont("GShop-Bold", 6.1)
-    pdf.drawString(inner_x, y + height - 81, "SEMNĂTURĂ CLIENT")
-    stamp_x = 365
-    pdf.drawString(stamp_x, y + height - 81, "ȘTAMPILĂ")
+    pdf.drawString(inner_x, y + height - 81, "ȘTAMPILĂ")
+    signature_x = 365
+    pdf.drawString(signature_x, y + height - 81, "SEMNĂTURĂ CLIENT")
     pdf.setStrokeColor(HexColor("#C8D3E3"))
     pdf.setLineWidth(0.85)
-    pdf.line(inner_x, 220, inner_x + 102, 220)
+    pdf.line(signature_x, 220, signature_x + 102, 220)
     # Ștampila se aplică direct pe fundal, fără chenar ajutător.
 
 
