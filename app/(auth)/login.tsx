@@ -15,14 +15,14 @@ import { Animated, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView,
 export default function LoginScreen() {
   const { colors, isDark } = useAppTheme();
   const { login, savedUsername } = useAuth();
-  const [username, setUsername] = useState(savedUsername || 'admin');
-  const [password, setPassword] = useState('admin');
-  const [remember, setRemember] = useState(true);
+  const [username, setUsername] = useState(savedUsername);
+  const [password, setPassword] = useState('');
+  const [remember, setRemember] = useState(Boolean(savedUsername));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const entrance = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => { if (savedUsername) setUsername(savedUsername); }, [savedUsername]);
+  useEffect(() => { if (savedUsername) { setUsername(savedUsername); setRemember(true); } }, [savedUsername]);
   useEffect(() => {
     Animated.spring(entrance, { toValue: 1, damping: 18, stiffness: 110, mass: 0.8, useNativeDriver: true }).start();
   }, [entrance]);
