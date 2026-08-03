@@ -212,7 +212,7 @@ export default function ReportsScreen() {
             <StatCard style={{ flexGrow: 1, flexBasis: cardBasis }} label="G-Shop Net" value={formatCurrency(report.metrics.gshopNet)} icon="wallet-outline" color={palette.purple} />
             <StatCard style={{ flexGrow: 1, flexBasis: cardBasis }} label="Venituri on hold" value={formatCurrency(report.metrics.revenueOnHold)} icon="hourglass-outline" color={palette.warning} />
             <StatCard style={{ flexGrow: 1, flexBasis: cardBasis }} label="Total încasări" value={formatCurrency(report.metrics.totalRevenue)} icon="cash-outline" color={palette.success} />
-            <StatCard style={{ flexGrow: 1, flexBasis: cardBasis }} label="Total cheltuieli" value={formatCurrency(report.metrics.totalExpenses)} icon="receipt-outline" color={palette.warning} />
+            <StatCard style={{ flexGrow: 1, flexBasis: cardBasis }} label="Total cheltuieli" value={formatCurrency(report.metrics.totalExpenses)} icon="receipt-outline" color={palette.warning} helper="Costuri interne + comisioane achitate" />
             <StatCard
               style={{ flexGrow: 1, flexBasis: cardBasis }}
               label="Total colaboratori"

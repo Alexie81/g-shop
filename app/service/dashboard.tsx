@@ -61,7 +61,7 @@ export default function DashboardScreen() {
         <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="G-Shop Net" value={formatCurrency(metrics.gshopNet)} icon="wallet-outline" color={palette.purple} />
         <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Venituri on hold" value={formatCurrency(metrics.revenueOnHold)} icon="hourglass-outline" color={palette.warning} />
         <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Total încasări" value={formatCurrency(metrics.totalRevenue)} icon="cash-outline" color={palette.success} />
-        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Total cheltuieli" value={formatCurrency(metrics.totalExpenses)} icon="receipt-outline" color={palette.warning} />
+        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Total cheltuieli" value={formatCurrency(metrics.totalExpenses)} icon="receipt-outline" color={palette.warning} helper="Costuri interne + comisioane achitate" />
         <StatCard
           style={{ flexGrow: 1, flexBasis: statCardBasis }}
           label="Total colaboratori"
