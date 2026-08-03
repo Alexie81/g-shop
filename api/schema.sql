@@ -140,6 +140,22 @@ CREATE TABLE IF NOT EXISTS collaborator_properties (
   CONSTRAINT fk_cp_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS technicians (
+  id BINARY(16) PRIMARY KEY,
+  property_id BINARY(16) NOT NULL,
+  name VARCHAR(120) NOT NULL,
+  phone VARCHAR(24) NULL,
+  specialty VARCHAR(100) NULL,
+  notes VARCHAR(500) NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  created_by BINARY(16) NOT NULL,
+  updated_by BINARY(16) NOT NULL,
+  INDEX idx_technicians_property_active (property_id, is_active, name),
+  CONSTRAINT fk_technician_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS clients (
   id BINARY(16) PRIMARY KEY,
   property_id BINARY(16) NOT NULL,

@@ -1,6 +1,7 @@
 import { AppHeader } from '@/components/layout/AppHeader';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
+import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { Screen } from '@/components/ui/Screen';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProperty } from '@/contexts/PropertyContext';
@@ -26,6 +27,7 @@ export default function MoreScreen() {
   const [logoutLoading, setLogoutLoading] = useState(false);
   const allItems: Item[] = [
     { label: 'Colaboratori', description: 'Atribuiri și comisioane', icon: 'people-circle-outline', color: palette.cyan, route: '/service/collaborators', permission: 'collaborators.view' },
+    { label: 'Tehnicieni', description: 'Echipă și atribuirea fișelor', icon: 'construct-outline', color: palette.purple, route: '/service/technicians', permission: 'service_sheets.view' },
     { label: 'Mesaje WhatsApp', description: 'Mesajele rapide ale contului tău', icon: 'logo-whatsapp', color: '#18B95D', route: '/service/whatsapp-messages', permission: 'clients.view' },
     { label: 'Utilizatori', description: 'Roluri, parole și permisiuni', icon: 'people-outline', color: palette.purple, route: '/service/users', permission: 'users.view' },
     { label: 'Rapoarte', description: 'Venituri, costuri și performanță', icon: 'bar-chart-outline', color: palette.success, route: '/service/reports', permission: 'reports.view' },
@@ -62,7 +64,7 @@ export default function MoreScreen() {
       </View>
     </Screen>
 
-    <Modal visible={logoutOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={() => !logoutLoading && setLogoutOpen(false)}><View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}><Pressable style={StyleSheet.absoluteFill} onPress={() => !logoutLoading && setLogoutOpen(false)} /><View style={[styles.logoutModal, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}><View style={[styles.logoutModalIcon, { backgroundColor: isDark ? '#401722' : palette.dangerSoft }]}><Ionicons name="log-out-outline" size={30} color={palette.danger} /></View><AppText variant="title" style={styles.modalTitle}>Te deconectezi?</AppText><AppText muted style={styles.modalText}>Sesiunea va fi închisă pe acest dispozitiv, iar datele salvate rămân în siguranță.</AppText><View style={[styles.modalActions, compact && styles.modalActionsCompact]}><Button variant="outline" label="Rămân conectat" disabled={logoutLoading} onPress={() => setLogoutOpen(false)} style={styles.modalButton} /><Button variant="danger" label="Deconectare" icon="log-out-outline" loading={logoutLoading} onPress={() => void confirmLogout()} style={styles.modalButton} /></View></View></View></Modal>
+    <Modal visible={logoutOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={() => !logoutLoading && setLogoutOpen(false)}><ModalSafeBottom style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}><Pressable style={StyleSheet.absoluteFill} onPress={() => !logoutLoading && setLogoutOpen(false)} /><View style={[styles.logoutModal, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}><View style={[styles.logoutModalIcon, { backgroundColor: isDark ? '#401722' : palette.dangerSoft }]}><Ionicons name="log-out-outline" size={30} color={palette.danger} /></View><AppText variant="title" style={styles.modalTitle}>Te deconectezi?</AppText><AppText muted style={styles.modalText}>Sesiunea va fi închisă pe acest dispozitiv, iar datele salvate rămân în siguranță.</AppText><View style={[styles.modalActions, compact && styles.modalActionsCompact]}><Button variant="outline" label="Rămân conectat" disabled={logoutLoading} onPress={() => setLogoutOpen(false)} style={styles.modalButton} /><Button variant="danger" label="Deconectare" icon="log-out-outline" loading={logoutLoading} onPress={() => void confirmLogout()} style={styles.modalButton} /></View></View></ModalSafeBottom></Modal>
   </>;
 }
 

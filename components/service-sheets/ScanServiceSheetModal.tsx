@@ -1,9 +1,11 @@
 import { FinanceNumberField } from '@/components/clients/finance/FinanceNumberField';
 import { AccessoriesField, hasNoAccessories, NO_ACCESSORIES_VALUE } from '@/components/service-sheets/AccessoriesField';
+import { TechnicianField } from '@/components/service-sheets/TechnicianField';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { DateTimeField } from '@/components/ui/DateTimeField';
 import { Input } from '@/components/ui/Input';
+import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -36,6 +38,7 @@ type QuickSheetForm = {
   accessories: string;
   reportedIssue: string;
   technicalAssessment: string;
+  technicianId: string;
   technicianName: string;
   diagnosticFee: number;
   partsCost: number;
@@ -69,6 +72,7 @@ const emptyForm: QuickSheetForm = {
   accessories: '',
   reportedIssue: '',
   technicalAssessment: '',
+  technicianId: '',
   technicianName: '',
   diagnosticFee: 0,
   partsCost: 0,
@@ -95,6 +99,7 @@ function formFromSheet(sheet?: ServiceSheet | null): QuickSheetForm {
     accessories: sheet.accessories ?? '',
     reportedIssue: sheet.reportedIssue ?? '',
     technicalAssessment: sheet.technicalAssessment ?? '',
+    technicianId: sheet.technicianId ?? '',
     technicianName: sheet.technicianName ?? '',
     diagnosticFee: 0,
     partsCost: sheet.partsCost ?? 0,
@@ -238,6 +243,7 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
       accessories: hasNoAccessories(form.accessories) ? NO_ACCESSORIES_VALUE : form.accessories.trim(),
       reportedIssue: form.reportedIssue.trim(),
       technicalAssessment: form.technicalAssessment.trim(),
+      technicianId: form.technicianId || undefined,
       technicianName: form.technicianName.trim(),
       partsCost: form.partsCost,
       laborCost: form.laborCost,
@@ -342,7 +348,7 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
   };
 
   return <><Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={dismiss}>
-    <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
+    <ModalSafeBottom style={[styles.overlay, { backgroundColor: colors.overlay }]}>
       <Pressable accessibilityLabel="Anulează fișa de intrare" style={StyleSheet.absoluteFill} onPress={dismiss} />
       <KeyboardAvoidingView style={styles.positioner} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Animated.View style={[styles.sheet, { backgroundColor: colors.surfaceElevated, borderColor: colors.border, transform: [{ translateY }] }]}>
@@ -381,7 +387,7 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
             <AccessoriesField value={form.accessories} onChange={(value) => update('accessories', value)} />
             <Input label="Problema reclamată *" value={form.reportedIssue} onChangeText={(value) => update('reportedIssue', value)} multiline numberOfLines={4} style={styles.multiline} placeholder="Descrie pe scurt problema semnalată de client" />
             <Input label="Constatare inițială" value={form.technicalAssessment} onChangeText={(value) => update('technicalAssessment', value)} multiline numberOfLines={3} style={styles.multiline} />
-            <Input label="Tehnician" value={form.technicianName} onChangeText={(value) => update('technicianName', value)} />
+            <TechnicianField propertyId={propertyId} technicianId={form.technicianId || undefined} technicianName={form.technicianName} onChange={({ id, name }) => setForm((current) => ({ ...current, technicianId: id, technicianName: name }))} />
 
             <View style={styles.sectionTitle}><Ionicons name="calculator-outline" size={20} color={palette.cyan} /><AppText variant="heading">Cost estimativ</AppText></View>
             <AppText variant="caption" muted>Valorile sunt salvate în finanțele clientului și apar în fișa de intrare.</AppText>
@@ -431,7 +437,7 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
           </ScrollView>
         </Animated.View>
       </KeyboardAvoidingView>
-    </View>
+    </ModalSafeBottom>
   </Modal>
     <QuickSignatureModal
       visible={visible && signatureOpen}
@@ -475,7 +481,7 @@ export function QuickSignatureModal({ visible, clientName, saving, onClose, onCo
   const signatureWebStyle = '.m-signature-pad { box-shadow: none; border: none; background: #fff; } .m-signature-pad--body { border: none; background: #fff; } .m-signature-pad--footer { display: none; } body,html { background: transparent; }';
 
   return <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => !saving && onClose()}>
-    <View style={[styles.signatureOverlay, { backgroundColor: colors.overlay }]}>
+    <ModalSafeBottom style={[styles.signatureOverlay, { backgroundColor: colors.overlay }]}>
       <Pressable accessibilityLabel="Închide semnătura" disabled={saving} style={StyleSheet.absoluteFill} onPress={onClose} />
       <View style={[styles.signatureModal, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
         <View style={styles.signatureModalHeader}>
@@ -508,7 +514,7 @@ export function QuickSignatureModal({ visible, clientName, saving, onClose, onCo
           <Button label="Gata" icon="checkmark-circle-outline" loading={saving} onPress={finish} style={styles.signatureModalAction} />
         </View>
       </View>
-    </View>
+    </ModalSafeBottom>
   </Modal>;
 }
 

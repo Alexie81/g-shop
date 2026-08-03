@@ -647,7 +647,7 @@ function client_for_user(array $client, array $user): array {
     return $client;
 }
 function sheet_select(): string {
-    ensure_property_companies_table(db());ensure_service_warranty_fields(db());return 'SELECT ' . uuid_sql('s.id') . ' id,' . uuid_sql('s.property_id') . ' property_id,' . uuid_sql('s.client_id') . ' client_id,s.number,s.equipment,s.brand,s.model,s.serial_number,s.accessories,s.reported_issue,s.technical_assessment,s.work_performed,s.parts_used,s.parts_cost,s.labor_cost,s.total_cost,s.direct_costs,s.net_value,' . uuid_sql('s.technician_id') . ' technician_id,s.technician_name,' . uuid_sql('s.collaborator_id') . ' collaborator_id,s.collaborator_commission,s.show_company_details,' . uuid_sql('s.company_id') . ' company_id,s.company_snapshot,pc.legal_name company_name,s.warranty,s.warranty_start_at,s.warranty_end_at,s.warranty_remediation,s.storage_after,s.handover_notes,s.identity_document,s.approve_diagnostics,s.approve_repair,s.repair_refused,s.product_delivered,s.internal_notes,s.signature_path,s.signed_at,s.received_at,s.estimated_at,s.completed_at,s.status,COALESCE(cf.currency_code,\'RON\') currency_code,s.is_active,s.created_at,s.updated_at,' . uuid_sql('s.created_by') . ' created_by,' . uuid_sql('s.updated_by') . ' updated_by,' . uuid_sql('c.id') . ' c_id,c.first_name c_first_name,c.last_name c_last_name,c.phone c_phone,COALESCE(NULLIF(TRIM(s.technician_name),\'\'),TRIM(CONCAT(COALESCE(t.first_name,\'\'),\' \',COALESCE(t.last_name,\'\')))) t_name FROM service_sheets s JOIN clients c ON c.id=s.client_id LEFT JOIN client_financials cf ON cf.client_id=s.client_id LEFT JOIN users t ON t.id=s.technician_id LEFT JOIN property_companies pc ON pc.id=s.company_id';
+    ensure_property_companies_table(db());ensure_service_warranty_fields(db());ensure_technicians_table(db());return 'SELECT ' . uuid_sql('s.id') . ' id,' . uuid_sql('s.property_id') . ' property_id,' . uuid_sql('s.client_id') . ' client_id,s.number,s.equipment,s.brand,s.model,s.serial_number,s.accessories,s.reported_issue,s.technical_assessment,s.work_performed,s.parts_used,s.parts_cost,s.labor_cost,s.total_cost,s.direct_costs,s.net_value,' . uuid_sql('s.technician_id') . ' technician_id,s.technician_name,' . uuid_sql('s.collaborator_id') . ' collaborator_id,s.collaborator_commission,s.show_company_details,' . uuid_sql('s.company_id') . ' company_id,s.company_snapshot,pc.legal_name company_name,s.warranty,s.warranty_start_at,s.warranty_end_at,s.warranty_remediation,s.storage_after,s.handover_notes,s.identity_document,s.approve_diagnostics,s.approve_repair,s.repair_refused,s.product_delivered,s.internal_notes,s.signature_path,s.signed_at,s.received_at,s.estimated_at,s.completed_at,s.status,COALESCE(cf.currency_code,\'RON\') currency_code,s.is_active,s.created_at,s.updated_at,' . uuid_sql('s.created_by') . ' created_by,' . uuid_sql('s.updated_by') . ' updated_by,' . uuid_sql('c.id') . ' c_id,c.first_name c_first_name,c.last_name c_last_name,c.phone c_phone,COALESCE(NULLIF(TRIM(s.technician_name),\'\'),NULLIF(TRIM(tech.name),\'\'),TRIM(CONCAT(COALESCE(t.first_name,\'\'),\' \',COALESCE(t.last_name,\'\')))) t_name FROM service_sheets s JOIN clients c ON c.id=s.client_id LEFT JOIN client_financials cf ON cf.client_id=s.client_id LEFT JOIN users t ON t.id=s.technician_id LEFT JOIN technicians tech ON tech.id=s.technician_id LEFT JOIN property_companies pc ON pc.id=s.company_id';
 }
 function map_sheet(array $row): array {
     $client = ['id' => $row['c_id'], 'firstName' => $row['c_first_name'], 'lastName' => $row['c_last_name'], 'phone' => $row['c_phone']];
@@ -912,6 +912,49 @@ function gshop_flush_pending_service_sheet_pdfs(): void {
         try{gshop_regenerate_service_sheet_pdf((string)$sheetId);}
         catch(Throwable $error){error_log('[G-Shop PDF sync] '.$sheetId.': '.$error->getMessage());}
     }
+}
+
+function ensure_technicians_table(PDO $pdo): void {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS technicians (
+        id BINARY(16) PRIMARY KEY,
+        property_id BINARY(16) NOT NULL,
+        name VARCHAR(120) NOT NULL,
+        phone VARCHAR(24) NULL,
+        specialty VARCHAR(100) NULL,
+        notes VARCHAR(500) NULL,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        created_by BINARY(16) NOT NULL,
+        updated_by BINARY(16) NOT NULL,
+        INDEX idx_technicians_property_active (property_id,is_active,name),
+        CONSTRAINT fk_technician_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+}
+function technician_select(): string {
+    return 'SELECT '.uuid_sql('t.id').' id,'.uuid_sql('t.property_id').' property_id,t.name,t.phone,t.specialty,t.notes,t.is_active,t.created_at,t.updated_at,'.uuid_sql('t.created_by').' created_by,'.uuid_sql('t.updated_by').' updated_by FROM technicians t';
+}
+function map_technician(array $row): array {
+    $item=entity_base($row);$item['isActive']=(bool)$item['isActive'];return $item;
+}
+function get_technician(string $id, ?string $propertyId = null, bool $activeOnly = false): array {
+    ensure_technicians_table(db());$where=['t.id=?'];$args=[uuid_bin(validated_uuid($id,'Tehnicianul'))];
+    if($propertyId!==null){$where[]='t.property_id=?';$args[]=uuid_bin($propertyId);}if($activeOnly)$where[]='t.is_active=1';
+    $stmt=db()->prepare(technician_select().' WHERE '.implode(' AND ',$where).' LIMIT 1');$stmt->execute($args);$row=$stmt->fetch();if(!$row)fail('Tehnicianul nu există.',404);return map_technician($row);
+}
+function technician_for_property(string $id, string $propertyId): array {
+    return get_technician($id,$propertyId,true);
+}
+function technician_optional_text(mixed $value, string $label, int $maximum): ?string {
+    $text=trim((string)($value??''));if($text==='')return null;$length=function_exists('mb_strlen')?mb_strlen($text,'UTF-8'):strlen($text);if($length>$maximum)fail($label.' poate avea maximum '.$maximum.' caractere.',422);return $text;
+}
+function validated_technician_payload(array $body): array {
+    return [
+        'name'=>validated_person_name((string)($body['name']??''),'Numele tehnicianului'),
+        'phone'=>technician_optional_text($body['phone']??null,'Telefonul',24),
+        'specialty'=>technician_optional_text($body['specialty']??null,'Specializarea',100),
+        'notes'=>technician_optional_text($body['notes']??null,'Observațiile',500),
+    ];
 }
 
 function collaborator_select(string $extraColumns = ''): string {
@@ -1812,6 +1855,25 @@ try {
         respond(['clientId'=>$qr['client_id'],'clientName'=>$qr['first_name'].' '.$qr['last_name'],'qrStatus'=>'USED']);
     }
 
+    if ($method==='GET'&&$path==='/technicians') {
+        $user=require_permission('service_sheets.view');$propertyId=validated_uuid((string)($_GET['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);ensure_existing_property($propertyId);ensure_technicians_table(db());
+        $stmt=db()->prepare(technician_select().' WHERE t.property_id=? AND t.is_active=1 ORDER BY t.name');$stmt->execute([uuid_bin($propertyId)]);respond(array_map('map_technician',$stmt->fetchAll()));
+    }
+    if ($method==='POST'&&$path==='/technicians') {
+        $user=require_permission('service_sheets.create');$body=json_body();$propertyId=validated_uuid((string)($body['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);ensure_existing_property($propertyId);ensure_technicians_table(db());$values=validated_technician_payload($body);
+        $duplicate=db()->prepare('SELECT '.uuid_sql('id').' FROM technicians WHERE property_id=? AND is_active=1 AND LOWER(name)=LOWER(?) LIMIT 1');$duplicate->execute([uuid_bin($propertyId),$values['name']]);if($duplicate->fetchColumn())fail('Există deja un tehnician activ cu acest nume.',409);
+        $id=uuid_v4();$now=now_utc();db()->prepare('INSERT INTO technicians (id,property_id,name,phone,specialty,notes,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,1,?,?,?,?)')->execute([uuid_bin($id),uuid_bin($propertyId),$values['name'],$values['phone'],$values['specialty'],$values['notes'],$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);
+        $created=get_technician($id,$propertyId,true);audit_log('TECHNICIAN_CREATED','technicians','Tehnician adăugat: '.$created['name'],'Technician',$id,$propertyId,null,$created,$user);respond($created,201);
+    }
+    if ($method==='PUT'&&path_match('/technicians/{id}',$path,$params)) {
+        $user=require_permission('service_sheets.update');$body=json_body();$propertyId=validated_uuid((string)($body['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);$before=get_technician($params['id'],$propertyId,true);$values=validated_technician_payload($body);
+        $duplicate=db()->prepare('SELECT 1 FROM technicians WHERE property_id=? AND id<>? AND is_active=1 AND LOWER(name)=LOWER(?) LIMIT 1');$duplicate->execute([uuid_bin($propertyId),uuid_bin($params['id']),$values['name']]);if($duplicate->fetchColumn())fail('Există deja un tehnician activ cu acest nume.',409);
+        db()->prepare('UPDATE technicians SET name=?,phone=?,specialty=?,notes=?,updated_at=?,updated_by=? WHERE id=?')->execute([$values['name'],$values['phone'],$values['specialty'],$values['notes'],now_utc(),uuid_bin($user['id']),uuid_bin($params['id'])]);$after=get_technician($params['id'],$propertyId,true);audit_log('TECHNICIAN_UPDATED','technicians','Tehnician actualizat: '.$after['name'],'Technician',$after['id'],$propertyId,$before,$after,$user);respond($after);
+    }
+    if ($method==='DELETE'&&path_match('/technicians/{id}',$path,$params)) {
+        $user=require_permission('service_sheets.update');$propertyId=validated_uuid((string)($_GET['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);$before=get_technician($params['id'],$propertyId,true);db()->prepare('UPDATE technicians SET is_active=0,updated_at=?,updated_by=? WHERE id=?')->execute([now_utc(),uuid_bin($user['id']),uuid_bin($params['id'])]);audit_log('TECHNICIAN_DEACTIVATED','technicians','Tehnician dezactivat: '.$before['name'],'Technician',$before['id'],$propertyId,$before,['isActive'=>false],$user);respond(['deleted'=>true]);
+    }
+
     if ($method==='GET'&&$path==='/service-documents/register') {
         $user=require_permission('service_sheets.view');$propertyId=validated_uuid((string)($_GET['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);ensure_service_documents_table(db());
         $sql='SELECT '.uuid_sql('s.id').' service_sheet_id,s.number service_sheet_number,'.uuid_sql('c.id').' client_id,TRIM(CONCAT(c.first_name,\' \',c.last_name)) client_name,s.equipment,s.brand,s.model,s.status,s.received_at,MAX(CASE WHEN d.type=\'INTAKE\' THEN d.number END) intake_number,MAX(CASE WHEN d.type=\'INTAKE\' THEN d.document_at END) intake_at,MAX(CASE WHEN d.type=\'FINAL_ESTIMATE\' THEN d.number END) final_estimate_number,MAX(CASE WHEN d.type=\'FINAL_ESTIMATE\' THEN d.document_at END) final_estimate_at,MAX(CASE WHEN d.type=\'EXIT\' THEN d.number END) exit_number,MAX(CASE WHEN d.type=\'EXIT\' THEN d.document_at END) exit_at,MAX(CASE WHEN d.type=\'WARRANTY\' THEN d.number END) warranty_number,MAX(CASE WHEN d.type=\'WARRANTY\' THEN d.document_at END) warranty_at FROM service_sheets s JOIN clients c ON c.id=s.client_id AND c.is_active=1 LEFT JOIN service_documents d ON d.service_sheet_id=s.id AND d.is_active=1 AND d.status=\'PUBLISHED\' WHERE s.property_id=? AND s.is_active=1 GROUP BY s.id,s.number,c.id,c.first_name,c.last_name,s.equipment,s.brand,s.model,s.status,s.received_at ORDER BY s.received_at DESC,s.number DESC LIMIT 5000';$stmt=db()->prepare($sql);$stmt->execute([uuid_bin($propertyId)]);$rows=[];foreach($stmt->fetchAll()as$row)$rows[]=camel_row($row);respond($rows);
@@ -1828,7 +1890,8 @@ try {
         $clientId=(string)$body['clientId'];$client=get_client($clientId);
         if($client['propertyId']!==$propertyId)fail('Clientul nu aparține proprietății selectate.',422);
         $partsCost=max(0,(float)($body['partsCost']??0));$laborCost=max(0,(float)($body['laborCost']??0));$totalCost=max(0,(float)($body['totalCost']??($partsCost+$laborCost)));$directCosts=max(0,(float)($body['directCosts']??0));$netValue=max(0,$totalCost-$directCosts);
-        $technicianName=trim((string)($body['technicianName']??''));$technicianName=$technicianName===''?null:validated_person_name($technicianName,'Numele tehnicianului');
+        $technicianId=!empty($body['technicianId'])?validated_uuid((string)$body['technicianId'],'Tehnicianul'):null;$selectedTechnician=$technicianId!==null?technician_for_property($technicianId,$propertyId):null;
+        $technicianName=trim((string)($body['technicianName']??($selectedTechnician['name']??'')));$technicianName=$technicianName===''?null:validated_person_name($technicianName,'Numele tehnicianului');
         if(!empty($client['collaboratorId']))collaborator_for_property((string)$client['collaboratorId'],$propertyId);
         $activeCompany=company_details_record($propertyId);$activeCompanyId=!empty($activeCompany['id'])?(string)$activeCompany['id']:null;$activeCompanySnapshot=$activeCompanyId?company_sheet_snapshot(company_details_by_id($activeCompanyId,$propertyId,true)):null;
         $id=uuid_v4();$now=now_utc();$pdo=db();$pdo->beginTransaction();$commissionCreated=false;$financeSync=null;
@@ -1839,7 +1902,7 @@ try {
             if($existingId){$pdo->rollBack();fail('Clientul are deja o fișă de service.',409,['code'=>'SERVICE_SHEET_ALREADY_EXISTS','serviceSheetId'=>$existingId]);}
             $seq=(int)$pdo->query("SELECT COUNT(*)+1 FROM service_sheets WHERE YEAR(created_at)=YEAR(UTC_TIMESTAMP())")->fetchColumn();$number='GS-'.gmdate('Y').'-'.str_pad((string)$seq,5,'0',STR_PAD_LEFT);
             $insertColumns=['id','property_id','client_id','number','equipment','brand','model','serial_number','accessories','reported_issue','technical_assessment','work_performed','parts_used','parts_cost','labor_cost','total_cost','direct_costs','net_value','technician_id','technician_name','collaborator_id','collaborator_commission','show_company_details','company_id','company_snapshot','warranty','warranty_start_at','warranty_end_at','warranty_remediation','storage_after','handover_notes','identity_document','approve_diagnostics','approve_repair','repair_refused','product_delivered','internal_notes','signature_path','signed_at','received_at','estimated_at','status','is_active','created_at','updated_at','created_by','updated_by'];
-            $insertValues=[uuid_bin($id),uuid_bin($propertyId),uuid_bin($clientId),$number,trim((string)($body['equipment']??'')),$body['brand']??null,$body['model']??null,$body['serialNumber']??null,$body['accessories']??null,$body['reportedIssue'],$body['technicalAssessment']??null,$body['workPerformed']??null,$body['partsUsed']??null,$partsCost,$laborCost,$totalCost,$directCosts,$netValue,!empty($body['technicianId'])?uuid_bin((string)$body['technicianId']):uuid_bin($user['id']),$technicianName,$collaboratorId?uuid_bin($collaboratorId):null,$commissionValue,1,$activeCompanyId?uuid_bin($activeCompanyId):null,$activeCompanySnapshot?json_encode($activeCompanySnapshot,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES):null,$body['warranty']??null,service_document_optional_db_date($body['warrantyStartAt']??null),service_document_optional_db_date($body['warrantyEndAt']??null),$body['warrantyRemediation']??null,$body['storageAfter']??null,$body['handoverNotes']??null,$body['identityDocument']??null,!empty($body['approveDiagnostics'])?1:0,!empty($body['approveRepair'])?1:0,!empty($body['repairRefused'])?1:0,!empty($body['productDelivered'])?1:0,$body['internalNotes']??null,$clientSignature['path']??null,$clientSignature['signedAt']??null,!empty($body['receivedAt'])?gmdate('Y-m-d H:i:s',strtotime((string)$body['receivedAt'])):$now,!empty($body['estimatedAt'])?gmdate('Y-m-d H:i:s',strtotime((string)$body['estimatedAt'])):null,'NEW',1,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])];
+            $insertValues=[uuid_bin($id),uuid_bin($propertyId),uuid_bin($clientId),$number,trim((string)($body['equipment']??'')),$body['brand']??null,$body['model']??null,$body['serialNumber']??null,$body['accessories']??null,$body['reportedIssue'],$body['technicalAssessment']??null,$body['workPerformed']??null,$body['partsUsed']??null,$partsCost,$laborCost,$totalCost,$directCosts,$netValue,$technicianId!==null?uuid_bin($technicianId):uuid_bin($user['id']),$technicianName,$collaboratorId?uuid_bin($collaboratorId):null,$commissionValue,1,$activeCompanyId?uuid_bin($activeCompanyId):null,$activeCompanySnapshot?json_encode($activeCompanySnapshot,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES):null,$body['warranty']??null,service_document_optional_db_date($body['warrantyStartAt']??null),service_document_optional_db_date($body['warrantyEndAt']??null),$body['warrantyRemediation']??null,$body['storageAfter']??null,$body['handoverNotes']??null,$body['identityDocument']??null,!empty($body['approveDiagnostics'])?1:0,!empty($body['approveRepair'])?1:0,!empty($body['repairRefused'])?1:0,!empty($body['productDelivered'])?1:0,$body['internalNotes']??null,$clientSignature['path']??null,$clientSignature['signedAt']??null,!empty($body['receivedAt'])?gmdate('Y-m-d H:i:s',strtotime((string)$body['receivedAt'])):$now,!empty($body['estimatedAt'])?gmdate('Y-m-d H:i:s',strtotime((string)$body['estimatedAt'])):null,'NEW',1,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])];
             $stmt=$pdo->prepare('INSERT INTO service_sheets ('.implode(',',$insertColumns).') VALUES ('.implode(',',array_fill(0,count($insertColumns),'?')).')');
             $stmt->execute($insertValues);
             $pdo->prepare("INSERT INTO service_sheet_status_history (id,service_sheet_id,old_status,new_status,changed_by,created_at) VALUES (?,?,NULL,'NEW',?,?)")->execute([uuid_bin(uuid_v4()),uuid_bin($id),uuid_bin($user['id']),$now]);
@@ -1854,6 +1917,7 @@ try {
     }
     if ($method==='PUT'&&path_match('/service-sheets/{id}',$path,$params)) {
         $user=require_permission('service_sheets.update');$before=get_sheet($params['id']);ensure_property($before['propertyId'],$user);$body=json_body();
+        if(array_key_exists('technicianId',$body)){$technicianId=trim((string)($body['technicianId']??''));if($technicianId==='')$body['technicianId']=null;else{$technicianId=validated_uuid($technicianId,'Tehnicianul');$selectedTechnician=technician_for_property($technicianId,$before['propertyId']);$body['technicianId']=$technicianId;if(!array_key_exists('technicianName',$body))$body['technicianName']=$selectedTechnician['name'];}}
         if(array_key_exists('technicianName',$body)){$technicianName=trim((string)($body['technicianName']??''));$body['technicianName']=$technicianName===''?null:validated_person_name($technicianName,'Numele tehnicianului');}
         $financeChanged=count(array_intersect(array_keys($body),['partsCost','laborCost','totalCost','directCosts','netValue']))>0;
         if($financeChanged){
@@ -1861,8 +1925,8 @@ try {
             $nextTotal=array_key_exists('totalCost',$body)?max(0,(float)$body['totalCost']):((array_key_exists('partsCost',$body)||array_key_exists('laborCost',$body))?$nextParts+$nextLabor:(float)$before['totalCost']);$nextDirect=array_key_exists('directCosts',$body)?max(0,(float)$body['directCosts']):(float)$before['directCosts'];
             $body['partsCost']=$nextParts;$body['laborCost']=$nextLabor;$body['totalCost']=$nextTotal;$body['directCosts']=$nextDirect;$body['netValue']=max(0,$nextTotal-$nextDirect);
         }
-        $map=['equipment'=>'equipment','brand'=>'brand','model'=>'model','serialNumber'=>'serial_number','accessories'=>'accessories','reportedIssue'=>'reported_issue','technicalAssessment'=>'technical_assessment','workPerformed'=>'work_performed','partsUsed'=>'parts_used','partsCost'=>'parts_cost','laborCost'=>'labor_cost','totalCost'=>'total_cost','directCosts'=>'direct_costs','netValue'=>'net_value','technicianName'=>'technician_name','warranty'=>'warranty','warrantyStartAt'=>'warranty_start_at','warrantyEndAt'=>'warranty_end_at','warrantyRemediation'=>'warranty_remediation','storageAfter'=>'storage_after','handoverNotes'=>'handover_notes','identityDocument'=>'identity_document','approveDiagnostics'=>'approve_diagnostics','approveRepair'=>'approve_repair','repairRefused'=>'repair_refused','productDelivered'=>'product_delivered','internalNotes'=>'internal_notes','receivedAt'=>'received_at','estimatedAt'=>'estimated_at','completedAt'=>'completed_at','status'=>'status'];$sets=[];$args=[];
-        foreach($map as$key=>$column)if(array_key_exists($key,$body)){$sets[]="$column=?";$value=$body[$key];if(in_array($key,['receivedAt','estimatedAt','completedAt','warrantyStartAt','warrantyEndAt'],true))$value=service_document_optional_db_date($value);elseif(in_array($key,['approveDiagnostics','approveRepair','repairRefused','productDelivered'],true))$value=(bool)$value?1:0;elseif($value===''&&$key!=='equipment')$value=null;$args[]=$value;}
+        $map=['equipment'=>'equipment','brand'=>'brand','model'=>'model','serialNumber'=>'serial_number','accessories'=>'accessories','reportedIssue'=>'reported_issue','technicalAssessment'=>'technical_assessment','workPerformed'=>'work_performed','partsUsed'=>'parts_used','partsCost'=>'parts_cost','laborCost'=>'labor_cost','totalCost'=>'total_cost','directCosts'=>'direct_costs','netValue'=>'net_value','technicianId'=>'technician_id','technicianName'=>'technician_name','warranty'=>'warranty','warrantyStartAt'=>'warranty_start_at','warrantyEndAt'=>'warranty_end_at','warrantyRemediation'=>'warranty_remediation','storageAfter'=>'storage_after','handoverNotes'=>'handover_notes','identityDocument'=>'identity_document','approveDiagnostics'=>'approve_diagnostics','approveRepair'=>'approve_repair','repairRefused'=>'repair_refused','productDelivered'=>'product_delivered','internalNotes'=>'internal_notes','receivedAt'=>'received_at','estimatedAt'=>'estimated_at','completedAt'=>'completed_at','status'=>'status'];$sets=[];$args=[];
+        foreach($map as$key=>$column)if(array_key_exists($key,$body)){$sets[]="$column=?";$value=$body[$key];if($key==='technicianId')$value=$value?uuid_bin((string)$value):null;elseif(in_array($key,['receivedAt','estimatedAt','completedAt','warrantyStartAt','warrantyEndAt'],true))$value=service_document_optional_db_date($value);elseif(in_array($key,['approveDiagnostics','approveRepair','repairRefused','productDelivered'],true))$value=(bool)$value?1:0;elseif($value===''&&$key!=='equipment')$value=null;$args[]=$value;}
         if(!$sets)fail('Nu există date de actualizat.',422);$now=now_utc();$sets[]='updated_at=?';$args[]=$now;$sets[]='updated_by=?';$args[]=uuid_bin($user['id']);$args[]=uuid_bin($params['id']);$pdo=db();$pdo->beginTransaction();
         try{
             $clientLock=$pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE');$clientLock->execute([uuid_bin($before['clientId'])]);

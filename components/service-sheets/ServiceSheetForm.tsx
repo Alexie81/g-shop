@@ -2,6 +2,7 @@ import { ClientFinanceSection, type ExpenseInput } from '@/components/clients/fi
 import { AccessoriesField, hasNoAccessories, NO_ACCESSORIES_VALUE } from '@/components/service-sheets/AccessoriesField';
 import { IntakeEstimateSection } from '@/components/service-sheets/IntakeEstimateSection';
 import { ServiceSheetCollaborators } from '@/components/service-sheets/ServiceSheetCollaborators';
+import { TechnicianField } from '@/components/service-sheets/TechnicianField';
 import { DocumentStageGroupHeader, DocumentStageHeader, ServiceDocumentTimeline } from '@/components/service-sheets/ServiceDocumentTimeline';
 import { SERVICE_STATUS_LABELS } from '@/components/service-sheets/ServiceSheetStatus';
 import { AppText } from '@/components/ui/AppText';
@@ -38,6 +39,7 @@ type Form = {
   partsCost: string;
   laborCost: string;
   actualPartsCost: string;
+  technicianId: string;
   technicianName: string;
   warranty: string;
   warrantyStartAt: string;
@@ -79,6 +81,7 @@ const blank: Form = {
   partsCost: '0',
   laborCost: '0',
   actualPartsCost: '0',
+  technicianId: '',
   technicianName: '',
   warranty: '',
   warrantyStartAt: '',
@@ -116,6 +119,7 @@ function formFromSheet(sheet: ServiceSheet): Form {
     partsCost: String(sheet.partsCost ?? 0),
     laborCost: String(sheet.laborCost ?? 0),
     actualPartsCost: '0',
+    technicianId: sheet.technicianId ?? '',
     technicianName: sheet.technicianName ?? '',
     warranty: sheet.warranty ?? '',
     warrantyStartAt: sheet.warrantyStartAt ?? '',
@@ -347,6 +351,7 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
       directCosts: direct,
       netValue: net,
       currencyCode: financeValue.currencyCode,
+      technicianId: form.technicianId || undefined,
       technicianName: form.technicianName.trim(),
       warranty: form.warranty.trim(),
       warrantyStartAt: form.warrantyStartAt || undefined,
@@ -456,7 +461,7 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
         {!sheet ? <View style={styles.field}><DateTimeField label="Data acordului" value={form.intakeAgreementAt} onChange={(value) => update('intakeAgreementAt', value)} allowClear showNow /></View> : null}
         {sheet ? <View style={styles.field}><DateTimeField label="Termen estimat" value={form.estimatedAt} onChange={(value) => update('estimatedAt', value)} allowClear /></View> : null}
       </View>
-      <Input label="Numele tehnicianului" placeholder="ex. Andrei Popescu" value={form.technicianName} onChangeText={(value) => update('technicianName', value)} />
+      <TechnicianField propertyId={propertyId} technicianId={form.technicianId || undefined} technicianName={form.technicianName} onChange={({ id, name }) => setForm((current) => ({ ...current, technicianId: id, technicianName: name }))} />
       <Input label="Observații interne (nu apar în PDF)" multiline value={form.internalNotes} onChangeText={(value) => update('internalNotes', value)} />
     </Card>
 

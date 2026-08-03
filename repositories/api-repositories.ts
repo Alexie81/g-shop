@@ -1,5 +1,5 @@
 import { apiRequest } from '@/services/api';
-import { AppUpdateRepository, AuthRepository, AuditRepository, ClientRepository, CollaboratorRepository, CompanyDetailsRepository, DashboardRepository, PropertyRepository, ServiceSheetRepository, UserRepository, WhatsAppMessageRepository } from '@/repositories/interfaces';
+import { AppUpdateRepository, AuthRepository, AuditRepository, ClientRepository, CollaboratorRepository, CompanyDetailsRepository, DashboardRepository, PropertyRepository, ServiceSheetRepository, TechnicianRepository, UserRepository, WhatsAppMessageRepository } from '@/repositories/interfaces';
 
 export const authRepository: AuthRepository = {
   login: (username, password, device) => apiRequest('/auth/login', { method: 'POST', authenticated: false, body: JSON.stringify({ username, password, device }) }),
@@ -60,6 +60,12 @@ export const collaboratorRepository: CollaboratorRepository = {
   create: (input) => apiRequest('/collaborators', { method: 'POST', body: JSON.stringify(input) }),
   update: (id, input) => apiRequest(`/collaborators/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
   remove: (id, propertyId) => apiRequest(`/collaborators/${id}?propertyId=${propertyId}`, { method: 'DELETE' }),
+};
+export const technicianRepository: TechnicianRepository = {
+  list: (propertyId) => apiRequest(`/technicians?propertyId=${encodeURIComponent(propertyId)}`),
+  create: (input) => apiRequest('/technicians', { method: 'POST', body: JSON.stringify(input) }),
+  update: (id, input) => apiRequest(`/technicians/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
+  remove: (id, propertyId) => apiRequest(`/technicians/${id}?propertyId=${encodeURIComponent(propertyId)}`, { method: 'DELETE' }),
 };
 export const userRepository: UserRepository = {
   list: (propertyId) => apiRequest(`/users?propertyId=${propertyId}`),

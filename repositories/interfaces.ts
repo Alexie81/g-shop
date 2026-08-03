@@ -1,4 +1,4 @@
-import { AppUpdateInfo, AuditLog, AuthSession, Client, ClientExpense, ClientExpenseDeleteResult, ClientFinancialOverview, ClientParticipant, Collaborator, CompanyDetails, CreateClientExpensePayload, DashboardMetrics, GenerateServiceDocumentInput, Paginated, Permission, Property, ServiceDocument, ServiceDocumentRegisterRow, ServiceDocumentType, ServiceSheet, ServiceSheetPdf, UpdateClientExpensePayload, UpdateClientFinancialsPayload, User, UUID, WhatsAppMessage } from '@/types';
+import { AppUpdateInfo, AuditLog, AuthSession, Client, ClientExpense, ClientExpenseDeleteResult, ClientFinancialOverview, ClientParticipant, Collaborator, CompanyDetails, CreateClientExpensePayload, DashboardMetrics, GenerateServiceDocumentInput, Paginated, Permission, Property, ServiceDocument, ServiceDocumentRegisterRow, ServiceDocumentType, ServiceSheet, ServiceSheetPdf, Technician, UpdateClientExpensePayload, UpdateClientFinancialsPayload, User, UUID, WhatsAppMessage } from '@/types';
 
 export interface AuthRepository {
   login(username: string, password: string, device: string): Promise<AuthSession>;
@@ -58,6 +58,12 @@ export interface CollaboratorRepository {
   get(id: UUID, propertyId: UUID): Promise<Collaborator>;
   create(input: Partial<Collaborator> & { propertyIds: UUID[] }): Promise<Collaborator>;
   update(id: UUID, input: Partial<Collaborator> & { propertyId: UUID }): Promise<Collaborator>;
+  remove(id: UUID, propertyId: UUID): Promise<void>;
+}
+export interface TechnicianRepository {
+  list(propertyId: UUID): Promise<Technician[]>;
+  create(input: Pick<Technician, 'propertyId' | 'name'> & Partial<Pick<Technician, 'phone' | 'specialty' | 'notes'>>): Promise<Technician>;
+  update(id: UUID, input: Pick<Technician, 'propertyId' | 'name'> & Partial<Pick<Technician, 'phone' | 'specialty' | 'notes'>>): Promise<Technician>;
   remove(id: UUID, propertyId: UUID): Promise<void>;
 }
 export interface UserRepository {

@@ -31,6 +31,7 @@ export default function ServiceLayout() {
     <Tabs.Screen name="qr-scanner" options={{ title: 'Scanare' }} />
     <Tabs.Screen name="more" options={{ title: '•••', tabBarAccessibilityLabel: 'Mai mult' }} />
     <Tabs.Screen name="collaborators" options={{ href: null }} />
+    <Tabs.Screen name="technicians" options={{ href: null }} />
     <Tabs.Screen name="users" options={{ href: null }} />
     <Tabs.Screen name="reports" options={{ href: null }} />
     <Tabs.Screen name="register" options={{ href: null }} />

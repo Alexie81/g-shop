@@ -99,6 +99,14 @@ export interface User extends BaseEntity {
   lastLoginAt?: ISODate;
 }
 
+export interface Technician extends BaseEntity {
+  propertyId: UUID;
+  name: string;
+  phone?: string;
+  specialty?: string;
+  notes?: string;
+}
+
 export type QRStatus =
   | 'NOT_GENERATED'
   | 'GENERATED'
