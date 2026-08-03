@@ -13,10 +13,12 @@ export interface PropertyRepository {
   updateName(id: UUID, name: string): Promise<Property>;
 }
 export interface CompanyDetailsRepository {
-  get(propertyId: UUID): Promise<CompanyDetails>;
-  update(propertyId: UUID, input: Omit<CompanyDetails, 'propertyId' | 'stampUrl' | 'createdAt' | 'updatedAt'>): Promise<CompanyDetails>;
-  saveStamp(propertyId: UUID, stamp: string): Promise<CompanyDetails>;
-  removeStamp(propertyId: UUID): Promise<CompanyDetails>;
+  list(propertyId: UUID): Promise<CompanyDetails[]>;
+  create(propertyId: UUID, input: Omit<CompanyDetails, 'id' | 'propertyId' | 'isDefault' | 'stampUrl' | 'createdAt' | 'updatedAt'>): Promise<CompanyDetails>;
+  update(companyId: UUID, input: Omit<CompanyDetails, 'id' | 'propertyId' | 'isDefault' | 'stampUrl' | 'createdAt' | 'updatedAt'>): Promise<CompanyDetails>;
+  setDefault(companyId: UUID): Promise<CompanyDetails>;
+  saveStamp(companyId: UUID, stamp: string): Promise<CompanyDetails>;
+  removeStamp(companyId: UUID): Promise<CompanyDetails>;
 }
 export interface AppUpdateRepository { get(): Promise<AppUpdateInfo>; }
 export interface DashboardRepository { get(propertyId: UUID): Promise<DashboardMetrics>; }

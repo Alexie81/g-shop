@@ -422,6 +422,60 @@ function ensure_company_details_table(PDO $pdo): void {
         CONSTRAINT fk_company_details_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 }
+function ensure_property_companies_table(PDO $pdo): void {
+    static $ready = false;
+    if ($ready) return;
+    ensure_company_details_table($pdo);
+    $pdo->exec("CREATE TABLE IF NOT EXISTS property_companies (
+        id BINARY(16) PRIMARY KEY,
+        property_id BINARY(16) NOT NULL,
+        is_default TINYINT(1) NOT NULL DEFAULT 0,
+        legal_name VARCHAR(160) NULL,
+        tax_id VARCHAR(24) NULL,
+        trade_register_number VARCHAR(40) NULL,
+        vat_payer TINYINT(1) NOT NULL DEFAULT 0,
+        address VARCHAR(220) NULL,
+        city VARCHAR(80) NULL,
+        county VARCHAR(80) NULL,
+        postal_code VARCHAR(16) NULL,
+        country VARCHAR(60) NOT NULL DEFAULT 'România',
+        phone VARCHAR(30) NULL,
+        email VARCHAR(140) NULL,
+        website VARCHAR(160) NULL,
+        bank_name VARCHAR(100) NULL,
+        iban VARCHAR(40) NULL,
+        representative_name VARCHAR(120) NULL,
+        representative_role VARCHAR(80) NULL,
+        stamp_path VARCHAR(255) NULL,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        created_by BINARY(16) NULL,
+        updated_by BINARY(16) NULL,
+        INDEX idx_property_companies_property (property_id,is_active,is_default),
+        CONSTRAINT fk_property_companies_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    $legacy=$pdo->query('SELECT property_id,legal_name,tax_id,trade_register_number,vat_payer,address,city,county,postal_code,country,phone,email,website,bank_name,iban,representative_name,representative_role,stamp_path,created_at,updated_at,created_by,updated_by FROM property_company_details')->fetchAll();
+    $exists=$pdo->prepare('SELECT 1 FROM property_companies WHERE property_id=? AND is_active=1 LIMIT 1');
+    $migrationColumns=['id','property_id','is_default','legal_name','tax_id','trade_register_number','vat_payer','address','city','county','postal_code','country','phone','email','website','bank_name','iban','representative_name','representative_role','stamp_path','is_active','created_at','updated_at','created_by','updated_by'];
+    $insert=$pdo->prepare('INSERT INTO property_companies ('.implode(',',$migrationColumns).') VALUES ('.implode(',',array_fill(0,count($migrationColumns),'?')).')');
+    foreach($legacy as$row){$exists->execute([$row['property_id']]);if($exists->fetchColumn())continue;$insert->execute([uuid_bin(uuid_v4()),$row['property_id'],1,$row['legal_name'],$row['tax_id'],$row['trade_register_number'],$row['vat_payer'],$row['address'],$row['city'],$row['county'],$row['postal_code'],$row['country']?:'România',$row['phone'],$row['email'],$row['website'],$row['bank_name'],$row['iban'],$row['representative_name'],$row['representative_role'],$row['stamp_path'],1,$row['created_at'],$row['updated_at'],$row['created_by'],$row['updated_by']]);}
+
+    $properties=$pdo->query('SELECT DISTINCT property_id FROM property_companies WHERE is_active=1')->fetchAll();
+    $hasDefault=$pdo->prepare('SELECT 1 FROM property_companies WHERE property_id=? AND is_active=1 AND is_default=1 LIMIT 1');
+    $first=$pdo->prepare('SELECT id FROM property_companies WHERE property_id=? AND is_active=1 ORDER BY created_at,id LIMIT 1');
+    $makeDefault=$pdo->prepare('UPDATE property_companies SET is_default=1 WHERE id=?');
+    foreach($properties as$row){$hasDefault->execute([$row['property_id']]);if($hasDefault->fetchColumn())continue;$first->execute([$row['property_id']]);$id=$first->fetchColumn();if($id)$makeDefault->execute([$id]);}
+
+    $column=$pdo->prepare("SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='service_sheets' AND column_name=? LIMIT 1");
+    $column->execute(['company_id']);$companyColumnExists=(bool)$column->fetchColumn();
+    if(!$companyColumnExists)$pdo->exec('ALTER TABLE service_sheets ADD COLUMN company_id BINARY(16) NULL AFTER show_company_details');
+    $column->execute(['company_snapshot']);if(!$column->fetchColumn())$pdo->exec('ALTER TABLE service_sheets ADD COLUMN company_snapshot LONGTEXT NULL AFTER company_id');
+    if(!$companyColumnExists)$pdo->exec('UPDATE service_sheets SET show_company_details=1');
+    $pdo->exec('UPDATE service_sheets s JOIN property_companies pc ON pc.property_id=s.property_id AND pc.is_active=1 AND pc.is_default=1 SET s.company_id=pc.id WHERE s.company_id IS NULL');
+    $ready = true;
+}
 function company_detail_text(mixed $value, string $label, int $maximum, bool $required = false): ?string {
     if ($value === null || $value === '') {
         if ($required) fail($label . ' este obligatoriu.', 422);
@@ -433,15 +487,33 @@ function company_detail_text(mixed $value, string $label, int $maximum, bool $re
     if ($text === null || $length === false || ($required && $length < 2) || $length > $maximum || preg_match('/[\x00-\x1F\x7F]/u', $text)) fail($label . ' nu este valid.', 422);
     return $text === '' ? null : $text;
 }
+function company_select(): string { return 'SELECT '.uuid_sql('id').' id,'.uuid_sql('property_id').' property_id,is_default,legal_name,tax_id,trade_register_number,vat_payer,address,city,county,postal_code,country,phone,email,website,bank_name,iban,representative_name,representative_role,stamp_path,created_at,updated_at,'.uuid_sql('created_by').' created_by,'.uuid_sql('updated_by').' updated_by FROM property_companies'; }
+function map_company_details(array $row, bool $includeStampPath = false): array {
+    $item=entity_base($row);$item['isDefault']=(bool)($item['isDefault']??false);$item['vatPayer']=(bool)($item['vatPayer']??false);foreach(['legalName','taxId','tradeRegisterNumber','address','city','county','postalCode','country','phone','email','website','bankName','iban','representativeName','representativeRole']as$key)$item[$key]=(string)($item[$key]??'');$item['stampUrl']=$item['stampPath']?public_base_url().'/'.ltrim((string)$item['stampPath'],'/').'?v='.rawurlencode((string)($item['updatedAt']??'')):null;if(!$includeStampPath)unset($item['stampPath']);return$item;
+}
+function empty_company_details(string $propertyId): array { return['id'=>'','propertyId'=>$propertyId,'isDefault'=>false,'legalName'=>'','taxId'=>'','tradeRegisterNumber'=>'','vatPayer'=>false,'address'=>'','city'=>'','county'=>'','postalCode'=>'','country'=>'România','phone'=>'','email'=>'','website'=>'','bankName'=>'','iban'=>'','representativeName'=>'','representativeRole'=>'','stampUrl'=>null,'createdAt'=>null,'updatedAt'=>null,'createdBy'=>null,'updatedBy'=>null]; }
 function company_details_record(string $propertyId): array {
-    ensure_company_details_table(db());
-    $stmt=db()->prepare('SELECT '.uuid_sql('property_id').' property_id,legal_name,tax_id,trade_register_number,vat_payer,address,city,county,postal_code,country,phone,email,website,bank_name,iban,representative_name,representative_role,stamp_path,created_at,updated_at,'.uuid_sql('created_by').' created_by,'.uuid_sql('updated_by').' updated_by FROM property_company_details WHERE property_id=? LIMIT 1');
-    $stmt->execute([uuid_bin($propertyId)]);$row=$stmt->fetch();
-    if(!$row)return['propertyId'=>$propertyId,'legalName'=>'','taxId'=>'','tradeRegisterNumber'=>'','vatPayer'=>false,'address'=>'','city'=>'','county'=>'','postalCode'=>'','country'=>'România','phone'=>'','email'=>'','website'=>'','bankName'=>'','iban'=>'','representativeName'=>'','representativeRole'=>'','stampUrl'=>null,'createdAt'=>null,'updatedAt'=>null,'createdBy'=>null,'updatedBy'=>null];
-    $item=entity_base($row);$item['vatPayer']=(bool)$item['vatPayer'];foreach(['legalName','taxId','tradeRegisterNumber','address','city','county','postalCode','country','phone','email','website','bankName','iban','representativeName','representativeRole']as$key)$item[$key]=(string)($item[$key]??'');$item['stampUrl']=$item['stampPath']?public_base_url().'/'.ltrim((string)$item['stampPath'],'/').'?v='.rawurlencode((string)$item['updatedAt']):null;unset($item['stampPath']);return$item;
+    ensure_property_companies_table(db());$stmt=db()->prepare(company_select().' WHERE property_id=? AND is_active=1 ORDER BY is_default DESC,created_at LIMIT 1');$stmt->execute([uuid_bin($propertyId)]);$row=$stmt->fetch();return$row?map_company_details($row):empty_company_details($propertyId);
+}
+function company_details_by_id(string $id, ?string $propertyId = null, bool $includeStampPath = false): array {
+    ensure_property_companies_table(db());$sql=company_select().' WHERE id=? AND is_active=1';$args=[uuid_bin($id)];if($propertyId!==null){$sql.=' AND property_id=?';$args[]=uuid_bin($propertyId);}$sql.=' LIMIT 1';$stmt=db()->prepare($sql);$stmt->execute($args);$row=$stmt->fetch();if(!$row)fail('Firma nu există.',404);return map_company_details($row,$includeStampPath);
+}
+function company_details_list(string $propertyId): array {
+    ensure_property_companies_table(db());$stmt=db()->prepare(company_select().' WHERE property_id=? AND is_active=1 ORDER BY is_default DESC,legal_name,created_at');$stmt->execute([uuid_bin($propertyId)]);return array_map('map_company_details',$stmt->fetchAll());
+}
+function company_sheet_snapshot(array $company): array {
+    foreach(['stampUrl','createdAt','updatedAt','createdBy','updatedBy','isDefault']as$key)unset($company[$key]);return$company;
+}
+function validated_company_payload(array $body): array {
+    $legalName=company_detail_text($body['legalName']??null,'Denumirea juridică',160,true);$taxId=company_detail_text($body['taxId']??null,'CUI / CIF',24);$tradeRegister=company_detail_text($body['tradeRegisterNumber']??null,'Numărul Registrului Comerțului',40);
+    $address=company_detail_text($body['address']??null,'Adresa',220);$city=company_detail_text($body['city']??null,'Localitatea',80);$county=company_detail_text($body['county']??null,'Județul',80);$postalCode=company_detail_text($body['postalCode']??null,'Codul poștal',16);$country=company_detail_text($body['country']??'România','Țara',60)??'România';
+    $phone=company_detail_text($body['phone']??null,'Telefonul',30);$email=company_detail_text($body['email']??null,'Emailul',140);if($email!==null&&!filter_var($email,FILTER_VALIDATE_EMAIL))fail('Adresa de email nu este validă.',422);$website=company_detail_text($body['website']??null,'Website-ul',160);
+    $bankName=company_detail_text($body['bankName']??null,'Banca',100);$iban=company_detail_text($body['iban']??null,'IBAN-ul',40);if($iban!==null){$iban=strtoupper(str_replace(' ','',$iban));if(!preg_match('/^[A-Z]{2}[A-Z0-9]{13,38}$/',$iban))fail('IBAN-ul nu este valid.',422);}
+    $representativeName=company_detail_text($body['representativeName']??null,'Reprezentantul legal',120);$representativeRole=company_detail_text($body['representativeRole']??null,'Funcția reprezentantului',80);$vatPayer=(bool)($body['vatPayer']??false);
+    return[$legalName,$taxId,$tradeRegister,$vatPayer?1:0,$address,$city,$county,$postalCode,$country,$phone,$email,$website,$bankName,$iban,$representativeName,$representativeRole];
 }
 function company_details_snapshot(array $details): array {
-    unset($details['stampUrl'],$details['createdAt'],$details['updatedAt'],$details['createdBy'],$details['updatedBy']);
+    unset($details['stampUrl'],$details['stampPath'],$details['createdAt'],$details['updatedAt'],$details['createdBy'],$details['updatedBy']);
     return $details;
 }
 function client_select(): string {
@@ -493,7 +565,7 @@ function client_for_user(array $client, array $user): array {
     return $client;
 }
 function sheet_select(): string {
-    return 'SELECT ' . uuid_sql('s.id') . ' id,' . uuid_sql('s.property_id') . ' property_id,' . uuid_sql('s.client_id') . ' client_id,s.number,s.equipment,s.brand,s.model,s.serial_number,s.accessories,s.reported_issue,s.technical_assessment,s.work_performed,s.parts_used,s.parts_cost,s.labor_cost,s.total_cost,s.direct_costs,s.net_value,' . uuid_sql('s.technician_id') . ' technician_id,s.technician_name,' . uuid_sql('s.collaborator_id') . ' collaborator_id,s.collaborator_commission,s.show_company_details,s.warranty,s.storage_after,s.handover_notes,s.identity_document,s.approve_diagnostics,s.approve_repair,s.repair_refused,s.product_delivered,s.internal_notes,s.signature_path,s.signed_at,s.received_at,s.estimated_at,s.completed_at,s.status,COALESCE(cf.currency_code,\'RON\') currency_code,s.is_active,s.created_at,s.updated_at,' . uuid_sql('s.created_by') . ' created_by,' . uuid_sql('s.updated_by') . ' updated_by,' . uuid_sql('c.id') . ' c_id,c.first_name c_first_name,c.last_name c_last_name,c.phone c_phone,COALESCE(NULLIF(TRIM(s.technician_name),\'\'),TRIM(CONCAT(COALESCE(t.first_name,\'\'),\' \',COALESCE(t.last_name,\'\')))) t_name FROM service_sheets s JOIN clients c ON c.id=s.client_id LEFT JOIN client_financials cf ON cf.client_id=s.client_id LEFT JOIN users t ON t.id=s.technician_id';
+    ensure_property_companies_table(db());return 'SELECT ' . uuid_sql('s.id') . ' id,' . uuid_sql('s.property_id') . ' property_id,' . uuid_sql('s.client_id') . ' client_id,s.number,s.equipment,s.brand,s.model,s.serial_number,s.accessories,s.reported_issue,s.technical_assessment,s.work_performed,s.parts_used,s.parts_cost,s.labor_cost,s.total_cost,s.direct_costs,s.net_value,' . uuid_sql('s.technician_id') . ' technician_id,s.technician_name,' . uuid_sql('s.collaborator_id') . ' collaborator_id,s.collaborator_commission,s.show_company_details,' . uuid_sql('s.company_id') . ' company_id,s.company_snapshot,pc.legal_name company_name,s.warranty,s.storage_after,s.handover_notes,s.identity_document,s.approve_diagnostics,s.approve_repair,s.repair_refused,s.product_delivered,s.internal_notes,s.signature_path,s.signed_at,s.received_at,s.estimated_at,s.completed_at,s.status,COALESCE(cf.currency_code,\'RON\') currency_code,s.is_active,s.created_at,s.updated_at,' . uuid_sql('s.created_by') . ' created_by,' . uuid_sql('s.updated_by') . ' updated_by,' . uuid_sql('c.id') . ' c_id,c.first_name c_first_name,c.last_name c_last_name,c.phone c_phone,COALESCE(NULLIF(TRIM(s.technician_name),\'\'),TRIM(CONCAT(COALESCE(t.first_name,\'\'),\' \',COALESCE(t.last_name,\'\')))) t_name FROM service_sheets s JOIN clients c ON c.id=s.client_id LEFT JOIN client_financials cf ON cf.client_id=s.client_id LEFT JOIN users t ON t.id=s.technician_id LEFT JOIN property_companies pc ON pc.id=s.company_id';
 }
 function map_sheet(array $row): array {
     $client = ['id' => $row['c_id'], 'firstName' => $row['c_first_name'], 'lastName' => $row['c_last_name'], 'phone' => $row['c_phone']];
@@ -502,6 +574,7 @@ function map_sheet(array $row): array {
     $sheet = entity_base($row);
     foreach (['partsCost','laborCost','totalCost','directCosts','netValue','collaboratorCommission'] as $key) $sheet[$key] = $sheet[$key] !== null ? (float)$sheet[$key] : null;
     foreach (['showCompanyDetails','approveDiagnostics','approveRepair','repairRefused','productDelivered'] as $key) $sheet[$key] = (bool)$sheet[$key];
+    $sheet['companySnapshot']=is_string($sheet['companySnapshot']??null)?(json_decode($sheet['companySnapshot'],true)?:null):($sheet['companySnapshot']??null);$sheet['companyName']=(string)($sheet['companySnapshot']['legalName']??$sheet['companyName']??'');
     $sheet['technicianName'] = $technicianName !== '' ? $technicianName : null;
     $signatureVersion = (string)($sheet['signedAt'] ?? $sheet['updatedAt'] ?? '');
     $sheet['signatureUrl'] = $sheet['signaturePath']
@@ -511,12 +584,18 @@ function map_sheet(array $row): array {
     return $sheet;
 }
 function get_sheet(string $id): array { $stmt = db()->prepare(sheet_select() . ' WHERE s.id=? LIMIT 1'); $stmt->execute([uuid_bin($id)]); $row = $stmt->fetch(); if (!$row) fail('Fișa nu există.', 404); return map_sheet($row); }
+function company_for_service_sheet(array $sheet): array {
+    $company=is_array($sheet['companySnapshot']??null)?$sheet['companySnapshot']:null;
+    if(!$company&&!empty($sheet['companyId']))$company=company_details_by_id((string)$sheet['companyId'],(string)$sheet['propertyId'],true);
+    if(!$company){$default=company_details_record((string)$sheet['propertyId']);$company=!empty($default['id'])?company_details_by_id((string)$default['id'],(string)$sheet['propertyId'],true):$default;}
+    $company['propertyName']=(string)property_record((string)$sheet['propertyId'])['name'];return$company;
+}
 
 function gshop_regenerate_service_sheet_pdf(string $sheetId): array {
     $sheet=get_sheet($sheetId);if(empty($sheet['isActive']))throw new RuntimeException('Fișa de service nu mai este activă.');
-    $client=get_client($sheet['clientId']);$bundle=client_financial_bundle($client);$company=company_details_record($sheet['propertyId']);$company['propertyName']=(string)property_record($sheet['propertyId'])['name'];
+    $client=get_client($sheet['clientId']);$bundle=client_financial_bundle($client);$company=company_for_service_sheet($sheet);
     $pathStmt=db()->prepare('SELECT signature_path FROM service_sheets WHERE id=? LIMIT 1');$pathStmt->execute([uuid_bin($sheet['id'])]);$signaturePath=$pathStmt->fetchColumn()?:null;
-    ensure_company_details_table(db());$stampStmt=db()->prepare('SELECT stamp_path FROM property_company_details WHERE property_id=? LIMIT 1');$stampStmt->execute([uuid_bin($sheet['propertyId'])]);$stampPath=$stampStmt->fetchColumn()?:null;
+    $stampPath=$company['stampPath']??null;
     require_once __DIR__.'/src/service_sheet_pdf.php';
     return generate_service_sheet_pdf($sheet,$client,$bundle['financials'],$bundle['summary'],$company,$signaturePath,$stampPath);
 }
@@ -1010,6 +1089,27 @@ try {
         $after=property_record($propertyId);audit_log('PROPERTY_NAME_UPDATED','settings','Numele proprietății a fost actualizat','Property',$propertyId,$propertyId,['name'=>$before['name']],['name'=>$after['name']],$user);gshop_queue_property_service_sheet_pdfs($propertyId);respond($after);
     }
 
+    if ($method === 'GET' && $path === '/companies') {
+        $user=require_permission('settings.manage');if($user['role']!=='ADMIN')fail('Doar administratorul poate vedea firmele.',403);$propertyId=validated_uuid((string)($_GET['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);property_record($propertyId);respond(company_details_list($propertyId));
+    }
+    if ($method === 'POST' && $path === '/companies') {
+        $user=require_permission('settings.manage');if($user['role']!=='ADMIN')fail('Doar administratorul poate adăuga firme.',403);$body=json_body();$propertyId=validated_uuid((string)($body['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);property_record($propertyId);ensure_property_companies_table(db());$values=validated_company_payload($body);$id=uuid_v4();$now=now_utc();$pdo=db();$count=$pdo->prepare('SELECT COUNT(*) FROM property_companies WHERE property_id=? AND is_active=1');$count->execute([uuid_bin($propertyId)]);$isDefault=(int)$count->fetchColumn()===0||!empty($body['isDefault']);
+        $columns=['id','property_id','is_default','legal_name','tax_id','trade_register_number','vat_payer','address','city','county','postal_code','country','phone','email','website','bank_name','iban','representative_name','representative_role','is_active','created_at','updated_at','created_by','updated_by'];$args=[uuid_bin($id),uuid_bin($propertyId),$isDefault?1:0,...$values,1,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])];$pdo->beginTransaction();try{if($isDefault)$pdo->prepare('UPDATE property_companies SET is_default=0 WHERE property_id=?')->execute([uuid_bin($propertyId)]);$pdo->prepare('INSERT INTO property_companies ('.implode(',',$columns).') VALUES ('.implode(',',array_fill(0,count($args),'?')).')')->execute($args);$pdo->commit();}catch(Throwable$error){if($pdo->inTransaction())$pdo->rollBack();throw$error;}
+        $after=company_details_by_id($id,$propertyId);audit_log('COMPANY_CREATED','settings','Firmă adăugată: '.$after['legalName'],'Company',$id,$propertyId,null,company_details_snapshot($after),$user);respond($after,201);
+    }
+    if ($method === 'PUT' && path_match('/companies/{id}/default',$path,$params)) {
+        $user=require_permission('settings.manage');if($user['role']!=='ADMIN')fail('Doar administratorul poate selecta firma activă.',403);$id=validated_uuid($params['id'],'Firma');$before=company_details_by_id($id);ensure_property($before['propertyId'],$user);$pdo=db();$pdo->beginTransaction();try{$pdo->prepare('UPDATE property_companies SET is_default=0 WHERE property_id=? AND is_active=1')->execute([uuid_bin($before['propertyId'])]);$pdo->prepare('UPDATE property_companies SET is_default=1,updated_at=?,updated_by=? WHERE id=?')->execute([now_utc(),uuid_bin($user['id']),uuid_bin($id)]);$pdo->commit();}catch(Throwable$error){if($pdo->inTransaction())$pdo->rollBack();throw$error;}$after=company_details_by_id($id,$before['propertyId']);audit_log('DEFAULT_COMPANY_CHANGED','settings','Firma activă este acum '.$after['legalName'],'Company',$id,$after['propertyId'],['isDefault'=>$before['isDefault']],['isDefault'=>true],$user);respond($after);
+    }
+    if ($method === 'PUT' && path_match('/companies/{id}',$path,$params)) {
+        $user=require_permission('settings.manage');if($user['role']!=='ADMIN')fail('Doar administratorul poate modifica firmele.',403);$id=validated_uuid($params['id'],'Firma');$before=company_details_by_id($id);ensure_property($before['propertyId'],$user);$values=validated_company_payload(json_body());$now=now_utc();$sets=['legal_name','tax_id','trade_register_number','vat_payer','address','city','county','postal_code','country','phone','email','website','bank_name','iban','representative_name','representative_role'];$assignments=array_map(fn($column)=>$column.'=?',$sets);db()->prepare('UPDATE property_companies SET '.implode(',',$assignments).',updated_at=?,updated_by=? WHERE id=?')->execute([...$values,$now,uuid_bin($user['id']),uuid_bin($id)]);$after=company_details_by_id($id,$before['propertyId']);audit_log('COMPANY_UPDATED','settings','Firmă actualizată: '.$after['legalName'],'Company',$id,$after['propertyId'],company_details_snapshot($before),company_details_snapshot($after),$user);respond($after);
+    }
+    if ($method === 'POST' && path_match('/companies/{id}/stamp',$path,$params)) {
+        $user=require_permission('settings.manage');if($user['role']!=='ADMIN')fail('Doar administratorul poate modifica ștampila.',403);$id=validated_uuid($params['id'],'Firma');$before=company_details_by_id($id);ensure_property($before['propertyId'],$user);$data=(string)(json_body()['stamp']??'');if(!preg_match('#^data:image/(png|jpeg|webp);base64,(.+)$#',$data,$match))fail('Formatul ștampilei nu este valid.',422);$binary=base64_decode($match[2],true);if($binary===false||strlen($binary)<100||strlen($binary)>2500000)fail('Imaginea ștampilei este invalidă sau prea mare.',422);$extensions=['png'=>'png','jpeg'=>'jpg','webp'=>'webp'];$extension=$extensions[$match[1]];$directory=__DIR__.'/uploads/stamps';if(!is_dir($directory)&&!mkdir($directory,0755,true)&&!is_dir($directory))throw new RuntimeException('Directorul pentru ștampile nu poate fi creat.');foreach(glob($directory.'/'.$id.'.*')?:[]as$oldFile)if(is_file($oldFile))@unlink($oldFile);$filename=$id.'.'.$extension;if(file_put_contents($directory.'/'.$filename,$binary,LOCK_EX)===false)throw new RuntimeException('Ștampila nu poate fi salvată.');$pathValue='uploads/stamps/'.$filename;db()->prepare('UPDATE property_companies SET stamp_path=?,updated_at=?,updated_by=? WHERE id=?')->execute([$pathValue,now_utc(),uuid_bin($user['id']),uuid_bin($id)]);$after=company_details_by_id($id,$before['propertyId']);audit_log('COMPANY_STAMP_UPDATED','settings','Ștampila firmei a fost actualizată','Company',$id,$after['propertyId'],['hasStamp'=>!empty($before['stampUrl'])],['hasStamp'=>true],$user);respond($after);
+    }
+    if ($method === 'DELETE' && path_match('/companies/{id}/stamp',$path,$params)) {
+        $user=require_permission('settings.manage');if($user['role']!=='ADMIN')fail('Doar administratorul poate elimina ștampila.',403);$id=validated_uuid($params['id'],'Firma');$before=company_details_by_id($id);ensure_property($before['propertyId'],$user);$directory=__DIR__.'/uploads/stamps';foreach(glob($directory.'/'.$id.'.*')?:[]as$oldFile)if(is_file($oldFile))@unlink($oldFile);db()->prepare('UPDATE property_companies SET stamp_path=NULL,updated_at=?,updated_by=? WHERE id=?')->execute([now_utc(),uuid_bin($user['id']),uuid_bin($id)]);$after=company_details_by_id($id,$before['propertyId']);audit_log('COMPANY_STAMP_DELETED','settings','Ștampila firmei a fost eliminată','Company',$id,$after['propertyId'],['hasStamp'=>!empty($before['stampUrl'])],['hasStamp'=>false],$user);respond($after);
+    }
+
     if ($method === 'GET' && $path === '/company-details') {
         $user=require_permission('settings.manage');if($user['role']!=='ADMIN')fail('Doar administratorul poate vedea datele firmei.',403);
         $propertyId=validated_uuid((string)($_GET['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);property_record($propertyId);respond(company_details_record($propertyId));
@@ -1410,6 +1510,7 @@ try {
         $partsCost=max(0,(float)($body['partsCost']??0));$laborCost=max(0,(float)($body['laborCost']??0));$totalCost=max(0,(float)($body['totalCost']??($partsCost+$laborCost)));$directCosts=max(0,(float)($body['directCosts']??0));$netValue=max(0,$totalCost-$directCosts);
         $technicianName=trim((string)($body['technicianName']??''));$technicianName=$technicianName===''?null:validated_person_name($technicianName,'Numele tehnicianului');
         if(!empty($client['collaboratorId']))collaborator_for_property((string)$client['collaboratorId'],$propertyId);
+        $activeCompany=company_details_record($propertyId);$activeCompanyId=!empty($activeCompany['id'])?(string)$activeCompany['id']:null;$activeCompanySnapshot=$activeCompanyId?company_sheet_snapshot(company_details_by_id($activeCompanyId,$propertyId,true)):null;
         $id=uuid_v4();$now=now_utc();$pdo=db();$pdo->beginTransaction();$commissionCreated=false;$financeSync=null;
         try{
             $clientLock=$pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE');$clientLock->execute([uuid_bin($clientId)]);
@@ -1417,8 +1518,8 @@ try {
             $existingStmt=$pdo->prepare('SELECT '.uuid_sql('id').' id FROM service_sheets WHERE client_id=? AND is_active=1 ORDER BY updated_at DESC,created_at DESC LIMIT 1 FOR UPDATE');$existingStmt->execute([uuid_bin($clientId)]);$existingId=$existingStmt->fetchColumn();
             if($existingId){$pdo->rollBack();fail('Clientul are deja o fișă de service.',409,['code'=>'SERVICE_SHEET_ALREADY_EXISTS','serviceSheetId'=>$existingId]);}
             $seq=(int)$pdo->query("SELECT COUNT(*)+1 FROM service_sheets WHERE YEAR(created_at)=YEAR(UTC_TIMESTAMP())")->fetchColumn();$number='GS-'.gmdate('Y').'-'.str_pad((string)$seq,5,'0',STR_PAD_LEFT);
-            $insertColumns=['id','property_id','client_id','number','equipment','brand','model','serial_number','accessories','reported_issue','technical_assessment','work_performed','parts_used','parts_cost','labor_cost','total_cost','direct_costs','net_value','technician_id','technician_name','collaborator_id','collaborator_commission','show_company_details','warranty','storage_after','handover_notes','identity_document','approve_diagnostics','approve_repair','repair_refused','product_delivered','internal_notes','received_at','estimated_at','status','is_active','created_at','updated_at','created_by','updated_by'];
-            $insertValues=[uuid_bin($id),uuid_bin($propertyId),uuid_bin($clientId),$number,trim((string)($body['equipment']??'')),$body['brand']??null,$body['model']??null,$body['serialNumber']??null,$body['accessories']??null,$body['reportedIssue'],$body['technicalAssessment']??null,$body['workPerformed']??null,$body['partsUsed']??null,$partsCost,$laborCost,$totalCost,$directCosts,$netValue,!empty($body['technicianId'])?uuid_bin((string)$body['technicianId']):uuid_bin($user['id']),$technicianName,$collaboratorId?uuid_bin($collaboratorId):null,$commissionValue,array_key_exists('showCompanyDetails',$body)?((bool)$body['showCompanyDetails']?1:0):1,$body['warranty']??null,$body['storageAfter']??null,$body['handoverNotes']??null,$body['identityDocument']??null,!empty($body['approveDiagnostics'])?1:0,!empty($body['approveRepair'])?1:0,!empty($body['repairRefused'])?1:0,!empty($body['productDelivered'])?1:0,$body['internalNotes']??null,!empty($body['receivedAt'])?gmdate('Y-m-d H:i:s',strtotime((string)$body['receivedAt'])):$now,!empty($body['estimatedAt'])?gmdate('Y-m-d H:i:s',strtotime((string)$body['estimatedAt'])):null,'NEW',1,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])];
+            $insertColumns=['id','property_id','client_id','number','equipment','brand','model','serial_number','accessories','reported_issue','technical_assessment','work_performed','parts_used','parts_cost','labor_cost','total_cost','direct_costs','net_value','technician_id','technician_name','collaborator_id','collaborator_commission','show_company_details','company_id','company_snapshot','warranty','storage_after','handover_notes','identity_document','approve_diagnostics','approve_repair','repair_refused','product_delivered','internal_notes','received_at','estimated_at','status','is_active','created_at','updated_at','created_by','updated_by'];
+            $insertValues=[uuid_bin($id),uuid_bin($propertyId),uuid_bin($clientId),$number,trim((string)($body['equipment']??'')),$body['brand']??null,$body['model']??null,$body['serialNumber']??null,$body['accessories']??null,$body['reportedIssue'],$body['technicalAssessment']??null,$body['workPerformed']??null,$body['partsUsed']??null,$partsCost,$laborCost,$totalCost,$directCosts,$netValue,!empty($body['technicianId'])?uuid_bin((string)$body['technicianId']):uuid_bin($user['id']),$technicianName,$collaboratorId?uuid_bin($collaboratorId):null,$commissionValue,1,$activeCompanyId?uuid_bin($activeCompanyId):null,$activeCompanySnapshot?json_encode($activeCompanySnapshot,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES):null,$body['warranty']??null,$body['storageAfter']??null,$body['handoverNotes']??null,$body['identityDocument']??null,!empty($body['approveDiagnostics'])?1:0,!empty($body['approveRepair'])?1:0,!empty($body['repairRefused'])?1:0,!empty($body['productDelivered'])?1:0,$body['internalNotes']??null,!empty($body['receivedAt'])?gmdate('Y-m-d H:i:s',strtotime((string)$body['receivedAt'])):$now,!empty($body['estimatedAt'])?gmdate('Y-m-d H:i:s',strtotime((string)$body['estimatedAt'])):null,'NEW',1,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])];
             $stmt=$pdo->prepare('INSERT INTO service_sheets ('.implode(',',$insertColumns).') VALUES ('.implode(',',array_fill(0,count($insertColumns),'?')).')');
             $stmt->execute($insertValues);
             $pdo->prepare("INSERT INTO service_sheet_status_history (id,service_sheet_id,old_status,new_status,changed_by,created_at) VALUES (?,?,NULL,'NEW',?,?)")->execute([uuid_bin(uuid_v4()),uuid_bin($id),uuid_bin($user['id']),$now]);
@@ -1440,8 +1541,8 @@ try {
             $nextTotal=array_key_exists('totalCost',$body)?max(0,(float)$body['totalCost']):((array_key_exists('partsCost',$body)||array_key_exists('laborCost',$body))?$nextParts+$nextLabor:(float)$before['totalCost']);$nextDirect=array_key_exists('directCosts',$body)?max(0,(float)$body['directCosts']):(float)$before['directCosts'];
             $body['partsCost']=$nextParts;$body['laborCost']=$nextLabor;$body['totalCost']=$nextTotal;$body['directCosts']=$nextDirect;$body['netValue']=max(0,$nextTotal-$nextDirect);
         }
-        $map=['equipment'=>'equipment','brand'=>'brand','model'=>'model','serialNumber'=>'serial_number','accessories'=>'accessories','reportedIssue'=>'reported_issue','technicalAssessment'=>'technical_assessment','workPerformed'=>'work_performed','partsUsed'=>'parts_used','partsCost'=>'parts_cost','laborCost'=>'labor_cost','totalCost'=>'total_cost','directCosts'=>'direct_costs','netValue'=>'net_value','technicianName'=>'technician_name','showCompanyDetails'=>'show_company_details','warranty'=>'warranty','storageAfter'=>'storage_after','handoverNotes'=>'handover_notes','identityDocument'=>'identity_document','approveDiagnostics'=>'approve_diagnostics','approveRepair'=>'approve_repair','repairRefused'=>'repair_refused','productDelivered'=>'product_delivered','internalNotes'=>'internal_notes','receivedAt'=>'received_at','estimatedAt'=>'estimated_at','completedAt'=>'completed_at','status'=>'status'];$sets=[];$args=[];
-        foreach($map as$key=>$column)if(array_key_exists($key,$body)){$sets[]="$column=?";$value=$body[$key];if(in_array($key,['receivedAt','estimatedAt','completedAt'],true))$value=$value?gmdate('Y-m-d H:i:s',strtotime((string)$value)):null;elseif(in_array($key,['showCompanyDetails','approveDiagnostics','approveRepair','repairRefused','productDelivered'],true))$value=(bool)$value?1:0;elseif($value===''&&$key!=='equipment')$value=null;$args[]=$value;}
+        $map=['equipment'=>'equipment','brand'=>'brand','model'=>'model','serialNumber'=>'serial_number','accessories'=>'accessories','reportedIssue'=>'reported_issue','technicalAssessment'=>'technical_assessment','workPerformed'=>'work_performed','partsUsed'=>'parts_used','partsCost'=>'parts_cost','laborCost'=>'labor_cost','totalCost'=>'total_cost','directCosts'=>'direct_costs','netValue'=>'net_value','technicianName'=>'technician_name','warranty'=>'warranty','storageAfter'=>'storage_after','handoverNotes'=>'handover_notes','identityDocument'=>'identity_document','approveDiagnostics'=>'approve_diagnostics','approveRepair'=>'approve_repair','repairRefused'=>'repair_refused','productDelivered'=>'product_delivered','internalNotes'=>'internal_notes','receivedAt'=>'received_at','estimatedAt'=>'estimated_at','completedAt'=>'completed_at','status'=>'status'];$sets=[];$args=[];
+        foreach($map as$key=>$column)if(array_key_exists($key,$body)){$sets[]="$column=?";$value=$body[$key];if(in_array($key,['receivedAt','estimatedAt','completedAt'],true))$value=$value?gmdate('Y-m-d H:i:s',strtotime((string)$value)):null;elseif(in_array($key,['approveDiagnostics','approveRepair','repairRefused','productDelivered'],true))$value=(bool)$value?1:0;elseif($value===''&&$key!=='equipment')$value=null;$args[]=$value;}
         if(!$sets)fail('Nu există date de actualizat.',422);$now=now_utc();$sets[]='updated_at=?';$args[]=$now;$sets[]='updated_by=?';$args[]=uuid_bin($user['id']);$args[]=uuid_bin($params['id']);$pdo=db();$pdo->beginTransaction();
         try{
             $clientLock=$pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE');$clientLock->execute([uuid_bin($before['clientId'])]);
@@ -1482,9 +1583,9 @@ try {
     if ($method==='POST'&&path_match('/service-sheets/{id}/signature',$path,$params)) { $user=require_permission('service_sheets.sign');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);$body=json_body();$data=(string)($body['signature']??'');if(!preg_match('#^data:image/png;base64,(.+)$#',$data,$match))fail('Formatul semnăturii nu este valid.',422);$binary=base64_decode($match[1],true);if($binary===false||strlen($binary)<100||strlen($binary)>1500000)fail('Semnătura este invalidă sau prea mare.',422);$directory=__DIR__.'/uploads/signatures';if(!is_dir($directory)&&!mkdir($directory,0755,true)&&!is_dir($directory))throw new RuntimeException('Directorul pentru semnături nu poate fi creat.');$filename=$sheet['id'].'.png';if(file_put_contents($directory.'/'.$filename,$binary,LOCK_EX)===false)throw new RuntimeException('Semnătura nu poate fi salvată.');$pathValue='uploads/signatures/'.$filename;$now=now_utc();db()->prepare('UPDATE service_sheets SET signature_path=?,signed_at=?,updated_at=?,updated_by=? WHERE id=?')->execute([$pathValue,$now,$now,uuid_bin($user['id']),uuid_bin($sheet['id'])]);audit_log('SERVICE_SHEET_SIGNED','service_sheets','Semnătură client salvată pentru '.$sheet['number'],'ServiceSheet',$sheet['id'],$sheet['propertyId'],null,['signedAt'=>$now],$user);gshop_queue_service_sheet_pdf($sheet['id']);respond(get_sheet($sheet['id'])); }
     if ($method==='POST'&&path_match('/service-sheets/{id}/pdf',$path,$params)) {
         $user=require_permission('service_sheets.view');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);
-        $client=get_client($sheet['clientId']);$bundle=client_financial_bundle($client);$company=company_details_record($sheet['propertyId']);$company['propertyName']=(string)property_record($sheet['propertyId'])['name'];
+        $client=get_client($sheet['clientId']);$bundle=client_financial_bundle($client);$company=company_for_service_sheet($sheet);
         $pathStmt=db()->prepare('SELECT signature_path FROM service_sheets WHERE id=? LIMIT 1');$pathStmt->execute([uuid_bin($sheet['id'])]);$signaturePath=$pathStmt->fetchColumn()?:null;
-        ensure_company_details_table(db());$stampStmt=db()->prepare('SELECT stamp_path FROM property_company_details WHERE property_id=? LIMIT 1');$stampStmt->execute([uuid_bin($sheet['propertyId'])]);$stampPath=$stampStmt->fetchColumn()?:null;
+        $stampPath=$company['stampPath']??null;
         require_once __DIR__.'/src/service_sheet_pdf.php';
         $document=generate_service_sheet_pdf($sheet,$client,$bundle['financials'],$bundle['summary'],$company,$signaturePath,$stampPath);
         $result=['url'=>public_base_url().'/uploads/service-sheets/'.rawurlencode($document['fileName']).'?v='.rawurlencode($document['generatedAt']),'fileName'=>$document['fileName'],'generatedAt'=>$document['generatedAt']];
@@ -1675,17 +1776,17 @@ try {
         $metrics=['clientsTotal'=>$clients,'totalRevenue'=>round($revenue,2),'clientsWaiting'=>$clientsWaiting,'revenueOnHold'=>round($revenueOnHold,2),'gshopNet'=>round($gshopNet,2),'collaboratorTotal'=>round($collaboratorTotal,2),'collaboratorPaid'=>round($payments,2),'collaboratorOnHold'=>round($collaboratorOnHold,2),'clientsNew'=>(int)$scalar('SELECT COUNT(*) FROM clients WHERE property_id=? AND is_active=1 AND created_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 30 DAY)',[$p]),'serviceSheetsOpen'=>(int)$scalar("SELECT COUNT(*) FROM service_sheets WHERE property_id=? AND is_active=1 AND status IN ('NEW','WAITING','VERIFYING','IN_PROGRESS','WAITING_PARTS')",[$p]),'serviceSheetsInProgress'=>(int)$scalar("SELECT COUNT(*) FROM service_sheets WHERE property_id=? AND is_active=1 AND status='IN_PROGRESS'",[$p]),'serviceSheetsCompleted'=>(int)$scalar("SELECT COUNT(*) FROM service_sheets WHERE property_id=? AND is_active=1 AND status IN ('COMPLETED','DELIVERED')",[$p]),'usersActive'=>(int)$scalar('SELECT COUNT(*) FROM user_properties up JOIN users u ON u.id=up.user_id WHERE up.property_id=? AND u.is_active=1',[$p]),'collaboratorsActive'=>(int)$scalar('SELECT COUNT(*) FROM collaborator_properties cp JOIN collaborators c ON c.id=cp.collaborator_id WHERE cp.property_id=? AND c.is_active=1',[$p]),'qrGenerated'=>$generated,'qrUsed'=>$used,'estimatedRevenue'=>$revenue,'collaboratorCommissions'=>$commissionTotal,'collaboratorPayments'=>$payments];
 
         $monthNames=[1=>'Ian',2=>'Feb',3=>'Mar',4=>'Apr',5=>'Mai',6=>'Iun',7=>'Iul',8=>'Aug',9=>'Sep',10=>'Oct',11=>'Noi',12=>'Dec'];
-        $series=[];$cursor=$periodStart;$seriesRevenue=0.0;$seriesCosts=0.0;$seriesCommission=0.0;
-        while($cursor<$periodEnd&&count($series)<80){
-            if($bucket==='HOUR')$next=$cursor->modify('+4 hours');elseif($bucket==='WEEK')$next=$cursor->modify('+7 days');elseif($bucket==='MONTH')$next=$cursor->modify('first day of next month');elseif($bucket==='YEAR')$next=$cursor->modify('first day of january next year');else$next=$cursor->modify('+1 day');
-            if($next>$periodEnd)$next=$periodEnd;
+        $series=[];$cursor=$periodStart;$seriesEnd=$period==='TODAY'?$now->setTime((int)$now->format('H'),0)->modify('+1 hour'):$periodEnd;$seriesRevenue=0.0;$seriesCosts=0.0;$seriesCommission=0.0;
+        while($cursor<$seriesEnd&&count($series)<80){
+            if($bucket==='HOUR')$next=$cursor->modify('+1 hour');elseif($bucket==='WEEK')$next=$cursor->modify('+7 days');elseif($bucket==='MONTH')$next=$cursor->modify('first day of next month');elseif($bucket==='YEAR')$next=$cursor->modify('first day of january next year');else$next=$cursor->modify('+1 day');
+            if($next>$seriesEnd)$next=$seriesEnd;
             $startSql=$cursor->format('Y-m-d H:i:s');$endSql=$next->format('Y-m-d H:i:s');$args=[$p,$startSql,$endSql];
             $bucketRevenue=(float)$scalar("SELECT COALESCE(SUM(total_cost),0) FROM service_sheets WHERE property_id=? AND is_active=1 AND status<>'CANCELLED' AND created_at>=? AND created_at<?",$args);
             $bucketCosts=(float)$scalar("SELECT COALESCE(SUM(direct_costs),0) FROM service_sheets WHERE property_id=? AND is_active=1 AND status<>'CANCELLED' AND created_at>=? AND created_at<?",$args);
             $bucketCommission=(float)$scalar("SELECT COALESCE(SUM(commission_value),0) FROM commissions WHERE property_id=? AND is_active=1 AND status='PAID' AND paid_at IS NOT NULL AND created_at>=? AND created_at<?",$args);
             $bucketClients=(int)$scalar('SELECT COUNT(*) FROM clients WHERE property_id=? AND is_active=1 AND created_at>=? AND created_at<?',$args);
             $label=$bucket==='HOUR'?$cursor->format('H:i'):($bucket==='MONTH'?$monthNames[(int)$cursor->format('n')].' '.$cursor->format('y'):($bucket==='YEAR'?$cursor->format('Y'):$cursor->format('d').' '.$monthNames[(int)$cursor->format('n')]));
-            $series[]=['label'=>$label,'revenue'=>round($bucketRevenue,2),'costs'=>round($bucketCosts,2),'net'=>round($bucketRevenue-$bucketCosts-$bucketCommission,2),'clients'=>$bucketClients];
+            $series[]=['label'=>$label,'revenue'=>round($bucketRevenue,2),'costs'=>round($bucketCosts,2),'net'=>round($bucketRevenue-$bucketCosts-$bucketCommission,2),'clients'=>$bucketClients,'isCurrent'=>$now>=$cursor&&$now<$next];
             $seriesRevenue+=$bucketRevenue;$seriesCosts+=$bucketCosts;$seriesCommission+=$bucketCommission;$cursor=$next;
         }
 
@@ -1707,8 +1808,8 @@ try {
         $periodRevenue=$periodRevenueRon+(float)$periodLegacy['total_revenue'];$periodRevenueOnHold=$periodHoldRon+(float)$periodLegacy['revenue_on_hold'];$periodClientsWaiting=$periodWaiting+(int)$periodLegacy['clients_waiting'];
         $periodCollaboratorPaid=$periodCollaboratorPaidRon+(float)$periodLegacyCommission['paid'];$periodCollaboratorOnHold=$periodCollaboratorOnHoldRon+(float)$periodLegacyCommission['on_hold'];$periodCollaboratorTotal=$periodCollaboratorPaid+$periodCollaboratorOnHold;
         $periodGshopNet=$periodNetRon+((float)$periodLegacy['total_revenue']-(float)$periodLegacy['direct_costs']-(float)$periodLegacyCommission['paid']);
-        $periodMetrics=['clientsTotal'=>$periodClientsTotal,'clientsWaiting'=>$periodClientsWaiting,'gshopNet'=>round($periodGshopNet,2),'revenueOnHold'=>round($periodRevenueOnHold,2),'totalRevenue'=>round($periodRevenue,2),'collaboratorTotal'=>round($periodCollaboratorTotal,2)];
-        $stmt=$pdo->prepare('SELECT '.uuid_sql('co.id').' id,'.uuid_sql('co.collaborator_id').' collaborator_id,'.uuid_sql('co.client_id').' client_id,'.uuid_sql('co.service_sheet_id').' service_sheet_id,s.number service_sheet_number,'.uuid_sql('co.intervention_id').' intervention_id,'.uuid_sql('co.property_id').' property_id,co.total_value,co.direct_costs,co.net_value,co.type,co.rate_or_amount,co.commission_value,co.status,co.paid_at,co.is_active,co.created_at,co.updated_at,'.uuid_sql('co.created_by').' created_by,'.uuid_sql('co.updated_by').' updated_by FROM commissions co LEFT JOIN service_sheets s ON s.id=co.service_sheet_id WHERE co.property_id=? AND co.is_active=1 AND co.created_at>=? AND co.created_at<? ORDER BY co.created_at DESC LIMIT 100');
+        $periodMetrics=['clientsTotal'=>$periodClientsTotal,'clientsWaiting'=>$periodClientsWaiting,'gshopNet'=>round($periodGshopNet,2),'revenueOnHold'=>round($periodRevenueOnHold,2),'totalRevenue'=>round($periodRevenue,2),'collaboratorTotal'=>round($periodCollaboratorTotal,2),'collaboratorPaid'=>round($periodCollaboratorPaid,2),'collaboratorOnHold'=>round($periodCollaboratorOnHold,2)];
+        $stmt=$pdo->prepare('SELECT '.uuid_sql('co.id').' id,'.uuid_sql('co.collaborator_id').' collaborator_id,collab.name collaborator_name,'.uuid_sql('co.client_id').' client_id,CONCAT(cl.first_name,\' \',cl.last_name) client_name,'.uuid_sql('co.service_sheet_id').' service_sheet_id,s.number service_sheet_number,'.uuid_sql('co.intervention_id').' intervention_id,'.uuid_sql('co.property_id').' property_id,co.total_value,co.direct_costs,co.net_value,co.type,co.rate_or_amount,co.commission_value,co.status,co.paid_at,co.is_active,co.created_at,co.updated_at,'.uuid_sql('co.created_by').' created_by,'.uuid_sql('co.updated_by').' updated_by FROM commissions co JOIN collaborators collab ON collab.id=co.collaborator_id JOIN clients cl ON cl.id=co.client_id LEFT JOIN service_sheets s ON s.id=co.service_sheet_id WHERE co.property_id=? AND co.is_active=1 AND co.created_at>=? AND co.created_at<? ORDER BY co.created_at DESC LIMIT 100');
         $stmt->execute([$p,$startSql,$endSql]);
         $commissions=array_map(function($row){$item=entity_base($row);foreach(['totalValue','directCosts','netValue','rateOrAmount','commissionValue']as$key)$item[$key]=(float)$item[$key];return$item;},$stmt->fetchAll());
         $revenueByMonth=array_map(fn($item)=>['label'=>$item['label'],'value'=>$item['revenue']],$series);

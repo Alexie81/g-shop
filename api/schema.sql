@@ -69,6 +69,36 @@ CREATE TABLE IF NOT EXISTS property_company_details (
   CONSTRAINT fk_company_details_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS property_companies (
+  id BINARY(16) PRIMARY KEY,
+  property_id BINARY(16) NOT NULL,
+  is_default TINYINT(1) NOT NULL DEFAULT 0,
+  legal_name VARCHAR(160) NULL,
+  tax_id VARCHAR(24) NULL,
+  trade_register_number VARCHAR(40) NULL,
+  vat_payer TINYINT(1) NOT NULL DEFAULT 0,
+  address VARCHAR(220) NULL,
+  city VARCHAR(80) NULL,
+  county VARCHAR(80) NULL,
+  postal_code VARCHAR(16) NULL,
+  country VARCHAR(60) NOT NULL DEFAULT 'România',
+  phone VARCHAR(30) NULL,
+  email VARCHAR(140) NULL,
+  website VARCHAR(160) NULL,
+  bank_name VARCHAR(100) NULL,
+  iban VARCHAR(40) NULL,
+  representative_name VARCHAR(120) NULL,
+  representative_role VARCHAR(80) NULL,
+  stamp_path VARCHAR(255) NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  created_by BINARY(16) NULL,
+  updated_by BINARY(16) NULL,
+  INDEX idx_property_companies_property (property_id, is_active, is_default),
+  CONSTRAINT fk_property_companies_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS refresh_sessions (
   id BINARY(16) PRIMARY KEY,
   user_id BINARY(16) NOT NULL,
@@ -287,6 +317,8 @@ CREATE TABLE IF NOT EXISTS service_sheets (
   collaborator_id BINARY(16) NULL,
   collaborator_commission DECIMAL(12,2) NULL,
   show_company_details TINYINT(1) NOT NULL DEFAULT 1,
+  company_id BINARY(16) NULL,
+  company_snapshot LONGTEXT NULL,
   warranty VARCHAR(120) NULL,
   storage_after VARCHAR(120) NULL,
   handover_notes TEXT NULL,
@@ -311,7 +343,8 @@ CREATE TABLE IF NOT EXISTS service_sheets (
   INDEX idx_sheets_client (client_id, created_at),
   CONSTRAINT fk_sheet_property FOREIGN KEY (property_id) REFERENCES properties(id),
   CONSTRAINT fk_sheet_client FOREIGN KEY (client_id) REFERENCES clients(id),
-  CONSTRAINT fk_sheet_collaborator FOREIGN KEY (collaborator_id) REFERENCES collaborators(id) ON DELETE SET NULL
+  CONSTRAINT fk_sheet_collaborator FOREIGN KEY (collaborator_id) REFERENCES collaborators(id) ON DELETE SET NULL,
+  CONSTRAINT fk_sheet_company FOREIGN KEY (company_id) REFERENCES property_companies(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS service_sheet_status_history (

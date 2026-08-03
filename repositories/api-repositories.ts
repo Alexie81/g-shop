@@ -14,10 +14,12 @@ export const propertyRepository: PropertyRepository = {
   updateName: (id, name) => apiRequest(`/properties/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
 };
 export const companyDetailsRepository: CompanyDetailsRepository = {
-  get: (propertyId) => apiRequest(`/company-details?propertyId=${propertyId}`),
-  update: (propertyId, input) => apiRequest(`/company-details/${propertyId}`, { method: 'PUT', body: JSON.stringify(input) }),
-  saveStamp: (propertyId, stamp) => apiRequest(`/company-details/${propertyId}/stamp`, { method: 'POST', body: JSON.stringify({ stamp }) }),
-  removeStamp: (propertyId) => apiRequest(`/company-details/${propertyId}/stamp`, { method: 'DELETE' }),
+  list: (propertyId) => apiRequest(`/companies?propertyId=${propertyId}`),
+  create: (propertyId, input) => apiRequest('/companies', { method: 'POST', body: JSON.stringify({ propertyId, ...input }) }),
+  update: (companyId, input) => apiRequest(`/companies/${companyId}`, { method: 'PUT', body: JSON.stringify(input) }),
+  setDefault: (companyId) => apiRequest(`/companies/${companyId}/default`, { method: 'PUT' }),
+  saveStamp: (companyId, stamp) => apiRequest(`/companies/${companyId}/stamp`, { method: 'POST', body: JSON.stringify({ stamp }) }),
+  removeStamp: (companyId) => apiRequest(`/companies/${companyId}/stamp`, { method: 'DELETE' }),
 };
 export const appUpdateRepository: AppUpdateRepository = { get: () => apiRequest('/app-update', { authenticated: false }) };
 export const dashboardRepository: DashboardRepository = { get: (propertyId) => apiRequest(`/dashboard?propertyId=${propertyId}`) };

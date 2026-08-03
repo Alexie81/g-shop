@@ -53,7 +53,9 @@ export interface Property extends BaseEntity {
 }
 
 export interface CompanyDetails {
+  id: UUID;
   propertyId: UUID;
+  isDefault: boolean;
   legalName: string;
   taxId: string;
   tradeRegisterNumber: string;
@@ -308,6 +310,8 @@ export interface ServiceSheet extends BaseEntity {
   collaboratorId?: UUID;
   collaboratorCommission?: number;
   showCompanyDetails: boolean;
+  companyId?: UUID;
+  companyName?: string;
   warranty?: string;
   storageAfter?: string;
   handoverNotes?: string;
@@ -361,7 +365,9 @@ export interface CollaboratorAssignment extends BaseEntity {
 
 export interface Commission extends BaseEntity {
   collaboratorId: UUID;
+  collaboratorName?: string;
   clientId: UUID;
+  clientName?: string;
   serviceSheetId?: UUID;
   serviceSheetNumber?: string;
   propertyId: UUID;
