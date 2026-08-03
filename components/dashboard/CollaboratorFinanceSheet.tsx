@@ -11,6 +11,7 @@ import { formatCurrency, formatDate } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Modal, PanResponder, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type CollaboratorFinanceSheetProps = {
   visible: boolean;
@@ -24,11 +25,13 @@ type CollaboratorFinanceSheetProps = {
 export function CollaboratorFinanceSheet({ visible, propertyId, collaboratorId, collaboratorName, onClose, onChanged }: CollaboratorFinanceSheetProps) {
   const { colors, isDark } = useAppTheme();
   const { height: windowHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [data, setData] = useState<CollaboratorFinanceSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [updating, setUpdating] = useState('');
-  const expandedHeight = Math.max(360, windowHeight - 12);
+  const topClearance = Math.max(insets.top, 12) + spacing.sm;
+  const expandedHeight = Math.max(360, windowHeight - topClearance - insets.bottom);
   const collapsedHeight = Math.max(360, Math.min(windowHeight * 0.72, expandedHeight - 96));
   const sheetHeight = useRef(new Animated.Value(collapsedHeight)).current;
   const dragStart = useRef(collapsedHeight);
