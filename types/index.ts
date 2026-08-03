@@ -313,6 +313,9 @@ export interface ServiceSheet extends BaseEntity {
   companyId?: UUID;
   companyName?: string;
   warranty?: string;
+  warrantyStartAt?: ISODate;
+  warrantyEndAt?: ISODate;
+  warrantyRemediation?: string;
   storageAfter?: string;
   handoverNotes?: string;
   identityDocument?: string;
@@ -339,7 +342,7 @@ export interface ServiceSheetPdf {
   generatedAt: ISODate;
 }
 
-export type ServiceDocumentType = 'INTAKE' | 'FINAL_ESTIMATE' | 'EXIT';
+export type ServiceDocumentType = 'INTAKE' | 'FINAL_ESTIMATE' | 'EXIT' | 'WARRANTY';
 export type ServiceDocumentStatus = 'MISSING' | 'PUBLISHED';
 
 export interface ServiceDocumentItem {
@@ -381,6 +384,10 @@ export interface ServiceDocument {
   technicalAssessment?: string;
   defectCause?: string;
   finalNotes?: string;
+  warrantyPeriod?: string;
+  warrantyStartAt?: ISODate;
+  warrantyEndAt?: ISODate;
+  warrantyRemediation?: string;
   estimatedCosts?: EstimatedCosts;
   parts: ServiceDocumentItem[];
   labor: ServiceDocumentItem[];
@@ -396,6 +403,10 @@ export interface GenerateServiceDocumentInput {
   technicalAssessment?: string;
   defectCause?: string;
   finalNotes?: string;
+  warrantyPeriod?: string;
+  warrantyStartAt?: ISODate;
+  warrantyEndAt?: ISODate;
+  warrantyRemediation?: string;
   estimatedCosts?: EstimatedCosts;
   parts?: ServiceDocumentItem[];
   labor?: ServiceDocumentItem[];
@@ -417,6 +428,8 @@ export interface ServiceDocumentRegisterRow {
   finalEstimateAt?: ISODate;
   exitNumber?: string;
   exitAt?: ISODate;
+  warrantyNumber?: string;
+  warrantyAt?: ISODate;
 }
 
 export type CommissionType = 'PERCENT_NET' | 'PERCENT_TOTAL' | 'FIXED';

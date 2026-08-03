@@ -760,6 +760,50 @@ function gshop_document_overlay_exit(Fpdi $pdf, array $document, array $snapshot
     gshop_document_footer($pdf, 1, 1);
 }
 
+/** @param array{path:string,width:int,height:int}|null $signature */
+function gshop_document_overlay_warranty(Fpdi $pdf, array $document, array $snapshot, ?array $signature, ?string $stampPath): void {
+    $company = is_array($snapshot['company'] ?? null) ? $snapshot['company'] : [];
+    $client = is_array($snapshot['client'] ?? null) ? $snapshot['client'] : [];
+    $sheet = is_array($snapshot['sheet'] ?? null) ? $snapshot['sheet'] : [];
+    $warranty = is_array($snapshot['warranty'] ?? null) ? $snapshot['warranty'] : [];
+    // Normalize the reference card to the same two-row layout used by the
+    // intake sheet: compact labels above, complete values and blue rules below.
+    gshop_document_box($pdf, 349, 769, 208, 38, 'electricLight', 'electricLight', 0, 0);
+    gshop_pdf_text($pdf, 355, 795, 'NR. CERTIFICAT', 4.7, 'B', 94, 'L', gshop_document_color('electricDark'));
+    gshop_pdf_text($pdf, 464, 795, 'DATA ȘI ORA', 4.7, 'B', 87, 'L', gshop_document_color('electricDark'));
+    gshop_document_shrink_text($pdf, 355, 779, $document['number'] ?? '', 94, 5.8, 4.7, 'B');
+    gshop_document_shrink_text($pdf, 464, 779, gshop_document_date($document['documentAt'] ?? ''), 87, 5.6, 4.7, 'B');
+    gshop_document_source_line($pdf, 355, 774, 449, 774, 'electric', 0.55);
+    gshop_document_source_line($pdf, 464, 774, 551, 774, 'electric', 0.55);
+    gshop_document_overlay_company($pdf, $company);
+    gshop_document_reference($pdf, $snapshot, 679, true);
+
+    $left = [
+        [596, $sheet['equipment'] ?? ''],
+        [576, $sheet['brand'] ?? ''],
+        [556, $sheet['model'] ?? ''],
+        [536, $sheet['serialNumber'] ?? ''],
+    ];
+    $right = [
+        [596, $warranty['period'] ?? $sheet['warranty'] ?? ''],
+        [576, gshop_document_date($warranty['startAt'] ?? $sheet['warrantyStartAt'] ?? '')],
+        [556, gshop_document_date($warranty['endAt'] ?? $sheet['warrantyEndAt'] ?? '')],
+        [536, $warranty['remediation'] ?? $sheet['warrantyRemediation'] ?? ''],
+        [516, $warranty['contact'] ?? ''],
+    ];
+    gshop_document_box($pdf, 32, 513.5, 253, 14.5, 'white', 'white', 0, 0);
+    foreach ($left as [$baseline, $value]) gshop_pdf_text($pdf, 117, $baseline, $value, 6.6, '', 164);
+    foreach ($right as [$baseline, $value]) gshop_pdf_text($pdf, 405, $baseline, $value, 6.4, '', 156);
+
+    gshop_pdf_text($pdf, 104, 235, gshop_document_client_name($client), 6.8, '', 235);
+    gshop_pdf_text($pdf, 417, 235, gshop_document_date($document['documentAt'] ?? $warranty['date'] ?? ''), 6.3, '', 142);
+    gshop_document_box($pdf, 35, 184, 252, 24, 'white', 'white', 0, 0);
+    gshop_pdf_text($pdf, 36, 198, 'ȘTAMPILĂ SERVICE', 5.3, 'B', 150, 'L', gshop_document_color('slate'));
+    gshop_document_place_image($pdf, $stampPath, 36, 126, 249, 84);
+    gshop_document_place_image($pdf, $signature['path'] ?? null, 310, 126, 249, 84, $signature);
+    gshop_document_footer($pdf, 1, 1);
+}
+
 function gshop_document_add_template(GshopServiceDocumentPdf $pdf, string $template, int $page = 1): void {
     if (!is_file($template)) throw new RuntimeException('Șablonul PDF al documentului nu este disponibil.');
     $count = $pdf->setSourceFile($template);
@@ -817,7 +861,7 @@ function generate_service_document_pdf(
     ?string $stampPath
 ): array {
     $normalizedType = strtoupper(str_replace('-', '_', trim($type)));
-    if (!in_array($normalizedType, ['INTAKE', 'FINAL_ESTIMATE', 'EXIT'], true)) throw new InvalidArgumentException('Tipul documentului PDF nu este valid.');
+    if (!in_array($normalizedType, ['INTAKE', 'FINAL_ESTIMATE', 'EXIT', 'WARRANTY'], true)) throw new InvalidArgumentException('Tipul documentului PDF nu este valid.');
 
     $signaturePath = gshop_document_safe_source($signaturePath);
     $stampPath = gshop_document_safe_source($stampPath);
@@ -831,6 +875,7 @@ function generate_service_document_pdf(
             'agreement' => $templateRoot . '/final-estimate-agreement.pdf',
         ],
         'EXIT' => ['exit' => $templateRoot . '/exit.pdf'],
+        'WARRANTY' => ['warranty' => $templateRoot . '/warranty.pdf'],
     };
     foreach ($templates as $template) if (!is_file($template)) throw new RuntimeException('Șablonul PDF al documentului nu este disponibil.');
 
@@ -848,7 +893,7 @@ function generate_service_document_pdf(
         'hash' => hash_file('sha256', $template) ?: '',
     ];
     $fingerprint = hash('sha256', serialize([
-        'version' => 11,
+        'version' => 20,
         'type' => $normalizedType,
         'document' => $document,
         'snapshot' => $snapshot,
@@ -890,6 +935,7 @@ function generate_service_document_pdf(
                 'INTAKE' => 'Fișă de intrare în service ' . gshop_pdf_string($document['number'] ?? ''),
                 'FINAL_ESTIMATE' => 'Deviz final ' . gshop_pdf_string($document['number'] ?? ''),
                 'EXIT' => 'Fișă de ieșire din service ' . gshop_pdf_string($document['number'] ?? ''),
+                'WARRANTY' => 'Certificat de calitate și garanție ' . gshop_pdf_string($document['number'] ?? ''),
             }, true);
             $pdf->SetAuthor('G-Shop', true);
             $pdf->AddFont('DejaVu', '', 'DejaVuSans.ttf', true);
@@ -902,9 +948,12 @@ function generate_service_document_pdf(
                 gshop_document_overlay_intake($pdf, 2, $document, $snapshot, $signature, $stamp);
             } elseif ($normalizedType === 'FINAL_ESTIMATE') {
                 gshop_document_build_final($pdf, $document, $snapshot, $templates, $signature, $stamp);
-            } else {
+            } elseif ($normalizedType === 'EXIT') {
                 gshop_document_add_template($pdf, $templates['exit']);
                 gshop_document_overlay_exit($pdf, $document, $snapshot, $signature, $stamp);
+            } else {
+                gshop_document_add_template($pdf, $templates['warranty']);
+                gshop_document_overlay_warranty($pdf, $document, $snapshot, $signature, $stamp);
             }
 
             $pdf->Output('F', $temporary, true);
