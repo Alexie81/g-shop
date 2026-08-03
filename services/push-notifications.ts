@@ -71,20 +71,28 @@ export async function scheduleLocalMissingDocumentReminder(propertyId: string) {
   const incomplete = rows.map((row) => ({ row, missing: missingDocumentLabels(row) })).filter((item) => item.missing.length > 0);
   if (!incomplete.length) {
     await Notifications.setBadgeCountAsync(0).catch(() => undefined);
+    await preferenceStorage.remove(`push.missing-documents.notice.${propertyId}`);
     return;
   }
 
   const first = incomplete[0];
   const extra = incomplete.length - 1;
   const body = `${first.row.serviceSheetNumber}: lipsesc ${first.missing.join(', ')}${extra > 0 ? `. Încă ${extra} ${extra === 1 ? 'reparație incompletă' : 'reparații incomplete'}.` : '.'}`;
+  const content = {
+    title: 'Documente lipsă în registru',
+    body,
+    sound: 'default' as const,
+    badge: incomplete.length,
+    data: { route: '/service/register?filter=INCOMPLETE', propertyId },
+  };
+  const noticeKey = `push.missing-documents.notice.${propertyId}`;
+  const fingerprint = `${new Date().toISOString().slice(0, 10)}:${incomplete.map(({ row, missing }) => `${row.serviceSheetNumber}:${missing.join(',')}`).join('|')}`;
+  if (await preferenceStorage.get(noticeKey) !== fingerprint) {
+    await Notifications.scheduleNotificationAsync({ content, trigger: null });
+    await preferenceStorage.set(noticeKey, fingerprint);
+  }
   const id = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: 'Documente lipsă în registru',
-      body,
-      sound: 'default',
-      badge: incomplete.length,
-      data: { route: '/service/register?filter=INCOMPLETE', propertyId },
-    },
+    content,
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.DAILY,
       hour: 9,
@@ -96,7 +104,7 @@ export async function scheduleLocalMissingDocumentReminder(propertyId: string) {
 }
 
 export async function refreshMissingDocumentNotifications(propertyId: string) {
-  await registerPushDevice(propertyId);
+  await registerPushDevice(propertyId).catch(() => null);
   await scheduleLocalMissingDocumentReminder(propertyId);
   await apiRequest('/push/reminders/missing-documents', {
     method: 'POST',
