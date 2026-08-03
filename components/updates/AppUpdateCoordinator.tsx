@@ -6,7 +6,7 @@ import { useAppTheme } from '@/contexts/ThemeContext';
 import { appUpdateRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { AppUpdateInfo } from '@/types';
-import { compareVersions, nativeBuildNumber, releaseVersion } from '@/utils/app-version';
+import { compareVersions, isNativeUpdateAvailable, releaseVersion } from '@/utils/app-version';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -32,7 +32,7 @@ export function AppUpdateCoordinator() {
       void (async () => {
         try {
           const info = await appUpdateRepository.get();
-          const nativeUpdateAvailable = (Number(info.latestBuildNumber) || 0) > nativeBuildNumber();
+          const nativeUpdateAvailable = isNativeUpdateAvailable(info.latestBuildNumber, info.latestVersion);
           let available = false;
           if (Updates.isEnabled) {
             try {

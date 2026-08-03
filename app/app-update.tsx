@@ -10,7 +10,7 @@ import { useAsyncData } from '@/hooks/useAsyncData';
 import { useBackToAdministration } from '@/hooks/useBackToAdministration';
 import { appUpdateRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
-import { compareVersions, nativeBuildNumber, releaseVersion } from '@/utils/app-version';
+import { compareVersions, isNativeUpdateAvailable, releaseVersion } from '@/utils/app-version';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -27,7 +27,7 @@ export default function AppUpdateScreen() {
   const state = useAsyncData(() => appUpdateRepository.get(), []);
   const currentVersion = releaseVersion();
   const serverVersion = state.data?.latestVersion ?? currentVersion;
-  const updateAvailable = (Number(state.data?.latestBuildNumber) || 0) > nativeBuildNumber();
+  const updateAvailable = state.data ? isNativeUpdateAvailable(state.data.latestBuildNumber, state.data.latestVersion) : false;
   const latest = updateAvailable ? serverVersion : currentVersion;
 
   const download = async () => {

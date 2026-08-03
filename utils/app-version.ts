@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import * as Application from 'expo-application';
 
 export function releaseVersion() {
   const configured = Constants.expoConfig?.extra?.releaseVersion;
@@ -10,8 +11,20 @@ export function nativeVersion() {
 }
 
 export function nativeBuildNumber() {
-  const value = Number(Constants.nativeBuildVersion ?? 0);
-  return Number.isFinite(value) ? value : 0;
+  const candidates = [Application.nativeBuildVersion, Constants.platform?.android?.versionCode];
+  for (const candidate of candidates) {
+    const value = Number(candidate);
+    if (Number.isFinite(value) && value > 0) return value;
+  }
+  return 0;
+}
+
+export function isNativeUpdateAvailable(latestBuildNumber: number | undefined, latestVersion: string) {
+  const latestBuild = Number(latestBuildNumber) || 0;
+  if (latestBuild <= 0) return false;
+  const installedBuild = nativeBuildNumber();
+  if (installedBuild > 0) return latestBuild > installedBuild;
+  return compareVersions(latestVersion, releaseVersion()) > 0;
 }
 
 export function compareVersions(a: string, b: string) {
