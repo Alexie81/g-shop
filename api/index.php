@@ -783,7 +783,7 @@ function save_client_signature_data(array $client, string $data, array $user): a
         if(!@rename($temporary,$target)){
             if(!is_file($target)||!@unlink($target)||!@rename($temporary,$target))throw new RuntimeException('Semnătura nu poate fi publicată.');
         }
-        @chmod($target,0640);
+        @chmod($target,0644);
     }finally{if(is_file($temporary))@unlink($temporary);}
     clearstatcache(true,$target);
     $pathValue='uploads/client-signatures/'.$filename;$now=now_utc();$pdo=db();
