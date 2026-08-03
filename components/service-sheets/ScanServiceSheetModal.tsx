@@ -333,7 +333,7 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
       setPendingSignature(null);
       setSignatureSaved(true);
       setSignatureOpen(false);
-      showToast('Semnătura a fost actualizată. Salvează fișa de intrare pentru regenerare.', 'success');
+      showToast('Semnătura a fost actualizată în toate documentele deja generate.', 'success');
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Semnătura nu a putut fi actualizată.', 'error');
     } finally {
@@ -415,7 +415,7 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
 
             {canSign ? <View style={[styles.signaturePrompt, { borderColor: pendingSignature || signatureSaved ? palette.success : colors.border, backgroundColor: pendingSignature || signatureSaved ? `${palette.success}10` : colors.surfaceMuted }]}>
               <View style={[styles.signaturePromptIcon, { backgroundColor: pendingSignature || signatureSaved ? `${palette.success}18` : `${palette.purple}16` }]}><Ionicons name={pendingSignature || signatureSaved ? 'checkmark-circle-outline' : 'pencil-outline'} size={24} color={pendingSignature || signatureSaved ? palette.success : palette.purple} /></View>
-              <View style={styles.signaturePromptCopy}><AppText variant="label">{signatureSaved ? 'Semnătura a fost actualizată' : pendingSignature ? 'Semnătura este pregătită' : existingSheet?.signatureUrl ? 'Fișa are deja o semnătură' : 'Semnătura clientului'}</AppText><AppText variant="caption" muted>{signatureSaved ? 'Este salvată online și va apărea în fișa de intrare regenerată.' : pendingSignature ? 'Va fi salvată împreună cu fișa de intrare.' : 'Deschide cadrul dedicat pentru ca persoana să poată semna fără conflict cu scrollul.'}</AppText></View>
+              <View style={styles.signaturePromptCopy}><AppText variant="label">{signatureSaved ? 'Semnătura a fost actualizată' : pendingSignature ? 'Semnătura este pregătită' : existingSheet?.signatureUrl ? 'Fișa are deja o semnătură' : 'Semnătura clientului'}</AppText><AppText variant="caption" muted>{signatureSaved ? 'Este salvată online și a actualizat toate documentele deja generate.' : pendingSignature ? 'Va fi salvată împreună cu fișa de intrare.' : 'Deschide cadrul dedicat pentru ca persoana să poată semna fără conflict cu scrollul.'}</AppText></View>
               <Button compact label={pendingSignature || signatureSaved || existingSheet?.signatureUrl ? 'Resemnează' : 'Semnează clientul'} icon="pencil-outline" disabled={signatureSaving} onPress={() => setSignatureOpen(true)} style={styles.signaturePromptButton} />
             </View> : null}
 

@@ -679,7 +679,7 @@ function map_service_document(array $row, ?string $publicToken = null, bool $pub
     $item['estimatedRepairDays']=$item['estimatedRepairDays']!==null?(int)$item['estimatedRepairDays']:null;
     $item['parts']=json_decode((string)($row['parts_json']??'[]'),true)?:[];$item['labor']=json_decode((string)($row['labor_json']??'[]'),true)?:[];
     $item['label']=$definition['label'];$item['available']=$item['status']==='PUBLISHED'&&service_document_absolute_path($row['file_path']??null)!==null;
-    $token=$publicToken??service_document_client_token((string)$item['clientId']);$item['url']=$item['available']&&$token?public_base_url().'/index.php/public/client-form/'.rawurlencode($token).'/documents/'.$definition['slug']:null;
+    $token=$publicToken??service_document_client_token((string)$item['clientId']);$version=trim((string)($item['fileSha256']??''));if($version==='')$version=trim((string)($item['generatedAt']??''));$item['url']=$item['available']&&$token?public_base_url().'/index.php/public/client-form/'.rawurlencode($token).'/documents/'.$definition['slug'].($version!==''?'?v='.rawurlencode($version):''):null;
     if($public){return['type'=>$item['type'],'label'=>$item['label'],'status'=>$item['status'],'available'=>$item['available'],'number'=>$item['number']??null,'documentAt'=>$item['documentAt']??null,'generatedAt'=>$item['generatedAt']??null,'url'=>$item['url']??null];}
     $snapshot=json_decode((string)($row['snapshot_json']??''),true);if($item['type']==='INTAKE'&&is_array($snapshot))$item['estimatedCosts']=service_document_estimated_costs_from_snapshot($snapshot);
     foreach(['snapshotJson','partsJson','laborJson','signaturePath','filePath','fileSha256','isActive']as$key)unset($item[$key]);
@@ -715,6 +715,9 @@ function service_document_existing_row(string $sheetId, string $type): ?array {
 function service_document_signature_path(string $sheetId): ?string {
     $stmt=db()->prepare('SELECT signature_path FROM service_sheets WHERE id=? LIMIT 1');$stmt->execute([uuid_bin($sheetId)]);return$stmt->fetchColumn()?:null;
 }
+function validate_service_document_signature(string $relativePath): void {
+    require_once __DIR__.'/src/service_sheet_pdf.php';$normalized=gshop_pdf_signature_image($relativePath);if(!$normalized)fail('Imaginea semnăturii nu poate fi inclusă în documentele PDF.',422);$temporary=$normalized['path']??null;if(is_string($temporary)&&str_starts_with($temporary,sys_get_temp_dir())&&is_file($temporary))@unlink($temporary);
+}
 function service_document_reference(string $sheetId, string $type): ?array {
     $row=service_document_existing_row($sheetId,$type);return$row?['number'=>$row['number'],'date'=>iso_date($row['document_at'])]:null;
 }
@@ -727,7 +730,7 @@ function require_service_document_write(bool $existing = false): array {
 function stream_service_document_row(array $row): void {
     $path=service_document_absolute_path($row['file_path']??null);if($path===null)fail('Documentul nu este disponibil.',404);
     $definition=service_document_definitions()[$row['type']]??['slug'=>'document'];$safeNumber=preg_replace('/[^A-Za-z0-9_-]+/','-',(string)($row['number']??''))?:$definition['slug'];
-    header('Content-Type: application/pdf');header('Content-Disposition: inline; filename="'.strtolower($safeNumber).'.pdf"');header('Content-Length: '.filesize($path));header('Cache-Control: private, no-store, max-age=0');header('X-Content-Type-Options: nosniff');readfile($path);exit;
+    header('Content-Type: application/pdf');header('Content-Disposition: inline; filename="'.strtolower($safeNumber).'.pdf"');header('Content-Length: '.filesize($path));header('Cache-Control: private, no-store, no-cache, must-revalidate, max-age=0');header('Pragma: no-cache');header('Expires: 0');header('X-Content-Type-Options: nosniff');readfile($path);exit;
 }
 function public_service_document_row(string $token, string $rawType): array {
     if(preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i',$token)!==1)fail('Documentul nu este disponibil.',404);
@@ -1773,7 +1776,7 @@ try {
     }
     if ($method==='POST'&&path_match('/service-sheets/{id}/signature',$path,$params)) {
         $user=require_permission('service_sheets.sign');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);$body=json_body();$data=(string)($body['signature']??'');if(!preg_match('#^data:image/png;base64,(.+)$#',$data,$match))fail('Formatul semnăturii nu este valid.',422);$binary=base64_decode($match[1],true);if($binary===false||strlen($binary)<100||strlen($binary)>1500000)fail('Semnătura este invalidă sau prea mare.',422);
-        $directory=__DIR__.'/uploads/signatures';if(!is_dir($directory)&&!mkdir($directory,0755,true)&&!is_dir($directory))throw new RuntimeException('Directorul pentru semnături nu poate fi creat.');$filename=$sheet['id'].'.png';if(file_put_contents($directory.'/'.$filename,$binary,LOCK_EX)===false)throw new RuntimeException('Semnătura nu poate fi salvată.');$pathValue='uploads/signatures/'.$filename;$now=now_utc();db()->prepare('UPDATE service_sheets SET signature_path=?,signed_at=?,updated_at=?,updated_by=? WHERE id=?')->execute([$pathValue,$now,$now,uuid_bin($user['id']),uuid_bin($sheet['id'])]);
+        $directory=__DIR__.'/uploads/signatures';if(!is_dir($directory)&&!mkdir($directory,0755,true)&&!is_dir($directory))throw new RuntimeException('Directorul pentru semnături nu poate fi creat.');$filename=$sheet['id'].'.png';$target=$directory.'/'.$filename;$temporary=tempnam($directory,'.signature-');if($temporary===false)throw new RuntimeException('Semnătura nu poate fi pregătită.');try{if(file_put_contents($temporary,$binary,LOCK_EX)===false)throw new RuntimeException('Semnătura nu poate fi salvată.');validate_service_document_signature('uploads/signatures/'.basename($temporary));if(!@rename($temporary,$target)){if(!is_file($target)||!@unlink($target)||!@rename($temporary,$target))throw new RuntimeException('Semnătura nu poate fi publicată.');}@chmod($target,0640);}finally{if(is_file($temporary))@unlink($temporary);}clearstatcache(true,$target);$pathValue='uploads/signatures/'.$filename;$now=now_utc();db()->prepare('UPDATE service_sheets SET signature_path=?,signed_at=?,updated_at=?,updated_by=? WHERE id=?')->execute([$pathValue,$now,$now,uuid_bin($user['id']),uuid_bin($sheet['id'])]);
         regenerate_existing_service_documents($sheet['id'],$user);audit_log('SERVICE_SHEET_SIGNED','service_sheets','Semnătură client salvată și reutilizată în documentele reparației '.$sheet['number'],'ServiceSheet',$sheet['id'],$sheet['propertyId'],null,['signedAt'=>$now,'documentsRegenerated'=>true],$user);gshop_queue_service_sheet_pdf($sheet['id']);respond(get_sheet($sheet['id']));
     }
     if ($method==='POST'&&path_match('/service-sheets/{id}/pdf',$path,$params)) {

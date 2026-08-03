@@ -30,7 +30,7 @@ export function ServiceDocumentsPanel({ sheet, style }: Props) {
   const { showToast } = useToast();
   const [editorType, setEditorType] = useState<ServiceDocumentType | null>(null);
   const canGenerate = hasPermission('service_sheets.update') || hasPermission('service_sheets.create');
-  const state = useAsyncData(() => serviceSheetRepository.listDocuments(sheet.id), [sheet.id]);
+  const state = useAsyncData(() => serviceSheetRepository.listDocuments(sheet.id), [sheet.id, sheet.signedAt]);
   const financialState = useAsyncData(() => clientRepository.getFinancials(sheet.clientId), [sheet.clientId]);
   useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);
 
