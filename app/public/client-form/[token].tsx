@@ -114,7 +114,7 @@ export default function PublicRepairTracking() {
           <View style={styles.card}>
             <SectionTitle icon="desktop-outline" title="Echipamentul tău" description="Detaliile lucrării curente" />
             <View style={styles.equipmentBox}><AppText variant="label">{equipment || 'Echipament înregistrat'}</AppText>{repair.reportedIssue ? <AppText style={styles.equipmentIssue}>{repair.reportedIssue}</AppText> : null}</View>
-            <View style={styles.metaGrid}><Meta label="PRIMIT ÎN SERVICE" value={formatDate(repair.receivedAt)} /><Meta label="TERMEN ESTIMAT" value={repair.estimatedAt ? formatDate(repair.estimatedAt) : 'În curs de stabilire'} /><Meta label="FINALIZAT" value={repair.completedAt ? formatDate(repair.completedAt) : '—'} /></View>
+            <View style={styles.metaGrid}><Meta label="PRIMIT ÎN SERVICE" value={formatDate(repair.receivedAt)} /><Meta label="TERMEN ESTIMAT" value={repair.estimatedAt ? formatDate(repair.estimatedAt) : '—'} /><Meta label="FINALIZAT" value={repair.completedAt ? formatDate(repair.completedAt) : '—'} /></View>
           </View>
 
           {(repair.documents ?? []).some((document) => document.available && document.url?.trim()) ? <RepairDocuments documents={repair.documents ?? []} /> : null}

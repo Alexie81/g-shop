@@ -32,6 +32,8 @@ SURFACE_MUTED = HexColor("#EEF3FA")
 SUCCESS = HexColor("#14A83B")
 WARNING = HexColor("#FF9F0A")
 DANGER = HexColor("#E7354C")
+SUCCESS_SOFT = HexColor("#E4F8E8")
+DANGER_SOFT = HexColor("#FDEBEE")
 
 
 def register_fonts() -> None:
@@ -72,10 +74,13 @@ def first_value(data: dict[str, Any], paths: Iterable[tuple[str, ...]]) -> str:
     return ""
 
 
-def money_display(field_value: str, currency: str) -> str:
-    if not field_value:
+def money_display(field_value: Any, currency: str) -> str:
+    if field_value is None:
         return ""
-    normalized = field_value.strip().replace(" ", "")
+    raw_value = str(field_value).strip()
+    if not raw_value:
+        return ""
+    normalized = raw_value.replace(" ", "")
     if "," in normalized and "." in normalized:
         if normalized.rfind(",") > normalized.rfind("."):
             normalized = normalized.replace(".", "").replace(",", ".")
@@ -86,7 +91,7 @@ def money_display(field_value: str, currency: str) -> str:
     try:
         amount = float(normalized)
     except ValueError:
-        return f"{field_value} {currency}".strip()
+        return f"{raw_value} {currency}".strip()
     formatted = f"{amount:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
     return f"{formatted} {currency}".strip()
 
@@ -177,6 +182,46 @@ def wrap_text(text: str, font: str, size: float, width: float) -> list[str]:
     return lines
 
 
+def draw_rich_paragraph(
+    pdf: canvas.Canvas,
+    x: float,
+    y: float,
+    width: float,
+    segments: list[tuple[str, bool]],
+    *,
+    size: float,
+    line_height: float,
+    max_lines: int,
+) -> int:
+    tokens: list[tuple[str, str]] = []
+    for segment_text, bold in segments:
+        font = "GShop-Bold" if bold else "GShop-Regular"
+        tokens.extend((word, font) for word in segment_text.split() if word)
+    lines: list[list[tuple[str, str, float, float]]] = [[]]
+    widths = [0.0]
+    for word, font in tokens:
+        word_width = pdfmetrics.stringWidth(word, font, size)
+        space_width = pdfmetrics.stringWidth(" ", "GShop-Regular", size) if lines[-1] else 0.0
+        if lines[-1] and widths[-1] + space_width + word_width > width:
+            if len(lines) >= max_lines:
+                break
+            lines.append([])
+            widths.append(0.0)
+            space_width = 0.0
+        lines[-1].append((word, font, space_width, word_width))
+        widths[-1] += space_width + word_width
+    pdf.setFillColor(NAVY)
+    for line_index, line in enumerate(lines):
+        cursor_x = x
+        baseline = y - line_index * line_height
+        for word, font, space_width, word_width in line:
+            cursor_x += space_width
+            pdf.setFont(font, size)
+            pdf.drawString(cursor_x, baseline, word)
+            cursor_x += word_width
+    return len(lines)
+
+
 def final_number(data: dict[str, Any]) -> str:
     return first_value(data, (("estimate", "number"), ("sheet", "finalEstimateNumber")))
 
@@ -228,19 +273,19 @@ def draw_header(pdf: canvas.Canvas, data: dict[str, Any], continuation: bool = F
 def draw_footer(pdf: canvas.Canvas, page: int, total: int) -> None:
     pdf.setStrokeColor(LINE)
     pdf.setLineWidth(0.6)
-    pdf.line(MARGIN, 30, PAGE_W - MARGIN, 30)
+    pdf.line(MARGIN, 38, PAGE_W - MARGIN, 38)
     pdf.setFillColor(SLATE)
     pdf.setFont("GShop-Regular", 4.45)
     pdf.drawString(
         MARGIN,
-        18,
+        26,
         "În temeiul legii: OG 21/1992 | Legea 193/2000 | Codul civil | GDPR (UE) 2016/679 | Legea 190/2018.",
     )
     pdf.setFillColor(SLATE)
     pdf.setFont("GShop-Bold", 5.3)
-    pdf.drawCentredString(PAGE_W / 2, 9, f"Pagina {page}/{total}")
+    pdf.drawCentredString(PAGE_W / 2, 18, f"Pagina {page}/{total}")
     pdf.setFillColor(ELECTRIC_DARK)
-    pdf.drawRightString(PAGE_W - MARGIN, 9, "G-SHOP | DEVIZ FINAL")
+    pdf.drawRightString(PAGE_W - MARGIN, 18, "G-SHOP | DEVIZ FINAL")
 
 
 def section_title(pdf: canvas.Canvas, y: float, number: int, title: str, subtitle: str = "") -> None:
@@ -287,13 +332,12 @@ def draw_line_field(
 def draw_company(pdf: canvas.Canvas, data: dict[str, Any]) -> None:
     y = 704
     rounded_box(pdf, MARGIN, y, CONTENT_W, 44, radius=8)
-    col = (CONTENT_W - 28) / 3
-    draw_line_field(pdf, MARGIN + 10, y + 26, col, "Denumire juridică", value(data, "company", "legalName"))
-    draw_line_field(pdf, MARGIN + 18 + col, y + 26, col, "CUI / CIF", value(data, "company", "taxId"))
-    draw_line_field(pdf, MARGIN + 26 + col * 2, y + 26, col - 18, "Registrul Comerțului", value(data, "company", "tradeRegisterNumber"), label_size=5.1)
-    draw_line_field(pdf, MARGIN + 10, y + 9, col * 1.45, "Sediu", full_address(data, "company"))
-    draw_line_field(pdf, MARGIN + 20 + col * 1.45, y + 9, col * 0.75, "Telefon", value(data, "company", "phone"))
-    draw_line_field(pdf, MARGIN + 30 + col * 2.2, y + 9, CONTENT_W - col * 2.2 - 40, "Email", value(data, "company", "email"))
+    draw_line_field(pdf, 32, 730, 190, "Denumire juridică", value(data, "company", "legalName"), label_width=64)
+    draw_line_field(pdf, 230, 730, 105, "CUI / CIF", value(data, "company", "taxId"), label_size=5.1, label_width=34)
+    draw_line_field(pdf, 343, 730, 220, "Registrul Comerțului", value(data, "company", "tradeRegisterNumber"), label_size=5.1, label_width=103)
+    draw_line_field(pdf, 32, 716, 531, "Sediu", full_address(data, "company"), label_width=32)
+    draw_line_field(pdf, 32, 705, 210, "Telefon", value(data, "company", "phone"), label_width=36)
+    draw_line_field(pdf, 250, 705, 313, "Email", value(data, "company", "email"), label_width=34)
 
 
 def draw_reference_band(pdf: canvas.Canvas, data: dict[str, Any], y: float) -> None:
@@ -439,13 +483,15 @@ def financial_summary_card(
     value_color: Color = NAVY,
     dark: bool = False,
     accent: Color | None = None,
+    height: float = 57,
+    status: str | None = None,
 ) -> None:
     rounded_box(
         pdf,
         x,
         y,
         width,
-        57,
+        height,
         radius=9,
         fill=fill,
         stroke=fill if dark else (accent or LINE),
@@ -453,15 +499,25 @@ def financial_summary_card(
     )
     if accent:
         pdf.setFillColor(accent)
-        pdf.roundRect(x, y + 8, 3.5, 41, 1.75, fill=1, stroke=0)
+        pdf.roundRect(x, y + 8, 3.5, max(8, height - 16), 1.75, fill=1, stroke=0)
     pdf.setFillColor(white if dark else SLATE)
     pdf.setFont("GShop-Bold", 5.8)
-    pdf.drawString(x + 11, y + 40, label.upper())
+    label_width = width - 22 - ((43 if status == "ACHITAT" else 51) + 7 if status else 0)
+    pdf.drawString(x + 11, y + height - 17, fit_text(label.upper(), "GShop-Bold", 5.8, label_width))
+    if status:
+        paid_status = status == "ACHITAT"
+        status_width = 43 if paid_status else 51
+        badge_x = x + width - status_width - 9
+        pdf.setFillColor(SUCCESS_SOFT if paid_status else DANGER_SOFT)
+        pdf.roundRect(badge_x, y + height - 22, status_width, 12, 6, fill=1, stroke=0)
+        pdf.setFillColor(SUCCESS if paid_status else DANGER)
+        pdf.setFont("GShop-Bold", 5.2)
+        pdf.drawCentredString(badge_x + status_width / 2, y + height - 18.7, status)
     if field_value:
         value_size = 12.2 if width >= 180 else 10.6
         pdf.setFillColor(value_color)
         pdf.setFont("GShop-Bold", value_size)
-        pdf.drawString(x + 11, y + 13, fit_text(field_value, "GShop-Bold", value_size, width - 22))
+        pdf.drawString(x + 11, y + (19 if height >= 70 else 13), fit_text(field_value, "GShop-Bold", value_size, width - 22))
 
 
 def financial_detail(
@@ -482,8 +538,73 @@ def financial_detail(
         pdf.drawString(x + 8, y + 5, fit_text(field_value, "GShop-Bold", 7.0, width - 16))
 
 
+def numeric_amount(field_value: Any) -> float:
+    raw = str(field_value or "").strip().replace("%", "").replace(" ", "")
+    if not raw:
+        return 0.0
+    if "," in raw and "." in raw:
+        raw = raw.replace(".", "").replace(",", ".") if raw.rfind(",") > raw.rfind(".") else raw.replace(",", "")
+    elif "," in raw:
+        raw = raw.replace(",", ".")
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return 0.0
+
+
+def payment_total_values(data: dict[str, Any], total: str, paid: str, remaining: str, diagnostic: str, parts: str, labor: str) -> tuple[float, float, bool, str, str | None]:
+    total_value = numeric_amount(total)
+    discount_percent = numeric_amount(value(data, "financials", "discountPercent"))
+    discount_amount = numeric_amount(value(data, "summary", "discountAmount"))
+    has_discount = discount_percent > 0.0001 or discount_amount > 0.004
+    before_discount = numeric_amount(value(data, "summary", "subtotal"))
+    if before_discount <= 0 and discount_amount > 0:
+        before_discount = total_value + discount_amount
+    component_total = numeric_amount(diagnostic) + numeric_amount(parts) + numeric_amount(labor)
+    if before_discount <= 0 and has_discount and component_total > 0:
+        before_discount = component_total
+    if before_discount <= 0 and has_discount and discount_percent < 100:
+        before_discount = total_value / max(0.0001, 1 - discount_percent / 100)
+    if not has_discount or before_discount < total_value:
+        before_discount = total_value
+    paid_value = numeric_amount(paid)
+    remaining_value = numeric_amount(remaining)
+    payment_status = value(data, "financials", "paymentStatus").upper()
+    total_paid = total_value > 0 and (payment_status == "PAID" or remaining_value <= 0.009 or paid_value >= total_value - 0.009)
+    total_status = "ACHITAT" if total_paid else "NEACHITAT"
+    rest_status = ("ACHITAT" if remaining_value <= 0.009 else "NEACHITAT") if paid_value > 0.009 else None
+    return before_discount, total_value, has_discount, total_status, rest_status
+
+
+def payment_total_cards(pdf: canvas.Canvas, x: float, y: float, width: float, height: float, before_discount: float, total: float, has_discount: bool, currency: str, total_status: str) -> None:
+    if not has_discount:
+        financial_summary_card(pdf, x, y, width, "Total de plată", money_display(total, currency), fill=ELECTRIC, value_color=white, dark=True, height=height, status=total_status)
+        return
+    gap = 7.0
+    card_height = (height - gap) / 2
+    for index, (label, amount) in enumerate((("Total estimativ fără reducere", before_discount), ("Total de plată cu reducere", total))):
+        bottom = y + (card_height + gap if index == 0 else 0)
+        rounded_box(pdf, x, bottom, width, card_height, radius=8, fill=ELECTRIC, stroke=ELECTRIC, line_width=0.8)
+        pdf.setFillColor(white)
+        pdf.setFont("GShop-Bold", 4.8)
+        label_width = width - 20 - ((50 if total_status == "ACHITAT" else 58) if index == 1 else 0)
+        pdf.drawString(x + 10, bottom + card_height - 12, fit_text(label.upper(), "GShop-Bold", 4.8, label_width))
+        shown = money_display(amount, currency)
+        pdf.setFont("GShop-Bold", 8.8)
+        pdf.drawString(x + 10, bottom + 8, fit_text(shown, "GShop-Bold", 8.8, width - 20))
+        if index == 1:
+            paid_status = total_status == "ACHITAT"
+            status_width = 43 if paid_status else 51
+            badge_x = x + width - status_width - 8
+            pdf.setFillColor(SUCCESS_SOFT if paid_status else DANGER_SOFT)
+            pdf.roundRect(badge_x, bottom + card_height - 17, status_width, 12, 6, fill=1, stroke=0)
+            pdf.setFillColor(SUCCESS if paid_status else DANGER)
+            pdf.setFont("GShop-Bold", 5.2)
+            pdf.drawCentredString(badge_x + status_width / 2, bottom + card_height - 13.7, total_status)
+
+
 def draw_totals(pdf: canvas.Canvas, data: dict[str, Any], y: float, template_mode: bool = False) -> None:
-    height = 118
+    height = 143
     rounded_box(pdf, MARGIN, y, CONTENT_W, height)
     inner_x = MARGIN + 11
     inner_width = CONTENT_W - 22
@@ -498,11 +619,12 @@ def draw_totals(pdf: canvas.Canvas, data: dict[str, Any], y: float, template_mod
 
     gap = 8
     summary_widths = (207.0, 143.0, inner_width - 207.0 - 143.0 - gap * 2)
-    x = inner_x
+    before_discount, total_value, has_discount, total_status, rest_status = payment_total_values(data, total, paid, remaining, diagnostic, parts, labor)
+    payment_total_cards(pdf, inner_x, y + 51, summary_widths[0], 82, before_discount, total_value, has_discount, currency, total_status)
+    x = inner_x + summary_widths[0] + gap
     for label, field_value, width, fill, value_color, dark, accent in (
-        ("Total de plată", money_display(total, currency), summary_widths[0], ELECTRIC, white, True, None),
         ("Achitat", money_display(paid, currency), summary_widths[1], white, SUCCESS, False, SUCCESS),
-        ("Rest de plată", money_display(remaining, currency), summary_widths[2], white, WARNING, False, WARNING),
+        ("Rest de plată", money_display(remaining, currency), summary_widths[2], white, SUCCESS if numeric_amount(remaining) <= 0.009 else WARNING, False, SUCCESS if numeric_amount(remaining) <= 0.009 else WARNING),
     ):
         financial_summary_card(
             pdf,
@@ -515,6 +637,8 @@ def draw_totals(pdf: canvas.Canvas, data: dict[str, Any], y: float, template_mod
             value_color=value_color,
             dark=dark,
             accent=accent,
+            height=82,
+            status=rest_status if label == "Rest de plată" else None,
         )
         x += width + gap
 
@@ -562,7 +686,6 @@ def draw_observations(pdf: canvas.Canvas, data: dict[str, Any]) -> None:
     pdf.drawString(MARGIN + 11, y + height - 20, "CAUZA DEFECTULUI")
     checkbox(pdf, MARGIN + 118, y + height - 23, "Client", cause == "CLIENT")
     checkbox(pdf, MARGIN + 206, y + height - 23, "Producător", cause in ("PRODUCER", "MANUFACTURER"))
-    checkbox(pdf, MARGIN + 320, y + height - 23, "În curs de stabilire", cause == "UNKNOWN")
     pdf.setFillColor(SLATE)
     pdf.setFont("GShop-Bold", 6.1)
     pdf.drawString(MARGIN + 11, y + height - 49, "ALTE OBSERVAȚII")
@@ -588,10 +711,23 @@ def draw_term(pdf: canvas.Canvas, data: dict[str, Any]) -> None:
     rounded_box(pdf, MARGIN, y, CONTENT_W, height, fill=ELECTRIC_LIGHT, stroke=HexColor("#B9D0FF"))
     days = value(data, "sheet", "estimatedRepairDays")
     agreement_date = first_value(data, (("agreement", "date"), ("sheet", "finalAgreementAt")))
-    draw_line_field(pdf, MARGIN + 12, y + 16, 280, "Termen estimat", days, label_width=75)
+    label_x = MARGIN + 12
+    line_x = label_x + 75
+    pdf.setFillColor(SLATE)
+    pdf.setFont("GShop-Bold", 5.7)
+    pdf.drawString(label_x, y + 19, "TERMEN ESTIMAT")
+    pdf.setFont("GShop-Bold", 7.2)
+    days_line_width = max(18.0, min(60.0, pdfmetrics.stringWidth(days, "GShop-Bold", 7.2) + 10))
+    pdf.setStrokeColor(HexColor("#C8D3E3"))
+    pdf.setLineWidth(0.8)
+    pdf.line(line_x, y + 16, line_x + days_line_width, y + 16)
+    if days:
+        pdf.setFillColor(NAVY)
+        pdf.setFont("GShop-Bold", 7.2)
+        pdf.drawString(line_x + 4, y + 18, days)
     pdf.setFillColor(NAVY)
     pdf.setFont("GShop-Regular", 7.0)
-    pdf.drawString(MARGIN + 304, y + 19, "zile de la data acordului final al clientului")
+    pdf.drawString(line_x + days_line_width + 9, y + 19, "zile de la data acordului final al clientului")
     if agreement_date:
         pdf.setFillColor(SLATE)
         pdf.setFont("GShop-Bold", 5.4)
@@ -613,31 +749,36 @@ def draw_final_agreement(pdf: canvas.Canvas, data: dict[str, Any]) -> None:
     agreement_name = client_name(data)
     status = value(data, "agreement", "status").upper()
     if status in ("AGREE", "ACCEPTED"):
-        decision = "sunt de acord"
+        decision = "SUNT DE ACORD"
     elif status in ("DISAGREE", "REJECTED", "REFUSED"):
-        decision = "nu sunt de acord"
+        decision = "NU SUNT DE ACORD"
     else:
-        decision = "nu am exprimat încă acordul"
-    statement = "" if data.get("templateMode") is True else (
-        f"Subsemnatul/a {agreement_name or 'Clientul'} declar că {decision} cu devizul final, "
-        "care include costurile de diagnosticare și reparare a produsului meu / produselor mele, "
-        "precum și cu termenul estimat de reparație."
-    )
+        decision = "ACORD NEEXPRIMAT"
     rounded_box(pdf, MARGIN + 11, y + height - 91, CONTENT_W - 22, 73, radius=8, fill=ELECTRIC_LIGHT, stroke=HexColor("#B9D0FF"))
-    lines = wrap_text(statement, "GShop-Regular", 8.2, CONTENT_W - 46)
-    pdf.setFillColor(NAVY)
-    pdf.setFont("GShop-Regular", 8.2)
-    for index, line in enumerate(lines[:4]):
-        pdf.drawString(MARGIN + 23, y + height - 42 - index * 12, line)
+    if data.get("templateMode") is not True:
+        draw_rich_paragraph(
+            pdf,
+            MARGIN + 23,
+            y + height - 42,
+            CONTENT_W - 46,
+            [
+                (f"Subsemnatul/a {agreement_name or 'Clientul'} declar că", False),
+                (decision, True),
+                ("cu devizul final, care include costurile de diagnosticare și reparare a produsului meu / produselor mele, precum și cu termenul estimat de reparație.", False),
+            ],
+            size=8.2,
+            line_height=12,
+            max_lines=4,
+        )
 
     checkbox(pdf, MARGIN + 22, y + height - 125, "SUNT DE ACORD", status in ("AGREE", "ACCEPTED"), SUCCESS)
     checkbox(pdf, MARGIN + 168, y + height - 125, "NU SUNT DE ACORD", status in ("DISAGREE", "REJECTED", "REFUSED"), DANGER)
-    draw_line_field(pdf, MARGIN + 22, y + height - 163, 250, "Nume client", agreement_name, label_width=68)
+    draw_line_field(pdf, MARGIN + 22, y + height - 163, 198, "Nume client", agreement_name, label_width=68)
     draw_line_field(
         pdf,
-        MARGIN + 300,
+        370,
         y + height - 163,
-        CONTENT_W - 300,
+        158,
         "Data / ora",
         first_value(data, (("agreement", "date"), ("sheet", "finalAgreementAt"))),
         label_width=58,
@@ -645,18 +786,18 @@ def draw_final_agreement(pdf: canvas.Canvas, data: dict[str, Any]) -> None:
     pdf.setFillColor(SLATE)
     pdf.setFont("GShop-Bold", 6.2)
     pdf.drawString(MARGIN + 22, y + height - 198, "SEMNĂTURĂ CLIENT")
-    stamp_x = MARGIN + CONTENT_W * 0.70
-    pdf.drawString(stamp_x, y + height - 198, "ȘTAMPILA FIRMEI")
+    stamp_x = 408
+    pdf.drawString(stamp_x, y + height - 198, "ȘTAMPILĂ")
     pdf.setStrokeColor(HexColor("#C8D3E3"))
     pdf.setLineWidth(0.85)
-    pdf.line(MARGIN + 22, y + 28, stamp_x - 18, y + 28)
+    pdf.line(MARGIN + 22, 195, MARGIN + 124, 195)
     # Ștampila se aplică direct pe fundal, fără chenar ajutător.
 
 
 TITLE_TO_CONTENT = 13
 SECTION_SPACING = 26
 CONTENT_BOTTOM = 48
-TOTALS_HEIGHT = 118
+TOTALS_HEIGHT = 143
 
 
 def item_block_height(row_count: int) -> float:

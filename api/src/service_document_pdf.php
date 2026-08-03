@@ -14,7 +14,7 @@ const GSHOP_DOCUMENT_SECTION_GAP = 26.0;
 const GSHOP_DOCUMENT_TABLE_HEADER = 18.0;
 const GSHOP_DOCUMENT_TABLE_ROW = 17.0;
 const GSHOP_DOCUMENT_EMPTY_TABLE = 28.0;
-const GSHOP_DOCUMENT_TOTALS_HEIGHT = 118.0;
+const GSHOP_DOCUMENT_TOTALS_HEIGHT = 143.0;
 
 /**
  * FPDI extension used only for the rounded client-facing cards drawn over the
@@ -86,9 +86,12 @@ function gshop_document_color(string $name): array {
         'line' => [228, 234, 243],
         'lineDark' => [200, 211, 227],
         'muted' => [247, 249, 252],
+        'canvas' => [245, 248, 253],
         'success' => [20, 168, 59],
+        'successSoft' => [228, 248, 232],
         'warning' => [224, 117, 20],
         'danger' => [205, 45, 45],
+        'dangerSoft' => [253, 235, 238],
         'white' => [255, 255, 255],
         default => [0, 0, 0],
     };
@@ -176,6 +179,67 @@ function gshop_document_wrap(Fpdi $pdf, mixed $value, float $width, float $size 
     return $lines;
 }
 
+/**
+ * Draws a short paragraph with per-segment bold and underline styling.
+ *
+ * @param list<array{text:string,style?:string,underline?:bool}> $segments
+ */
+function gshop_document_rich_paragraph(
+    Fpdi $pdf,
+    float $x,
+    float $sourceBaseline,
+    float $width,
+    array $segments,
+    float $size = 6.55,
+    float $lineHeight = 8.2,
+    int $maxLines = 3
+): int {
+    $tokens = [];
+    foreach ($segments as $segment) {
+        $words = preg_split('/\s+/u', trim((string)($segment['text'] ?? ''))) ?: [];
+        foreach ($words as $word) {
+            if ($word === '') continue;
+            $tokens[] = [
+                'text' => $word,
+                'style' => (string)($segment['style'] ?? ''),
+                'underline' => !empty($segment['underline']),
+            ];
+        }
+    }
+    if (!$tokens) return 0;
+    $lines = [[]];
+    $lineWidths = [0.0];
+    foreach ($tokens as $token) {
+        $lineIndex = count($lines) - 1;
+        $pdf->SetFont('DejaVu', $token['style'], $size);
+        $wordWidth = $pdf->GetStringWidth($token['text']);
+        $pdf->SetFont('DejaVu', '', $size);
+        $spaceWidth = $lines[$lineIndex] ? $pdf->GetStringWidth(' ') : 0.0;
+        if ($lines[$lineIndex] && $lineWidths[$lineIndex] + $spaceWidth + $wordWidth > $width) {
+            if (count($lines) >= $maxLines) break;
+            $lines[] = [];
+            $lineWidths[] = 0.0;
+            $lineIndex++;
+            $spaceWidth = 0.0;
+        }
+        $token['spaceBefore'] = $spaceWidth;
+        $token['width'] = $wordWidth;
+        $lines[$lineIndex][] = $token;
+        $lineWidths[$lineIndex] += $spaceWidth + $wordWidth;
+    }
+    foreach ($lines as $lineIndex => $line) {
+        $cursorX = $x;
+        $baseline = $sourceBaseline - $lineIndex * $lineHeight;
+        foreach ($line as $token) {
+            $cursorX += $token['spaceBefore'];
+            gshop_pdf_text($pdf, $cursorX, $baseline, $token['text'], $size, $token['style'], $token['width'] + .5);
+            if ($token['underline']) gshop_document_source_line($pdf, $cursorX, $baseline - 1.5, $cursorX + $token['width'], $baseline - 1.5, 'navy', .55);
+            $cursorX += $token['width'];
+        }
+    }
+    return count($lines);
+}
+
 function gshop_document_shrink_text(
     Fpdi $pdf,
     float $x,
@@ -230,7 +294,7 @@ function gshop_document_date(mixed $value): string {
     }
 }
 
-/** @return array{total:float,paid:float,remaining:float,diagnostic:float,parts:float,labor:float,discount:mixed,currency:string} */
+/** @return array{total:float,beforeDiscount:float,hasDiscount:bool,paid:float,remaining:float,totalStatus:string,restStatus:?string,diagnostic:float,parts:float,labor:float,discount:mixed,currency:string} */
 function gshop_document_financial_values(array $snapshot): array {
     $financials = is_array($snapshot['financials'] ?? null) ? $snapshot['financials'] : [];
     $summary = is_array($snapshot['summary'] ?? null) ? $snapshot['summary'] : [];
@@ -241,13 +305,35 @@ function gshop_document_financial_values(array $snapshot): array {
     $remaining = array_key_exists('remainingDue', $summary)
         ? max(0, (float)$summary['remainingDue'])
         : (array_key_exists('remaining', $estimate) ? max(0, (float)$estimate['remaining']) : max(0, $total - $paid));
+    $diagnostic = max(0, (float)($financials['diagnosticFee'] ?? 0));
+    $parts = max(0, (float)($financials['displayedPartsCost'] ?? $sheet['partsCost'] ?? 0));
+    $labor = max(0, (float)($financials['displayedLaborCost'] ?? $sheet['laborCost'] ?? 0));
+    $discountText = str_replace([',', '%', ' '], ['.', '', ''], gshop_pdf_string($financials['discountPercent'] ?? 0));
+    $discountPercent = max(0, (float)$discountText);
+    $discountAmount = max(0, (float)($summary['discountAmount'] ?? 0));
+    $hasDiscount = $discountPercent > .0001 || $discountAmount > .004;
+    $componentSubtotal = $diagnostic + $parts + $labor;
+    $beforeDiscount = array_key_exists('subtotal', $summary) ? max(0, (float)$summary['subtotal']) : 0.0;
+    if ($beforeDiscount <= 0 && $discountAmount > 0) $beforeDiscount = $total + $discountAmount;
+    if ($beforeDiscount <= 0 && $hasDiscount && $componentSubtotal > 0) $beforeDiscount = $componentSubtotal;
+    if ($beforeDiscount <= 0 && $hasDiscount && $discountPercent < 100) $beforeDiscount = $total / max(.0001, 1 - $discountPercent / 100);
+    if (!$hasDiscount || $beforeDiscount < $total) $beforeDiscount = $total;
+    $paymentStatus = strtoupper(gshop_pdf_string($financials['paymentStatus'] ?? ''));
+    $totalPaid = $total > 0 && ($paymentStatus === 'PAID' || $remaining <= .009 || $paid >= $total - .009);
+    $totalStatus = $totalPaid ? 'ACHITAT' : 'NEACHITAT';
+    $hasSeparateRest = $paid > .009;
+    $restStatus = $hasSeparateRest ? ($remaining <= .009 ? 'ACHITAT' : 'NEACHITAT') : null;
     return [
         'total' => $total,
+        'beforeDiscount' => $beforeDiscount,
+        'hasDiscount' => $hasDiscount,
         'paid' => $paid,
         'remaining' => $remaining,
-        'diagnostic' => max(0, (float)($financials['diagnosticFee'] ?? 0)),
-        'parts' => max(0, (float)($financials['displayedPartsCost'] ?? $sheet['partsCost'] ?? 0)),
-        'labor' => max(0, (float)($financials['displayedLaborCost'] ?? $sheet['laborCost'] ?? 0)),
+        'totalStatus' => $totalStatus,
+        'restStatus' => $restStatus,
+        'diagnostic' => $diagnostic,
+        'parts' => $parts,
+        'labor' => $labor,
         'discount' => $financials['discountPercent'] ?? 0,
         'currency' => gshop_document_currency($financials, $sheet),
     ];
@@ -259,12 +345,29 @@ function gshop_document_overlay_header(Fpdi $pdf, array $document, array $compan
 }
 
 function gshop_document_overlay_company(Fpdi $pdf, array $company): void {
-    gshop_pdf_text($pdf, 100, 732, $company['legalName'] ?? '', 6.8, 'B', 112);
-    gshop_pdf_text($pdf, 246, 732, $company['taxId'] ?? '', 6.8, 'B', 140);
-    gshop_pdf_text($pdf, 467, 732, $company['tradeRegisterNumber'] ?? '', 6.6, '', 84);
-    gshop_pdf_text($pdf, 61, 715, gshop_pdf_full_address($company), 6.5, '', 224);
-    gshop_pdf_text($pdf, 326, 715, $company['phone'] ?? '', 6.5, '', 104);
-    gshop_pdf_text($pdf, 466, 715, $company['email'] ?? '', 6.3, '', 88);
+    // Normalize every document to the same compact three-row company card.
+    // The address owns a full row; phone and email share the final row.
+    gshop_document_box($pdf, 22, 704, 551.2756, 44, 'white', 'line', 8, .7);
+    $field = static function (
+        float $x,
+        float $lineY,
+        float $width,
+        string $label,
+        mixed $value,
+        float $labelWidth,
+        float $labelSize = 5.6,
+        float $valueSize = 6.6
+    ) use ($pdf): void {
+        gshop_pdf_text($pdf, $x, $lineY + 3, strtoupper($label), $labelSize, 'B', $labelWidth, 'L', gshop_document_color('slate'));
+        gshop_document_source_line($pdf, $x + $labelWidth, $lineY, $x + $width, $lineY, 'lineDark', .7);
+        gshop_document_shrink_text($pdf, $x + $labelWidth + 4, $lineY + 2, $value, $width - $labelWidth - 7, $valueSize, 4.9, $label === 'Denumire juridică' ? 'B' : '');
+    };
+    $field(32, 730, 190, 'Denumire juridică', $company['legalName'] ?? '', 64);
+    $field(230, 730, 105, 'CUI / CIF', $company['taxId'] ?? '', 34, 5.1, 6.1);
+    $field(343, 730, 220, 'Registrul Comerțului', $company['tradeRegisterNumber'] ?? '', 103, 5.1, 6.6);
+    $field(32, 716, 531, 'Sediu', gshop_pdf_full_address($company), 32, 5.6, 6.3);
+    $field(32, 705, 210, 'Telefon', $company['phone'] ?? '', 36, 5.5, 6.3);
+    $field(250, 705, 313, 'Email', $company['email'] ?? '', 34, 5.5, 6.2);
 }
 
 function gshop_document_overlay_client_equipment(Fpdi $pdf, array $client, array $sheet, float $shift = 0): void {
@@ -286,11 +389,25 @@ function gshop_document_overlay_client_equipment(Fpdi $pdf, array $client, array
     foreach ($right as [$baseline, $value]) gshop_pdf_text($pdf, 398, $baseline + $shift, $value, 6.8, '', 160);
 }
 
-function gshop_document_footer(Fpdi $pdf, int $page, int $total): void {
+function gshop_document_footer(Fpdi $pdf, int $page, int $total, string $label): void {
+    gshop_document_box($pdf, 0, 0, GSHOP_DOCUMENT_PAGE_WIDTH, 45, 'canvas', 'canvas', 0, 0);
+    gshop_document_source_line($pdf, GSHOP_DOCUMENT_MARGIN, 38, GSHOP_DOCUMENT_PAGE_WIDTH - GSHOP_DOCUMENT_MARGIN, 38, 'line', .6);
+    gshop_pdf_text(
+        $pdf,
+        GSHOP_DOCUMENT_MARGIN,
+        26,
+        'În temeiul legii: OG 21/1992 | Legea 193/2000 | Codul civil | GDPR (UE) 2016/679 | Legea 190/2018.',
+        4.45,
+        '',
+        390,
+        'L',
+        gshop_document_color('slate')
+    );
     $value = 'Pagina ' . $page . '/' . $total;
     $pdf->SetFont('DejaVu', 'B', 5.3);
     $x = (GSHOP_DOCUMENT_PAGE_WIDTH - $pdf->GetStringWidth($value)) / 2;
-    gshop_pdf_text($pdf, $x, 9.5, $value, 5.3, 'B', 75, 'L', gshop_document_color('slate'));
+    gshop_pdf_text($pdf, $x, 18, $value, 5.3, 'B', 75, 'L', gshop_document_color('slate'));
+    gshop_pdf_text($pdf, 420, 18, $label, 5.3, 'B', 153, 'R', gshop_document_color('electricDark'));
 }
 
 function gshop_document_reference(Fpdi $pdf, array $snapshot, float $baseline = 682, bool $withEstimate = false): void {
@@ -340,16 +457,20 @@ function gshop_document_place_image(
     $pdf->Image($path, $drawX, $drawTop, $drawWidth, $drawHeight, $type);
 }
 
-function gshop_document_overlay_financials(Fpdi $pdf, array $snapshot, float $summaryBaseline, float $detailBaseline): void {
+function gshop_document_overlay_financials(Fpdi $pdf, array $snapshot, float $summaryBottom, float $detailBaseline): void {
     $values = gshop_document_financial_values($snapshot);
     $currency = $values['currency'];
-    foreach ([
-        [44, 185, $values['total'], 12.2, 'white'],
-        [259, 121, $values['paid'], 10.6, 'success'],
-        [410, 141, $values['remaining'], 10.6, 'warning'],
-    ] as [$x, $width, $value, $size, $color]) {
-        gshop_document_shrink_text($pdf, $x, $summaryBaseline, gshop_document_money($value, $currency), $width, $size, 5.8, 'B', 'L', gshop_document_color($color));
-    }
+    $innerX = 33.0;
+    $innerWidth = 529.2756;
+    $gap = 8.0;
+    $widths = [207.0, 143.0, $innerWidth - 207.0 - 143.0 - $gap * 2];
+    $summaryHeight = 82.0;
+    gshop_document_box($pdf, $innerX, $summaryBottom, $innerWidth, $summaryHeight, 'white', 'white', 0, 0);
+    gshop_document_payment_total_cards($pdf, $innerX, $summaryBottom, $widths[0], $summaryHeight, $values);
+    $x = $innerX + $widths[0] + $gap;
+    gshop_document_summary_card($pdf, $x, $summaryBottom, $widths[1], 'Achitat', gshop_document_money($values['paid'], $currency), 'white', 'success', 'success', $summaryHeight);
+    $x += $widths[1] + $gap;
+    gshop_document_summary_card($pdf, $x, $summaryBottom, $widths[2], 'Rest de plată', gshop_document_money($values['remaining'], $currency), 'white', $values['remaining'] <= .009 ? 'success' : 'warning', $values['remaining'] <= .009 ? 'success' : 'warning', $summaryHeight, $values['restStatus']);
     $discount = gshop_pdf_string($values['discount']);
     if ($discount !== '' && !str_ends_with($discount, '%')) $discount .= '%';
     $details = [
@@ -379,8 +500,8 @@ function gshop_document_overlay_intake(
     if ($page === 1) {
         gshop_document_overlay_company($pdf, $company);
         gshop_document_overlay_client_equipment($pdf, $client, $sheet);
-        gshop_pdf_multiline($pdf, 34, 508, 527, $sheet['reportedIssue'] ?? '', 10, 7, 14);
-        gshop_document_overlay_financials($pdf, $snapshot, 219.7, 122.5);
+        gshop_pdf_multiline($pdf, 34, 508, 527, $sheet['reportedIssue'] ?? '', 7, 7, 14);
+        gshop_document_overlay_financials($pdf, $snapshot, 242, 164.5);
     } else {
         $values = gshop_document_financial_values($snapshot);
         $diagnostic = gshop_document_money($values['diagnostic'], $values['currency']);
@@ -390,40 +511,64 @@ function gshop_document_overlay_intake(
         $agreementStatus = strtoupper(gshop_pdf_string($agreement['status'] ?? ''));
         $accepted = in_array($agreementStatus, ['AGREE', 'ACCEPTED'], true);
         $refused = in_array($agreementStatus, ['DISAGREE', 'REJECTED', 'REFUSED'], true);
-        $estimateDecision = $accepted
-            ? 'Clientul declară că a fost informat și acceptă suma estimată de ' . $total . ' pentru reparație.'
+        $decisionPrefix = $accepted
+            ? 'Clientul declară că a fost informat și acceptă suma estimată de'
             : ($refused
-                ? 'Clientul declară că a fost informat și nu acceptă suma estimată de ' . $total . ' pentru reparație.'
-                : 'Clientul declară că a fost informat despre suma estimată de ' . $total . ' pentru reparație; acordul nu a fost încă exprimat.');
+                ? 'Clientul declară că a fost informat și nu acceptă suma estimată de'
+                : 'Clientul declară că a fost informat despre suma estimată de');
+        $decisionSuffix = $accepted || $refused
+            ? 'pentru reparație.'
+            : 'pentru reparație; acordul nu a fost încă exprimat.';
         $conditions = [
-            'La predare, produsul intră în constatare.',
-            'Costul constatării este ' . gshop_document_money(0, $values['currency']) . ' (inclus în reparație) / sau ' . $diagnostic . ' dacă nu se efectuează reparația.',
-            'După constatare, se comunică clientului devizul estimativ.',
-            $estimateDecision,
-            'Dacă pe parcurs apar defecțiuni suplimentare sau piese adiționale necesare, clientul va fi informat și va transmite un nou acord (prin semnătură, e-mail sau WhatsApp).',
-            'Termen estimat reparație: ' . $days . ' zile lucrătoare.',
+            [['text' => 'La predare, produsul intră în constatare.']],
+            [
+                ['text' => 'Costul'],
+                ['text' => 'constatării/diagnosticării', 'style' => 'B'],
+                ['text' => 'este'],
+                ['text' => gshop_document_money(0, $values['currency']), 'style' => 'B', 'underline' => true],
+                ['text' => '(inclus în reparație) / sau'],
+                ['text' => $diagnostic, 'style' => 'B', 'underline' => true],
+                ['text' => 'dacă nu se efectuează reparația.'],
+            ],
+            [['text' => 'După constatare, se comunică clientului devizul estimativ.']],
+            [
+                ['text' => $decisionPrefix],
+                ['text' => $total, 'style' => 'B', 'underline' => true],
+                ['text' => $decisionSuffix],
+            ],
+            [['text' => 'Dacă pe parcurs apar defecțiuni suplimentare sau piese adiționale necesare, clientul va fi informat și va transmite un nou acord (prin semnătură, e-mail sau WhatsApp).']],
+            [
+                ['text' => 'Termen estimat reparație:'],
+                ['text' => $days . ' zile lucrătoare.', 'style' => 'B', 'underline' => true],
+            ],
         ];
         $cursor = 497.0;
-        foreach ($conditions as $index => $condition) {
+        foreach ($conditions as $index => $segments) {
             gshop_pdf_text($pdf, 34, $cursor, ($index + 1) . '.', 6.4, 'B', 14, 'L', gshop_document_color('electricDark'));
-            $lines = gshop_document_wrap($pdf, $condition, 509, 6.55, '', 3);
-            foreach ($lines as $lineIndex => $line) gshop_pdf_text($pdf, 52, $cursor - $lineIndex * 8.2, $line, 6.55, '', 509);
-            $cursor -= count($lines) * 8.2 + 3.2;
+            $lineCount = gshop_document_rich_paragraph($pdf, 52, $cursor, 509, $segments, 6.55, 8.2, 3);
+            $cursor -= max(1, $lineCount) * 8.2 + 3.2;
         }
         $confirmation = $accepted
-            ? 'Clientul confirmă că a citit și acceptă condițiile de reparație, costul estimativ și condițiile generale service.'
+            ? 'Clientul confirmă că a citit și acceptă condițiile generale de service și costul estimativ.'
             : ($refused
-                ? 'Clientul confirmă că a citit și nu acceptă condițiile de reparație, costul estimativ și condițiile generale service.'
-                : 'Clientul confirmă că a citit documentul; acordul sau refuzul privind condițiile de reparație și costul estimativ nu a fost încă exprimat.');
+                ? 'Clientul confirmă că a citit și nu acceptă condițiile generale de service și costul estimativ.'
+                : 'Clientul confirmă că a citit documentul; acordul privind condițiile generale de service și costul estimativ nu a fost încă exprimat.');
         $confirmationLines = gshop_document_wrap($pdf, $confirmation, 529, 7.1, 'B', 2);
         foreach ($confirmationLines as $lineIndex => $line) gshop_pdf_text($pdf, 33, 323 - $lineIndex * 9.5, $line, 7.1, 'B', 529);
-        $name = gshop_document_client_name($client);
-        gshop_pdf_text($pdf, 105, 290, $name, 6.8, '', 240);
-        gshop_pdf_text($pdf, 427, 290, gshop_document_date($document['agreementAt'] ?? $sheet['signedAt'] ?? ''), 6.5, '', 124);
-        gshop_document_place_image($pdf, $signature['path'] ?? null, 33, 108, 350, 128, $signature);
-        gshop_document_place_image($pdf, $stampPath, 403, 106, 150, 130);
+        gshop_document_box($pdf, 31, 100, 533, 205, 'white', 'white', 0, 0);
+        gshop_pdf_text($pdf, 33, 291, 'NUME CLIENT', 5.8, 'B', 68, 'L', gshop_document_color('slate'));
+        gshop_document_source_line($pdf, 101, 288, 240, 288, 'lineDark', .8);
+        gshop_document_shrink_text($pdf, 105, 290, gshop_document_client_name($client), 132, 6.8, 5.2, '');
+        gshop_pdf_text($pdf, 365, 291, 'DATA ȘI ORA', 5.8, 'B', 62, 'L', gshop_document_color('slate'));
+        gshop_document_source_line($pdf, 427, 288, 527, 288, 'lineDark', .8);
+        gshop_document_shrink_text($pdf, 431, 290, gshop_document_date($document['agreementAt'] ?? $sheet['signedAt'] ?? ''), 93, 6.5, 5.1, '');
+        gshop_pdf_text($pdf, 33, 257, 'SEMNĂTURĂ CLIENT', 6.1, 'B', 150, 'L', gshop_document_color('slate'));
+        gshop_pdf_text($pdf, 403, 257, 'ȘTAMPILĂ', 6.1, 'B', 150, 'L', gshop_document_color('slate'));
+        gshop_document_source_line($pdf, 33, 220, 135, 220, 'lineDark', .85);
+        gshop_document_place_image($pdf, $signature['path'] ?? null, 35, 222, 98, 27, $signature);
+        gshop_document_place_image($pdf, $stampPath, 405, 222, 98, 27);
     }
-    gshop_document_footer($pdf, $page, 2);
+    gshop_document_footer($pdf, $page, 2, 'G-SHOP | INTRARE SERVICE');
 }
 
 /** @return list<array{name:string,quantity:mixed,unitPrice:mixed,totalPrice:float}> */
@@ -591,6 +736,16 @@ function gshop_document_empty_table(GshopServiceDocumentPdf $pdf, float $sourceB
     gshop_pdf_text($pdf, $x, $sourceBottom + 10, $label, 6.8, '', 500, 'L', gshop_document_color('slate'));
 }
 
+function gshop_document_status_badge(GshopServiceDocumentPdf $pdf, float $x, float $sourceBottom, string $status): void {
+    $paid = $status === 'ACHITAT';
+    $width = $paid ? 43.0 : 51.0;
+    $fill = $paid ? 'successSoft' : 'dangerSoft';
+    $color = $paid ? 'success' : 'danger';
+    gshop_document_box($pdf, $x, $sourceBottom, $width, 12, $fill, $fill, 6, 0);
+    $pdf->SetFont('DejaVu', 'B', 5.2);
+    gshop_pdf_text($pdf, $x + ($width - $pdf->GetStringWidth($status)) / 2, $sourceBottom + 3.3, $status, 5.2, 'B', $width, 'L', gshop_document_color($color));
+}
+
 function gshop_document_summary_card(
     GshopServiceDocumentPdf $pdf,
     float $x,
@@ -600,12 +755,53 @@ function gshop_document_summary_card(
     string $value,
     string $fill,
     string $valueColor,
-    ?string $accent = null
+    ?string $accent = null,
+    float $height = 57,
+    ?string $status = null
 ): void {
-    gshop_document_box($pdf, $x, $sourceBottom, $width, 57, $fill, $accent ?? ($fill === 'electric' ? 'electric' : 'line'), 9, .8);
-    if ($accent) gshop_document_box($pdf, $x, $sourceBottom + 8, 3.5, 41, $accent, $accent, 1.75, 0);
-    gshop_pdf_text($pdf, $x + 11, $sourceBottom + 40, strtoupper($label), 5.8, 'B', $width - 22, 'L', gshop_document_color($fill === 'electric' ? 'white' : 'slate'));
-    gshop_document_shrink_text($pdf, $x + 11, $sourceBottom + 13, $value, $width - 22, $width >= 180 ? 12.2 : 10.6, 5.8, 'B', 'L', gshop_document_color($valueColor));
+    gshop_document_box($pdf, $x, $sourceBottom, $width, $height, $fill, $accent ?? ($fill === 'electric' ? 'electric' : 'line'), 9, .8);
+    if ($accent) gshop_document_box($pdf, $x, $sourceBottom + 8, 3.5, max(8, $height - 16), $accent, $accent, 1.75, 0);
+    $labelWidth = $width - 22;
+    if ($status) $labelWidth -= ($status === 'ACHITAT' ? 43.0 : 51.0) + 7;
+    gshop_pdf_text($pdf, $x + 11, $sourceBottom + $height - 17, strtoupper($label), 5.8, 'B', $labelWidth, 'L', gshop_document_color($fill === 'electric' ? 'white' : 'slate'));
+    if ($status) {
+        $statusWidth = $status === 'ACHITAT' ? 43.0 : 51.0;
+        gshop_document_status_badge($pdf, $x + $width - $statusWidth - 9, $sourceBottom + $height - 22, $status);
+    }
+    gshop_document_shrink_text($pdf, $x + 11, $sourceBottom + ($height >= 70 ? 19 : 13), $value, $width - 22, $width >= 180 ? 12.2 : 10.6, 5.8, 'B', 'L', gshop_document_color($valueColor));
+}
+
+/** @param array{total:float,beforeDiscount:float,hasDiscount:bool,totalStatus:string,currency:string} $values */
+function gshop_document_payment_total_cards(
+    GshopServiceDocumentPdf $pdf,
+    float $x,
+    float $sourceBottom,
+    float $width,
+    float $height,
+    array $values
+): void {
+    $currency = $values['currency'];
+    if (empty($values['hasDiscount'])) {
+        gshop_document_summary_card($pdf, $x, $sourceBottom, $width, 'Total de plată', gshop_document_money($values['total'], $currency), 'electric', 'white', null, $height, $values['totalStatus']);
+        return;
+    }
+    $gap = 7.0;
+    $cardHeight = ($height - $gap) / 2;
+    $cards = [
+        ['Total estimativ fără reducere', gshop_document_money($values['beforeDiscount'], $currency)],
+        ['Total de plată cu reducere', gshop_document_money($values['total'], $currency)],
+    ];
+    foreach ($cards as $index => [$label, $value]) {
+        $bottom = $sourceBottom + ($index === 0 ? $cardHeight + $gap : 0);
+        gshop_document_box($pdf, $x, $bottom, $width, $cardHeight, 'electric', 'electric', 8, .8);
+        $labelWidth = $width - 20 - ($index === 1 ? ($values['totalStatus'] === 'ACHITAT' ? 50 : 58) : 0);
+        gshop_pdf_text($pdf, $x + 10, $bottom + $cardHeight - 12, strtoupper($label), 4.8, 'B', $labelWidth, 'L', gshop_document_color('white'));
+        if ($index === 1) {
+            $statusWidth = $values['totalStatus'] === 'ACHITAT' ? 43.0 : 51.0;
+            gshop_document_status_badge($pdf, $x + $width - $statusWidth - 8, $bottom + $cardHeight - 17, $values['totalStatus']);
+        }
+        gshop_document_shrink_text($pdf, $x + 10, $bottom + 8, $value, $width - 20, 8.8, 5.7, 'B', 'L', gshop_document_color('white'));
+    }
 }
 
 function gshop_document_detail_card(GshopServiceDocumentPdf $pdf, float $x, float $sourceBottom, float $width, string $label, string $value): void {
@@ -622,16 +818,13 @@ function gshop_document_totals(GshopServiceDocumentPdf $pdf, array $snapshot, fl
     $innerWidth = GSHOP_DOCUMENT_CONTENT_WIDTH - 22;
     $gap = 8.0;
     $widths = [207.0, 143.0, $innerWidth - 207.0 - 143.0 - $gap * 2];
-    $x = $innerX;
-    $cards = [
-        ['Total de plată', gshop_document_money($values['total'], $currency), 'electric', 'white', null],
-        ['Achitat', gshop_document_money($values['paid'], $currency), 'white', 'success', 'success'],
-        ['Rest de plată', gshop_document_money($values['remaining'], $currency), 'white', 'warning', 'warning'],
-    ];
-    foreach ($cards as $index => [$label, $value, $fill, $valueColor, $accent]) {
-        gshop_document_summary_card($pdf, $x, $sourceBottom + 51, $widths[$index], $label, $value, $fill, $valueColor, $accent);
-        $x += $widths[$index] + $gap;
-    }
+    $summaryBottom = $sourceBottom + 51;
+    $summaryHeight = 82.0;
+    gshop_document_payment_total_cards($pdf, $innerX, $summaryBottom, $widths[0], $summaryHeight, $values);
+    $x = $innerX + $widths[0] + $gap;
+    gshop_document_summary_card($pdf, $x, $summaryBottom, $widths[1], 'Achitat', gshop_document_money($values['paid'], $currency), 'white', 'success', 'success', $summaryHeight);
+    $x += $widths[1] + $gap;
+    gshop_document_summary_card($pdf, $x, $summaryBottom, $widths[2], 'Rest de plată', gshop_document_money($values['remaining'], $currency), 'white', $values['remaining'] <= .009 ? 'success' : 'warning', $values['remaining'] <= .009 ? 'success' : 'warning', $summaryHeight, $values['restStatus']);
     $smallGap = 6.0;
     $pdf->SetFont('DejaVu', 'B', 4.7);
     $currencyLabelWidth = $pdf->GetStringWidth('MONEDĂ') + 16;
@@ -665,24 +858,40 @@ function gshop_document_overlay_final_agreement(Fpdi $pdf, array $document, arra
     $cause = strtoupper(gshop_pdf_string($sheet['defectCause'] ?? ''));
     if ($cause === 'CLIENT') gshop_document_check($pdf, 140, 660);
     elseif (in_array($cause, ['PRODUCER', 'MANUFACTURER'], true)) gshop_document_check($pdf, 228, 660);
-    elseif ($cause === 'UNKNOWN') gshop_document_check($pdf, 342, 660);
     gshop_pdf_multiline($pdf, 33, 619, 529, $sheet['finalNotes'] ?? '', 5, 7, 13);
-    gshop_pdf_text($pdf, 113, 480, $sheet['estimatedRepairDays'] ?? '', 7, '', 180);
+    gshop_document_box($pdf, 22, 462, 551.2756, 46, 'electricLight', 'electricLight', 8, .7);
+    gshop_pdf_text($pdf, 34, 481, 'TERMEN ESTIMAT', 5.7, 'B', 75, 'L', gshop_document_color('slate'));
+    $days = gshop_pdf_string($sheet['estimatedRepairDays'] ?? '');
+    $pdf->SetFont('DejaVu', 'B', 7.2);
+    $daysLineWidth = max(18.0, min(60.0, $pdf->GetStringWidth($days) + 10));
+    gshop_document_source_line($pdf, 109, 478, 109 + $daysLineWidth, 478, 'lineDark', .8);
+    gshop_pdf_text($pdf, 113, 480, $days, 7.2, 'B', max(10, $daysLineWidth - 7));
+    gshop_pdf_text($pdf, 118 + $daysLineWidth, 481, 'zile de la data acordului final al clientului', 7, '', 290);
     gshop_pdf_text($pdf, 453, 469, gshop_document_date($document['agreementAt'] ?? $agreement['date'] ?? $sheet['finalAgreementAt'] ?? ''), 5.4, 'B', 98, 'R', gshop_document_color('slate'));
     $status = strtoupper(gshop_pdf_string($agreement['status'] ?? ''));
     $decision = in_array($status, ['AGREE', 'ACCEPTED'], true)
-        ? 'sunt de acord'
-        : (in_array($status, ['DISAGREE', 'REJECTED', 'REFUSED'], true) ? 'nu sunt de acord' : 'nu am exprimat încă acordul');
+        ? 'SUNT DE ACORD'
+        : (in_array($status, ['DISAGREE', 'REJECTED', 'REFUSED'], true) ? 'NU SUNT DE ACORD' : 'ACORD NEEXPRIMAT');
     $agreementName = gshop_document_client_name($client) ?: 'Clientul';
-    $statement = 'Subsemnatul/a ' . $agreementName . ' declar că ' . $decision . ' cu devizul final, care include costurile de diagnosticare și reparare a produsului meu / produselor mele, precum și cu termenul estimat de reparație.';
-    $statementLines = gshop_document_wrap($pdf, $statement, 505, 8.2, '', 4);
-    foreach ($statementLines as $lineIndex => $line) gshop_pdf_text($pdf, 45, 380 - $lineIndex * 12, $line, 8.2, '', 505);
+    gshop_document_rich_paragraph($pdf, 45, 380, 505, [
+        ['text' => 'Subsemnatul/a ' . $agreementName . ' declar că'],
+        ['text' => $decision, 'style' => 'B'],
+        ['text' => 'cu devizul final, care include costurile de diagnosticare și reparare a produsului meu / produselor mele, precum și cu termenul estimat de reparație.'],
+    ], 8.2, 12, 4);
     if (in_array($status, ['AGREE', 'ACCEPTED'], true)) gshop_document_check($pdf, 44, 297);
     elseif (in_array($status, ['DISAGREE', 'REJECTED', 'REFUSED'], true)) gshop_document_check($pdf, 190, 297, 'danger');
-    gshop_pdf_text($pdf, 116, 261, gshop_document_client_name($client), 6.8, '', 184);
-    gshop_pdf_text($pdf, 384, 261, gshop_document_date($document['agreementAt'] ?? $agreement['date'] ?? ''), 6.3, '', 166);
-    gshop_document_place_image($pdf, $signature['path'] ?? null, 44, 76, 342, 118, $signature);
-    gshop_document_place_image($pdf, $stampPath, 408, 76, 143, 118);
+    gshop_document_box($pdf, 42, 60, 511, 218, 'white', 'white', 0, 0);
+    gshop_pdf_text($pdf, 44, 262, 'NUME CLIENT', 5.7, 'B', 68, 'L', gshop_document_color('slate'));
+    gshop_document_source_line($pdf, 112, 259, 242, 259, 'lineDark', .8);
+    gshop_document_shrink_text($pdf, 116, 261, gshop_document_client_name($client), 123, 6.8, 5.2, '');
+    gshop_pdf_text($pdf, 370, 262, 'DATA / ORA', 5.7, 'B', 58, 'L', gshop_document_color('slate'));
+    gshop_document_source_line($pdf, 428, 259, 528, 259, 'lineDark', .8);
+    gshop_document_shrink_text($pdf, 432, 261, gshop_document_date($document['agreementAt'] ?? $agreement['date'] ?? ''), 93, 6.3, 5.0, '');
+    gshop_pdf_text($pdf, 44, 224, 'SEMNĂTURĂ CLIENT', 6.2, 'B', 150, 'L', gshop_document_color('slate'));
+    gshop_pdf_text($pdf, 408, 224, 'ȘTAMPILĂ', 6.2, 'B', 143, 'L', gshop_document_color('slate'));
+    gshop_document_source_line($pdf, 44, 195, 146, 195, 'lineDark', .85);
+    gshop_document_place_image($pdf, $signature['path'] ?? null, 46, 197, 98, 20, $signature);
+    gshop_document_place_image($pdf, $stampPath, 410, 197, 98, 20);
 }
 
 /** @param array{path:string,width:int,height:int}|null $signature */
@@ -730,11 +939,11 @@ function gshop_document_build_final(
             gshop_document_section_title($pdf, $cursor, 5, 'Cost total final', 'total, achitat și rest de plată');
             gshop_document_totals($pdf, $snapshot, $cursor - GSHOP_DOCUMENT_TITLE_GAP - GSHOP_DOCUMENT_TOTALS_HEIGHT);
         }
-        gshop_document_footer($pdf, $index + 1, $totalPages);
+        gshop_document_footer($pdf, $index + 1, $totalPages, 'G-SHOP | DEVIZ FINAL');
     }
     gshop_document_add_template($pdf, $templates['agreement']);
     gshop_document_overlay_final_agreement($pdf, $document, $snapshot, $signature, $stampPath);
-    gshop_document_footer($pdf, $totalPages, $totalPages);
+    gshop_document_footer($pdf, $totalPages, $totalPages, 'G-SHOP | DEVIZ FINAL');
     return $totalPages;
 }
 
@@ -753,11 +962,19 @@ function gshop_document_overlay_exit(Fpdi $pdf, array $document, array $snapshot
     if ($state === 'REPAIRED') gshop_document_check($pdf, 44, 339);
     elseif (in_array($state, ['INITIAL', 'UNCHANGED'], true)) gshop_document_check($pdf, 184, 339);
     $date = $document['documentAt'] ?? $exit['date'] ?? $sheet['deliveredAt'] ?? '';
-    gshop_pdf_text($pdf, 110, 210, gshop_document_client_name($client), 6.8, '', 225);
-    gshop_pdf_text($pdf, 426, 210, gshop_document_date($date), 6.3, '', 125);
-    gshop_document_place_image($pdf, $signature['path'] ?? null, 38, 86, 341, 62, $signature);
-    gshop_document_place_image($pdf, $stampPath, 401, 86, 155, 62);
-    gshop_document_footer($pdf, 1, 1);
+    gshop_document_box($pdf, 36, 70, 523, 158, 'white', 'white', 0, 0);
+    gshop_pdf_text($pdf, 38, 211, 'NUME CLIENT', 5.7, 'B', 68, 'L', gshop_document_color('slate'));
+    gshop_document_source_line($pdf, 106, 208, 236, 208, 'lineDark', .8);
+    gshop_document_shrink_text($pdf, 110, 210, gshop_document_client_name($client), 123, 6.8, 5.2, '');
+    gshop_pdf_text($pdf, 390, 211, 'DATA ȘI ORA', 5.7, 'B', 62, 'L', gshop_document_color('slate'));
+    gshop_document_source_line($pdf, 452, 208, 552, 208, 'lineDark', .8);
+    gshop_document_shrink_text($pdf, 456, 210, gshop_document_date($date), 93, 6.3, 4.9, '');
+    gshop_pdf_text($pdf, 38, 171, 'SEMNĂTURĂ CLIENT', 6.3, 'B', 150, 'L', gshop_document_color('slate'));
+    gshop_pdf_text($pdf, 401, 171, 'ȘTAMPILĂ', 6.3, 'B', 155, 'L', gshop_document_color('slate'));
+    gshop_document_source_line($pdf, 38, 145, 140, 145, 'lineDark', .85);
+    gshop_document_place_image($pdf, $signature['path'] ?? null, 40, 147, 98, 18, $signature);
+    gshop_document_place_image($pdf, $stampPath, 403, 147, 98, 18);
+    gshop_document_footer($pdf, 1, 1, 'G-SHOP | IEȘIRE SERVICE');
 }
 
 /** @param array{path:string,width:int,height:int}|null $signature */
@@ -795,13 +1012,21 @@ function gshop_document_overlay_warranty(Fpdi $pdf, array $document, array $snap
     foreach ($left as [$baseline, $value]) gshop_pdf_text($pdf, 117, $baseline, $value, 6.6, '', 164);
     foreach ($right as [$baseline, $value]) gshop_pdf_text($pdf, 405, $baseline, $value, 6.4, '', 156);
 
-    gshop_pdf_text($pdf, 104, 235, gshop_document_client_name($client), 6.8, '', 235);
-    gshop_pdf_text($pdf, 417, 235, gshop_document_date($document['documentAt'] ?? $warranty['date'] ?? ''), 6.3, '', 142);
-    gshop_document_box($pdf, 35, 184, 252, 24, 'white', 'white', 0, 0);
-    gshop_pdf_text($pdf, 36, 198, 'ȘTAMPILĂ SERVICE', 5.3, 'B', 150, 'L', gshop_document_color('slate'));
-    gshop_document_place_image($pdf, $stampPath, 36, 126, 249, 84);
-    gshop_document_place_image($pdf, $signature['path'] ?? null, 310, 126, 249, 84, $signature);
-    gshop_document_footer($pdf, 1, 1);
+    // Remove the legacy full-width signature rules before drawing the compact
+    // client/stamp areas used by all service documents.
+    gshop_document_box($pdf, 34, 110, 527, 140, 'white', 'white', 0, 0);
+    gshop_pdf_text($pdf, 36, 237, 'NUME CLIENT', 5.7, 'B', 68, 'L', gshop_document_color('slate'));
+    gshop_document_source_line($pdf, 104, 233, 234, 233, 'lineDark', .8);
+    gshop_document_shrink_text($pdf, 108, 235, gshop_document_client_name($client), 123, 6.8, 5.2, '');
+    gshop_pdf_text($pdf, 360, 237, 'DATA ȘI ORA', 5.7, 'B', 57, 'L', gshop_document_color('slate'));
+    gshop_document_source_line($pdf, 417, 233, 517, 233, 'lineDark', .8);
+    gshop_document_shrink_text($pdf, 421, 235, gshop_document_date($document['documentAt'] ?? $warranty['date'] ?? ''), 93, 6.3, 5.0, '');
+    gshop_pdf_text($pdf, 36, 198, 'SEMNĂTURĂ CLIENT', 5.8, 'B', 150, 'L', gshop_document_color('slate'));
+    gshop_pdf_text($pdf, 310, 198, 'ȘTAMPILĂ', 5.8, 'B', 150, 'L', gshop_document_color('slate'));
+    gshop_document_source_line($pdf, 36, 172, 138, 172, 'lineDark', .85);
+    gshop_document_place_image($pdf, $signature['path'] ?? null, 38, 174, 98, 18, $signature);
+    gshop_document_place_image($pdf, $stampPath, 312, 174, 98, 18);
+    gshop_document_footer($pdf, 1, 1, 'G-SHOP | CERTIFICAT GARANȚIE');
 }
 
 function gshop_document_add_template(GshopServiceDocumentPdf $pdf, string $template, int $page = 1): void {
@@ -893,7 +1118,7 @@ function generate_service_document_pdf(
         'hash' => hash_file('sha256', $template) ?: '',
     ];
     $fingerprint = hash('sha256', serialize([
-        'version' => 20,
+        'version' => 27,
         'type' => $normalizedType,
         'document' => $document,
         'snapshot' => $snapshot,

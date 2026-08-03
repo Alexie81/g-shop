@@ -724,15 +724,10 @@ def draw_signatures(c: canvas.Canvas, data: dict[str, Any], show_company: bool) 
     if show_company:
         c.setFillColor(SLATE)
         c.setFont("GShop-Bold", 5.8)
-        c.drawString(right_x, y + 66, "ȘTAMPILĂ FIRMĂ")
+        c.drawString(right_x, y + 66, "ȘTAMPILĂ")
         stamp = image_source(text(data, "company", "stampUrl"))
         if stamp:
             c.drawImage(stamp, right_x, y + 16, width=right_w, height=38, preserveAspectRatio=True, mask="auto")
-        else:
-            c.setStrokeColor(HexColor("#C8D3E3"))
-            c.setDash(3, 2)
-            c.roundRect(right_x, y + 16, right_w, 38, 6, fill=0, stroke=1)
-            c.setDash()
 
 
 def build_pdf(output: Path, data: dict[str, Any], variant: Variant, show_company: bool) -> Path:

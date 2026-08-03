@@ -190,17 +190,19 @@ def draw_header(pdf: canvas.Canvas, data: dict[str, Any]) -> None:
 def draw_footer(pdf: canvas.Canvas) -> None:
     pdf.setStrokeColor(LINE)
     pdf.setLineWidth(0.6)
-    pdf.line(MARGIN, 30, PAGE_W - MARGIN, 30)
+    pdf.line(MARGIN, 38, PAGE_W - MARGIN, 38)
     pdf.setFillColor(SLATE)
     pdf.setFont("GShop-Regular", 4.45)
     pdf.drawString(
         MARGIN,
-        18,
+        26,
         "În temeiul legii: OG 21/1992 | Legea 193/2000 | Codul civil | GDPR (UE) 2016/679 | Legea 190/2018.",
     )
+    pdf.setFillColor(SLATE)
+    pdf.setFont("GShop-Bold", 5.3)
+    pdf.drawCentredString(PAGE_W / 2, 18, "Pagina 1/1")
     pdf.setFillColor(ELECTRIC_DARK)
-    pdf.setFont("GShop-Bold", 5.5)
-    pdf.drawRightString(PAGE_W - MARGIN, 10, "G-SHOP | IEȘIRE SERVICE")
+    pdf.drawRightString(PAGE_W - MARGIN, 18, "G-SHOP | IEȘIRE SERVICE")
 
 
 def section_title(pdf: canvas.Canvas, y: float, number: int, title: str, subtitle: str = "") -> None:
@@ -247,13 +249,12 @@ def draw_line_field(
 def draw_company(pdf: canvas.Canvas, data: dict[str, Any]) -> None:
     y = 704
     rounded_box(pdf, MARGIN, y, CONTENT_W, 44, radius=8)
-    col = (CONTENT_W - 28) / 3
-    draw_line_field(pdf, MARGIN + 10, y + 26, col, "Denumire juridică", value(data, "company", "legalName"))
-    draw_line_field(pdf, MARGIN + 18 + col, y + 26, col, "CUI / CIF", value(data, "company", "taxId"))
-    draw_line_field(pdf, MARGIN + 26 + col * 2, y + 26, col - 18, "Registrul Comerțului", value(data, "company", "tradeRegisterNumber"), label_size=5.1)
-    draw_line_field(pdf, MARGIN + 10, y + 9, col * 1.45, "Sediu", full_address(data, "company"))
-    draw_line_field(pdf, MARGIN + 20 + col * 1.45, y + 9, col * 0.75, "Telefon", value(data, "company", "phone"))
-    draw_line_field(pdf, MARGIN + 30 + col * 2.2, y + 9, CONTENT_W - col * 2.2 - 40, "Email", value(data, "company", "email"))
+    draw_line_field(pdf, 32, 730, 190, "Denumire juridică", value(data, "company", "legalName"), label_width=64)
+    draw_line_field(pdf, 230, 730, 105, "CUI / CIF", value(data, "company", "taxId"), label_size=5.1, label_width=34)
+    draw_line_field(pdf, 343, 730, 220, "Registrul Comerțului", value(data, "company", "tradeRegisterNumber"), label_size=5.1, label_width=103)
+    draw_line_field(pdf, 32, 716, 531, "Sediu", full_address(data, "company"), label_width=32)
+    draw_line_field(pdf, 32, 705, 210, "Telefon", value(data, "company", "phone"), label_width=36)
+    draw_line_field(pdf, 250, 705, 313, "Email", value(data, "company", "email"), label_width=34)
 
 
 def draw_reference_band(pdf: canvas.Canvas, data: dict[str, Any]) -> None:
@@ -361,12 +362,12 @@ def draw_pickup(pdf: canvas.Canvas, data: dict[str, Any]) -> None:
     pdf.drawString(MARGIN + 16, y + height - 34, "Am ridicat produsul și confirm primirea acestuia în starea indicată mai sus.")
     inner_x = MARGIN + 16
     inner_width = CONTENT_W - 32
-    draw_line_field(pdf, inner_x, y + height - 75, inner_width * 0.58, "Nume client", client_name(data), label_width=68)
+    draw_line_field(pdf, inner_x, y + height - 75, 198, "Nume client", client_name(data), label_width=68)
     draw_line_field(
         pdf,
-        inner_x + inner_width * 0.62,
+        390,
         y + height - 75,
-        inner_width * 0.38,
+        162,
         "Data și ora",
         first_value(data, (("exit", "date"), ("sheet", "deliveredAt"))),
         label_width=62,
@@ -374,11 +375,11 @@ def draw_pickup(pdf: canvas.Canvas, data: dict[str, Any]) -> None:
     pdf.setFillColor(SLATE)
     pdf.setFont("GShop-Bold", 6.3)
     pdf.drawString(inner_x, y + height - 112, "SEMNĂTURĂ CLIENT")
-    stamp_x = inner_x + inner_width * 0.70
-    pdf.drawString(stamp_x, y + height - 112, "ȘTAMPILA FIRMEI")
+    stamp_x = 401
+    pdf.drawString(stamp_x, y + height - 112, "ȘTAMPILĂ")
     pdf.setStrokeColor(HexColor("#C8D3E3"))
     pdf.setLineWidth(0.85)
-    pdf.line(inner_x, y + 24, stamp_x - 18, y + 24)
+    pdf.line(inner_x, 145, inner_x + 102, 145)
     # Ștampila se aplică direct pe fundal, fără chenar ajutător.
 
 

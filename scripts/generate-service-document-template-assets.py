@@ -40,17 +40,17 @@ def blank_data() -> dict[str, object]:
 def draw_footer_base(pdf: canvas.Canvas, module: ModuleType, label: str) -> None:
     pdf.setStrokeColor(module.LINE)
     pdf.setLineWidth(0.6)
-    pdf.line(module.MARGIN, 30, module.PAGE_W - module.MARGIN, 30)
+    pdf.line(module.MARGIN, 38, module.PAGE_W - module.MARGIN, 38)
     pdf.setFillColor(module.SLATE)
     pdf.setFont("GShop-Regular", 4.45)
     pdf.drawString(
         module.MARGIN,
-        18,
+        26,
         "În temeiul legii: OG 21/1992 | Legea 193/2000 | Codul civil | GDPR (UE) 2016/679 | Legea 190/2018.",
     )
     pdf.setFillColor(module.ELECTRIC_DARK)
     pdf.setFont("GShop-Bold", 5.3)
-    pdf.drawRightString(module.PAGE_W - module.MARGIN, 9, label)
+    pdf.drawRightString(module.PAGE_W - module.MARGIN, 18, label)
 
 
 def build_intake(module: ModuleType, data: dict[str, object]) -> Path:
@@ -64,7 +64,7 @@ def build_intake(module: ModuleType, data: dict[str, object]) -> Path:
     module.draw_company(pdf, data)
     module.draw_client_and_equipment(pdf, data)
     module.draw_problem(pdf, data)
-    module.draw_estimated_costs(pdf, data, section_y=324, box_y=72, height=234, number=3)
+    module.draw_estimated_costs(pdf, data, section_y=366, box_y=114, height=234, number=3)
     draw_footer_base(pdf, module, "G-SHOP | INTRARE SERVICE")
     pdf.showPage()
 
@@ -83,7 +83,7 @@ def build_intake(module: ModuleType, data: dict[str, object]) -> Path:
     )
     pdf.setFillColor(module.ELECTRIC_DARK)
     pdf.setFont("GShop-Bold", 7.2)
-    pdf.drawString(module.MARGIN + 12, 513, "CONDIȚII REPARAȚIE")
+    pdf.drawString(module.MARGIN + 12, 513, "CONDIȚII ȘI COST ESTIMATIV")
     module.section_title(pdf, 362, 6, "Confirmarea clientului", "decizie pentru întregul document")
     module.draw_acceptance(pdf, data, y=90, height=258)
     draw_footer_base(pdf, module, "G-SHOP | INTRARE SERVICE")

@@ -192,7 +192,7 @@ export default function CompanyDetailsScreen() {
         </FormSection>
 
         <Card style={styles.section} elevated>
-          <SectionHeading icon="finger-print-outline" color={palette.cyan} background={`${palette.cyan}16`} title="Ștampila firmei" subtitle="Ștampila aparține doar firmei selectate." />
+          <SectionHeading icon="finger-print-outline" color={palette.cyan} background={`${palette.cyan}16`} title="Ștampilă" subtitle="Imaginea se aplică automat documentelor entității selectate." />
           <Pressable accessibilityRole="button" onPress={() => void pickStamp()} style={({ pressed }) => [styles.stampArea, { backgroundColor: colors.surfaceMuted, borderColor: stampUri ? `${colors.primary}70` : colors.border, opacity: pressed ? 0.78 : 1 }]}>
             {stampUri ? <Image source={{ uri: stampUri }} resizeMode="contain" style={styles.stampImage} /> : <View style={styles.stampEmpty}><View style={[styles.stampEmptyIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="image-outline" size={28} color={colors.primary} /></View><AppText variant="label">Adaugă ștampila</AppText><AppText variant="caption" muted style={styles.stampHint}>PNG, JPG sau WEBP · recomandat cu fundal transparent</AppText></View>}
           </Pressable>
