@@ -109,14 +109,20 @@ function gshop_send_expo_push(array $devices, array $content): int {
 function gshop_notify_missing_documents(string $propertyId, bool $force = false): array {
     $pdo=db();gshop_ensure_push_tables($pdo);$items=gshop_missing_document_records($propertyId);
     if(!$items)return['sent'=>0,'missingRepairs'=>0,'deduplicated'=>false];
-    $fingerprint=hash('sha256',json_encode(array_map(fn($item)=>[$item['serviceSheetId'],$item['missing']],$items),JSON_UNESCAPED_UNICODE));$today=gmdate('Y-m-d');
-    if(!$force){$seen=$pdo->prepare('SELECT 1 FROM push_notification_runs WHERE property_id=? AND fingerprint=? AND sent_on=? LIMIT 1');$seen->execute([uuid_bin($propertyId),$fingerprint,$today]);if($seen->fetchColumn())return['sent'=>0,'missingRepairs'=>count($items),'deduplicated'=>true];}
     $devices=$pdo->prepare('SELECT expo_push_token FROM push_devices WHERE property_id=? AND is_active=1 ORDER BY updated_at DESC');$devices->execute([uuid_bin($propertyId)]);$recipients=$devices->fetchAll();
     if(!$recipients)return['sent'=>0,'missingRepairs'=>count($items),'deduplicated'=>false];
-    $first=$items[0];$extra=count($items)-1;$body=$first['serviceSheetNumber'].': lipsesc '.implode(', ',$first['missing']).'.';if($extra>0)$body.=' Încă '.$extra.' '.($extra===1?'reparație incompletă.':'reparații incomplete.');
-    $sent=gshop_send_expo_push($recipients,['title'=>'Documente lipsă în registru','body'=>$body,'data'=>['route'=>'/service/register?filter=INCOMPLETE','propertyId'=>$propertyId,'serviceSheetId'=>$first['serviceSheetId'],'missing'=>$first['missing']]]);
-    if($sent>0)$pdo->prepare('INSERT IGNORE INTO push_notification_runs (id,property_id,fingerprint,sent_on,recipients_count,created_at) VALUES (?,?,?,?,?,?)')->execute([uuid_bin(uuid_v4()),uuid_bin($propertyId),$fingerprint,$today,$sent,now_utc()]);
-    return['sent'=>$sent,'missingRepairs'=>count($items),'deduplicated'=>false];
+    $today=gmdate('Y-m-d');$sent=0;$pending=0;
+    foreach($items as$item){
+        $fingerprint=hash('sha256',json_encode([$item['serviceSheetId'],$item['missing']],JSON_UNESCAPED_UNICODE));
+        if(!$force){$seen=$pdo->prepare('SELECT 1 FROM push_notification_runs WHERE property_id=? AND fingerprint=? AND sent_on=? LIMIT 1');$seen->execute([uuid_bin($propertyId),$fingerprint,$today]);if($seen->fetchColumn())continue;}
+        $pending++;
+        $client=trim((string)($item['clientName']??''));
+        $body=($client!==''?$client.': ':'').'lipsesc '.implode(', ',$item['missing']).'.';
+        $itemSent=gshop_send_expo_push($recipients,['title'=>'Documente lipsă · '.$item['serviceSheetNumber'],'body'=>$body,'data'=>['kind'=>'missing-documents','route'=>'/service/service-sheets/'.$item['serviceSheetId'],'propertyId'=>$propertyId,'serviceSheetId'=>$item['serviceSheetId'],'missing'=>$item['missing']]]);
+        $sent+=$itemSent;
+        if($itemSent>0)$pdo->prepare('INSERT IGNORE INTO push_notification_runs (id,property_id,fingerprint,sent_on,recipients_count,created_at) VALUES (?,?,?,?,?,?)')->execute([uuid_bin(uuid_v4()),uuid_bin($propertyId),$fingerprint,$today,$itemSent,now_utc()]);
+    }
+    return['sent'=>$sent,'missingRepairs'=>count($items),'deduplicated'=>$pending===0];
 }
 
 function gshop_notify_missing_documents_safely(string $propertyId): void {

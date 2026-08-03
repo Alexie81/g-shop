@@ -3,13 +3,14 @@ import { useProperty } from '@/contexts/PropertyContext';
 import { notificationRoute, refreshMissingDocumentNotifications } from '@/services/push-notifications';
 import * as Notifications from 'expo-notifications';
 import { Href, router } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { AppState, Platform } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Platform } from 'react-native';
 
 export function NotificationCoordinator() {
   const { ready, user } = useAuth();
   const { activeProperty, loading } = useProperty();
   const [pendingRoute, setPendingRoute] = useState<string | null>(null);
+  const refreshedProperties = useRef(new Set<string>());
 
   useEffect(() => {
     if (Platform.OS === 'web') return;
@@ -27,12 +28,11 @@ export function NotificationCoordinator() {
 
   useEffect(() => {
     if (Platform.OS === 'web' || !ready || loading || !user || !activeProperty || activeProperty.type !== 'SERVICE') return;
-    const refresh = () => void refreshMissingDocumentNotifications(activeProperty.id).catch(() => undefined);
-    refresh();
-    const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') refresh();
+    if (refreshedProperties.current.has(activeProperty.id)) return;
+    refreshedProperties.current.add(activeProperty.id);
+    void refreshMissingDocumentNotifications(activeProperty.id).catch(() => {
+      refreshedProperties.current.delete(activeProperty.id);
     });
-    return () => subscription.remove();
   }, [activeProperty, loading, ready, user]);
 
   return null;

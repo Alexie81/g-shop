@@ -67,6 +67,15 @@ export async function scheduleLocalMissingDocumentReminder(propertyId: string) {
     await preferenceStorage.remove(storageKey);
   }
 
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  await Promise.all(scheduled.filter((notification) => notification.content.data?.propertyId === propertyId)
+    .map((notification) => Notifications.cancelScheduledNotificationAsync(notification.identifier).catch(() => undefined)));
+  const presented = await Notifications.getPresentedNotificationsAsync();
+  await Promise.all(presented.filter((notification) => {
+    const data = notification.request.content.data;
+    return data?.propertyId === propertyId && (data?.kind === 'missing-documents' || data?.route === '/service/register?filter=INCOMPLETE');
+  }).map((notification) => Notifications.dismissNotificationAsync(notification.request.identifier).catch(() => undefined)));
+
   const rows = await serviceSheetRepository.listRegister(propertyId);
   const incomplete = rows.map((row) => ({ row, missing: missingDocumentLabels(row) })).filter((item) => item.missing.length > 0);
   if (!incomplete.length) {
@@ -75,36 +84,30 @@ export async function scheduleLocalMissingDocumentReminder(propertyId: string) {
     return;
   }
 
-  const first = incomplete[0];
-  const extra = incomplete.length - 1;
-  const body = `${first.row.serviceSheetNumber}: lipsesc ${first.missing.join(', ')}${extra > 0 ? `. Încă ${extra} ${extra === 1 ? 'reparație incompletă' : 'reparații incomplete'}.` : '.'}`;
-  const content = {
-    title: 'Documente lipsă în registru',
-    body,
-    sound: 'default' as const,
-    badge: incomplete.length,
-    data: { route: '/service/register?filter=INCOMPLETE', propertyId },
-  };
-  await Notifications.scheduleNotificationAsync({ content, trigger: null });
-  const id = await Notifications.scheduleNotificationAsync({
-    content,
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DAILY,
-      hour: 9,
-      minute: 0,
-      channelId: SERVICE_REMINDERS_CHANNEL,
-    },
-  });
-  await preferenceStorage.set(storageKey, id);
+  for (const { row, missing } of incomplete) {
+    const client = row.clientName.trim();
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: `Documente lipsă · ${row.serviceSheetNumber}`,
+        body: `${client ? `${client}: ` : ''}lipsesc ${missing.join(', ')}.`,
+        sound: 'default',
+        badge: incomplete.length,
+        data: {
+          kind: 'missing-documents',
+          route: `/service/service-sheets/${row.serviceSheetId}`,
+          propertyId,
+          serviceSheetId: row.serviceSheetId,
+          missing,
+        },
+      },
+      trigger: null,
+    });
+  }
 }
 
 export async function refreshMissingDocumentNotifications(propertyId: string) {
   await registerPushDevice(propertyId).catch(() => null);
   await scheduleLocalMissingDocumentReminder(propertyId);
-  await apiRequest('/push/reminders/missing-documents', {
-    method: 'POST',
-    body: JSON.stringify({ propertyId }),
-  }).catch(() => undefined);
 }
 
 export function notificationRoute(response: Notifications.NotificationResponse | null | undefined) {
