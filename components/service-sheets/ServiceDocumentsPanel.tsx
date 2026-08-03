@@ -13,7 +13,7 @@ import { GenerateServiceDocumentInput, ServiceDocument, ServiceDocumentType, Ser
 import { formatDate, normalizePhoneForWhatsApp } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
 import { ComponentProps, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { ActivityIndicator, Linking, Modal, Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 type Props = { sheet: ServiceSheet; style?: StyleProp<ViewStyle> };
@@ -29,7 +29,10 @@ export function ServiceDocumentsPanel({ sheet, style }: Props) {
   const { hasPermission } = useAuth();
   const { showToast } = useToast();
   const [editorType, setEditorType] = useState<ServiceDocumentType | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ServiceDocument | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const canGenerate = hasPermission('service_sheets.update') || hasPermission('service_sheets.create');
+  const canDelete = hasPermission('service_sheets.update');
   const state = useAsyncData(() => serviceSheetRepository.listDocuments(sheet.id), [sheet.id, sheet.signedAt]);
   const financialState = useAsyncData(() => clientRepository.getFinancials(sheet.clientId), [sheet.clientId]);
   useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);
@@ -65,6 +68,22 @@ export function ServiceDocumentsPanel({ sheet, style }: Props) {
     }
     try { await Linking.openURL(generated.url); }
     catch { showToast('Documentul a fost generat, dar nu a putut fi deschis automat.', 'error'); }
+  };
+
+  const removeDocument = async () => {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    try {
+      const label = deleteTarget.label;
+      await serviceSheetRepository.removeDocument(sheet.id, deleteTarget.type);
+      await state.reload(true);
+      setDeleteTarget(null);
+      showToast(`${label} a fost șters. Îl poți crea din nou de la început.`, 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Documentul nu a putut fi șters.', 'error');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const sendOne = async (document: ServiceDocument) => {
@@ -109,6 +128,7 @@ export function ServiceDocumentsPanel({ sheet, style }: Props) {
           <View style={styles.documentActions}>
             {ready && document ? <Button compact label="Deschide" icon="open-outline" onPress={() => void openDocument(document)} style={styles.rowAction} /> : <Button compact label="Creează din fișă" icon="add-circle-outline" disabled={!canGenerate || state.loading} onPress={() => openEditor(definition.type, document)} style={styles.rowAction} />}
             {ready && document ? <Pressable accessibilityRole="button" accessibilityLabel={`Actualizează ${document.label}`} disabled={!canGenerate} onPress={() => openEditor(definition.type, document)} style={[styles.editAction, { backgroundColor: colors.surface, borderColor: colors.border, opacity: canGenerate ? 1 : 0.4 }]}><Ionicons name="create-outline" size={18} color={colors.primary} /></Pressable> : null}
+            {ready && document ? <Pressable accessibilityRole="button" accessibilityLabel={`Șterge ${document.label}`} disabled={!canDelete || deleting} onPress={() => setDeleteTarget(document)} style={[styles.editAction, { backgroundColor: `${palette.danger}0D`, borderColor: `${palette.danger}38`, opacity: canDelete ? 1 : 0.4 }]}><Ionicons name="trash-outline" size={18} color={palette.danger} /></Pressable> : null}
           </View>
         </View>;
       })}</View>
@@ -148,6 +168,21 @@ export function ServiceDocumentsPanel({ sheet, style }: Props) {
       onClose={() => setEditorType(null)}
       onGenerate={(input) => generate(editorType ?? 'INTAKE', input)}
     />
+
+    <Modal visible={deleteTarget !== null} transparent animationType="fade" statusBarTranslucent onRequestClose={() => { if (!deleting) setDeleteTarget(null); }}>
+      <View style={[styles.deleteOverlay, { backgroundColor: colors.overlay }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Închide confirmarea" disabled={deleting} style={StyleSheet.absoluteFill} onPress={() => setDeleteTarget(null)} />
+        {deleteTarget ? <View style={[styles.deleteCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
+          <View style={[styles.deleteIcon, { backgroundColor: `${palette.danger}16` }]}><Ionicons name="trash-outline" size={28} color={palette.danger} /></View>
+          <AppText variant="title" style={styles.deleteTitle}>Ștergi {deleteTarget.label.toLocaleLowerCase('ro-RO')}?</AppText>
+          <AppText muted style={styles.deleteCopy}>PDF-ul va fi eliminat din aplicație și din pagina clientului. Celelalte documente rămân neschimbate, iar acesta poate fi creat imediat din nou de la început.</AppText>
+          <View style={styles.deleteActions}>
+            <Button variant="outline" label="Păstrează" disabled={deleting} onPress={() => setDeleteTarget(null)} style={styles.deleteButton} />
+            <Button variant="danger" label="Șterge documentul" icon="trash-outline" loading={deleting} onPress={() => void removeDocument()} style={styles.deleteButton} />
+          </View>
+        </View> : null}
+      </View>
+    </Modal>
   </>;
 }
 
@@ -170,6 +205,13 @@ const styles = StyleSheet.create({
   documentActions: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.xs },
   rowAction: { minWidth: 142 },
   editAction: { width: 44, height: 44, borderWidth: 1, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  deleteOverlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
+  deleteCard: { width: '100%', maxWidth: 460, borderWidth: 1, borderRadius: radius.xl, padding: spacing.xl, alignItems: 'center', gap: spacing.md },
+  deleteIcon: { width: 58, height: 58, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
+  deleteTitle: { textAlign: 'center' },
+  deleteCopy: { textAlign: 'center', lineHeight: 21 },
+  deleteActions: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
+  deleteButton: { minWidth: 150, flex: 1 },
   missingNotice: { borderWidth: 1, borderRadius: radius.md, padding: spacing.md, gap: spacing.md },
   missingHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   missingActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },

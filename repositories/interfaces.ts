@@ -49,6 +49,7 @@ export interface ServiceSheetRepository {
   generatePdf(id: UUID): Promise<ServiceSheetPdf>;
   listDocuments(id: UUID): Promise<ServiceDocument[]>;
   generateDocument(id: UUID, type: ServiceDocumentType, input?: GenerateServiceDocumentInput): Promise<ServiceDocument>;
+  removeDocument(id: UUID, type: ServiceDocumentType): Promise<void>;
   listRegister(propertyId: UUID): Promise<ServiceDocumentRegisterRow[]>;
 }
 export interface CollaboratorRepository {

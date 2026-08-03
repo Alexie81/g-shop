@@ -50,6 +50,7 @@ export const serviceSheetRepository: ServiceSheetRepository = {
   generatePdf: (id) => apiRequest(`/service-sheets/${id}/pdf`, { method: 'POST' }),
   listDocuments: (id) => apiRequest(`/service-sheets/${id}/documents`),
   generateDocument: (id, type, input = {}) => apiRequest(`/service-sheets/${id}/documents/${type}`, { method: 'POST', body: JSON.stringify(input) }),
+  removeDocument: (id, type) => apiRequest(`/service-sheets/${id}/documents/${type}`, { method: 'DELETE' }),
   listRegister: (propertyId) => apiRequest(`/service-documents/register?propertyId=${encodeURIComponent(propertyId)}`),
 };
 export const collaboratorRepository: CollaboratorRepository = {
