@@ -2,7 +2,7 @@
   "expo": {
     "name": "G-Shop",
     "slug": "g-shop",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "default",
     "icon": "./logo/app-icon.png",
     "scheme": "gshop",
@@ -20,7 +20,7 @@
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./logo/app-icon.png",
-        "backgroundColor": "#07152D"
+        "backgroundColor": "#F6F9FF"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
@@ -34,8 +34,8 @@
       [
         "expo-splash-screen",
         {
-          "image": "./logo/logo.png",
-          "imageWidth": 180,
+          "image": "./logo/app-icon.png",
+          "imageWidth": 240,
           "resizeMode": "contain",
           "backgroundColor": "#F6F9FF",
           "dark": {
@@ -71,13 +71,31 @@
           "faceIDPermission": "Permite G-Shop să securizeze sesiunea cu Face ID."
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./logo/app-icon.png",
+          "color": "#075CFF",
+          "defaultChannel": "service-reminders"
+        }
+      ],
       "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "router": {}
+      "router": {},
+      "eas": {
+        "projectId": "2fe0de49-704b-49f7-a4ef-0f78c8195e08"
+      }
+    },
+    "owner": "cabitexpert",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/2fe0de49-704b-49f7-a4ef-0f78c8195e08"
     }
   }
 }

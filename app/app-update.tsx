@@ -14,6 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import * as Updates from 'expo-updates';
+import { useState } from 'react';
 import { Linking, Platform, StyleSheet, View } from 'react-native';
 
 function compareVersions(a: string, b: string) {
@@ -29,6 +31,7 @@ export default function AppUpdateScreen() {
   useBackToAdministration();
   const { colors } = useAppTheme();
   const { showToast } = useToast();
+  const [installing, setInstalling] = useState(false);
   const state = useAsyncData(() => appUpdateRepository.get(), []);
   const currentVersion = Constants.expoConfig?.version ?? '1.0.0';
   const latest = state.data?.latestVersion ?? currentVersion;
@@ -39,6 +42,29 @@ export default function AppUpdateScreen() {
     const url = state.data?.downloadUrl?.trim();
     if (!url) return showToast('Linkul pentru versiunea Android nu a fost publicat încă.', 'info');
     try { await Linking.openURL(url); } catch { showToast('Pagina de descărcare nu a putut fi deschisă.', 'error'); }
+  };
+
+  const installLatest = async () => {
+    if (installing) return;
+    setInstalling(true);
+    try {
+      if (Platform.OS !== 'web' && Updates.isEnabled) {
+        const ota = await Updates.checkForUpdateAsync();
+        if (ota.isAvailable) {
+          showToast('Descărcăm actualizarea. Aplicația se va redeschide automat.', 'info');
+          await Updates.fetchUpdateAsync();
+          await Updates.reloadAsync();
+          return;
+        }
+      }
+      if (updateAvailable) await download();
+      else showToast('Ai deja cea mai nouă versiune disponibilă.', 'success');
+    } catch {
+      if (updateAvailable) await download();
+      else showToast('Actualizarea nu a putut fi verificată acum.', 'error');
+    } finally {
+      setInstalling(false);
+    }
   };
 
   return <Screen header={<AppHeader title="Actualizare aplicație" back onBack={() => router.replace('/service/more')} />} refreshing={state.refreshing} onRefresh={() => void state.reload(true)}>
@@ -66,7 +92,7 @@ export default function AppUpdateScreen() {
 
         <Card style={styles.section} elevated>
           <View style={styles.sectionHeader}><View style={[styles.sectionIcon, { backgroundColor: `${palette.success}16` }]}><Ionicons name="shield-checkmark-outline" size={22} color={palette.success} /></View><View style={styles.sectionCopy}><AppText variant="heading">Actualizare sigură</AppText><AppText variant="caption" muted>Descarcă versiunea exclusiv din linkul oficial publicat de G-Shop.</AppText></View></View>
-          <Button label={updateAvailable ? 'Descarcă și actualizează' : 'Deschide ultima versiune'} icon="download-outline" disabled={Platform.OS !== 'android' && Platform.OS !== 'web'} onPress={() => void download()} />
+          <Button label={updateAvailable ? 'Descarcă și actualizează' : 'Verifică și actualizează'} icon="download-outline" loading={installing} disabled={Platform.OS !== 'android' && Platform.OS !== 'web'} onPress={() => void installLatest()} />
           <Button variant="outline" label="Verifică din nou" icon="refresh-outline" loading={state.refreshing} onPress={() => void state.reload(true)} />
         </Card>
       </>}
