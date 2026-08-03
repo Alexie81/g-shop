@@ -5,6 +5,7 @@ import { AnimatedRefreshIcon } from '@/components/ui/AnimatedRefreshIcon';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { Screen } from '@/components/ui/Screen';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
 import { useProperty } from '@/contexts/PropertyContext';
@@ -303,7 +304,7 @@ function DeleteClientModal({ client, loading, error, onClose, onConfirm }: {
     statusBarTranslucent
     onRequestClose={() => { if (!loading) onClose(); }}
   >
-    <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
+    <ModalSafeBottom style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
       <Pressable accessibilityLabel="Închide confirmarea" disabled={loading} style={StyleSheet.absoluteFill} onPress={onClose} />
       <Card style={[styles.modalCard, { backgroundColor: isDark ? colors.surfaceElevated : colors.surface }]} elevated>
         <View style={[styles.modalIcon, { backgroundColor: palette.dangerSoft }]}>
@@ -328,7 +329,7 @@ function DeleteClientModal({ client, loading, error, onClose, onConfirm }: {
           <Button label="Șterge clientul" variant="danger" icon="trash-outline" loading={loading} onPress={onConfirm} style={styles.modalButton} />
         </View>
       </Card>
-    </View>
+    </ModalSafeBottom>
   </Modal>;
 }
 

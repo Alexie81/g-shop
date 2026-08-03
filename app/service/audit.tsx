@@ -1,6 +1,7 @@
 import { AppHeader } from '@/components/layout/AppHeader';
 import { AppText } from '@/components/ui/AppText';
 import { Card } from '@/components/ui/Card';
+import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { Screen } from '@/components/ui/Screen';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
 import { useAuth } from '@/contexts/AuthContext';
@@ -127,11 +128,11 @@ function AuditDeleteButton({ label, icon, disabled = false, subtle = false, onPr
 function DeleteAuditModal({ mode, selectedCount, loading, compact, onClose, onConfirm }: { mode: DeleteMode; selectedCount: number; loading: boolean; compact: boolean; onClose: () => void; onConfirm: () => void }) {
   const { colors, isDark } = useAppTheme();
   const all = mode === 'all';
-  return <Modal visible={Boolean(mode)} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}><View style={[styles.modalOverlay, compact && styles.modalOverlayCompact, { backgroundColor: colors.overlay }]}><Pressable style={StyleSheet.absoluteFill} onPress={onClose} />{mode ? <View style={[styles.confirmCard, compact && styles.confirmCardCompact, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
+  return <Modal visible={Boolean(mode)} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}><ModalSafeBottom style={[styles.modalOverlay, compact && styles.modalOverlayCompact, { backgroundColor: colors.overlay }]}><Pressable style={StyleSheet.absoluteFill} onPress={onClose} />{mode ? <View style={[styles.confirmCard, compact && styles.confirmCardCompact, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
     <View style={styles.confirmHeader}><View style={[styles.confirmIcon, { backgroundColor: isDark ? '#401722' : palette.dangerSoft }]}><Ionicons name={all ? 'trash-bin-outline' : 'trash-outline'} size={27} color={palette.danger} /></View><View style={styles.confirmHeading}><AppText variant="title">{all ? 'Ștergi tot jurnalul?' : `Ștergi ${selectedCount} înregistrări?`}</AppText><AppText variant="caption" muted>{all ? 'Această acțiune afectează întregul istoric.' : 'Vor fi eliminate doar elementele selectate.'}</AppText></View><Pressable accessibilityRole="button" accessibilityLabel="Închide" onPress={onClose} disabled={loading} style={[styles.confirmClose, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={21} color={colors.text} /></Pressable></View>
     <View style={[styles.confirmNotice, { backgroundColor: isDark ? '#171C2B' : '#F4F7FC', borderColor: colors.border }]}><Ionicons name="shield-checkmark-outline" size={20} color={colors.primary} /><AppText variant="caption" muted style={styles.confirmCopy}>{all ? 'Toate intrările proprietății active vor fi eliminate.' : 'Doar acțiunile selectate vor fi eliminate.'} Operațiunea va rămâne consemnată printr-o înregistrare de securitate.</AppText></View>
     <View style={[styles.confirmActions, compact && styles.confirmActionsCompact]}><Pressable accessibilityRole="button" disabled={loading} onPress={onClose} style={({ pressed }) => [styles.confirmAction, { borderColor: colors.border, backgroundColor: colors.surfaceMuted, opacity: pressed ? 0.72 : 1 }]}><AppText variant="label">Anulează</AppText></Pressable><Pressable accessibilityRole="button" disabled={loading} onPress={onConfirm} style={({ pressed }) => [styles.confirmAction, styles.confirmDanger, { opacity: loading ? 0.55 : pressed ? 0.78 : 1 }]}><Ionicons name="trash-outline" size={19} color="#FFFFFF" /><AppText variant="label" style={{ color: '#FFFFFF' }}>{loading ? 'Se șterge…' : all ? 'Șterge tot' : 'Șterge selectate'}</AppText></Pressable></View>
-  </View> : null}</View></Modal>;
+  </View> : null}</ModalSafeBottom></Modal>;
 }
 
 const styles = StyleSheet.create({

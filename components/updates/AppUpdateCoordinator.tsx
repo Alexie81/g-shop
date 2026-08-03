@@ -21,6 +21,7 @@ export function AppUpdateCoordinator() {
   const [visible, setVisible] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [otaAvailable, setOtaAvailable] = useState(false);
+  const [otaVersion, setOtaVersion] = useState<string | null>(null);
   const [published, setPublished] = useState<AppUpdateInfo | null>(null);
 
   useEffect(() => {
@@ -34,7 +35,14 @@ export function AppUpdateCoordinator() {
           const nativeUpdateAvailable = compareVersions(nativeVersion(), info.latestVersion) < 0;
           let available = false;
           if (Updates.isEnabled) {
-            try { available = (await Updates.checkForUpdateAsync()).isAvailable; }
+            try {
+              const result = await Updates.checkForUpdateAsync();
+              available = result.isAvailable;
+              if (result.isAvailable && 'extra' in result.manifest) {
+                const candidate = result.manifest.extra?.expoClient?.extra?.releaseVersion;
+                if (typeof candidate === 'string' && candidate.trim()) setOtaVersion(candidate.trim());
+              }
+            }
             catch { /* Verificarea versiunii native rămâne disponibilă fără serviciul OTA. */ }
           }
           if (!nativeUpdateAvailable && !available) return;
@@ -73,7 +81,7 @@ export function AppUpdateCoordinator() {
     }
   };
 
-  const availableVersion = otaAvailable ? releaseVersion() : published?.latestVersion ?? releaseVersion();
+  const availableVersion = otaAvailable ? otaVersion ?? releaseVersion() : published?.latestVersion ?? releaseVersion();
   const notes = otaAvailable
     ? ['Actualizare rapidă OTA, fără reinstalarea aplicației.', 'Îmbunătățiri noi de funcționalitate, design și stabilitate.']
     : published?.releaseNotes.slice(0, 2) ?? [];

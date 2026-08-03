@@ -3,6 +3,7 @@ import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
+import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { Screen } from '@/components/ui/Screen';
 import { ROLE_LABELS } from '@/constants/permissions';
 import { useAuth } from '@/contexts/AuthContext';
@@ -156,7 +157,7 @@ export default function ProfileScreen() {
     </Screen>
 
     <Modal visible={logoutOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={() => !logoutLoading && setLogoutOpen(false)}>
-      <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
+      <ModalSafeBottom style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={() => !logoutLoading && setLogoutOpen(false)} />
         <View style={[styles.logoutModal, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
           <View style={[styles.modalIcon, { backgroundColor: isDark ? '#401722' : palette.dangerSoft }]}><Ionicons name="log-out-outline" size={30} color={palette.danger} /></View>
@@ -166,7 +167,7 @@ export default function ProfileScreen() {
             <Button variant="danger" label="Deconectare" icon="log-out-outline" loading={logoutLoading} onPress={() => void confirmLogout()} style={styles.modalButton} />
           </View>
         </View>
-      </View>
+      </ModalSafeBottom>
     </Modal>
   </>;
 }

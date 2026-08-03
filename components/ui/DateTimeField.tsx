@@ -1,4 +1,5 @@
 import { AppText } from '@/components/ui/AppText';
+import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { radius, spacing } from '@/theme/tokens';
 import DateTimePicker, { DateTimePickerAndroid, DateTimePickerEvent } from '@react-native-community/datetimepicker';
@@ -119,7 +120,7 @@ export function DateTimeField({ label, value, onChange, allowClear = false, show
       visible={iosPickerVisible}
       onRequestClose={() => setIosPickerVisible(false)}
     >
-      <View style={styles.modalRoot} accessibilityViewIsModal>
+      <ModalSafeBottom style={styles.modalRoot} accessibilityViewIsModal>
         <Pressable accessibilityRole="button" accessibilityLabel="Anulează selectarea" style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }]} onPress={() => setIosPickerVisible(false)} />
         <View style={[styles.pickerPanel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={styles.pickerHeader}>
@@ -146,7 +147,7 @@ export function DateTimeField({ label, value, onChange, allowClear = false, show
             }}
           />
         </View>
-      </View>
+      </ModalSafeBottom>
     </Modal> : null}
   </View>;
 }

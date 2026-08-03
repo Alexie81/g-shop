@@ -2,6 +2,7 @@ import { AppHeader } from '@/components/layout/AppHeader';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { Screen } from '@/components/ui/Screen';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
 import { useAuth } from '@/contexts/AuthContext';
@@ -150,7 +151,8 @@ function EditorModal({ draft, saving, onChange, onSave, onClose }: { draft: Draf
   }), [closeByDrag, saving, translateY]);
   const appendToken = (token: string) => draft && onChange({ ...draft, message: `${draft.message}${draft.message ? ' ' : ''}${token}` });
   return <Modal visible={Boolean(draft)} transparent animationType="slide" onRequestClose={onClose}>
-    <KeyboardAvoidingView style={[styles.modalOverlay, { backgroundColor: colors.overlay }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <ModalSafeBottom style={{ backgroundColor: colors.overlay }}>
+    <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <Pressable accessibilityLabel="Închide editorul" style={StyleSheet.absoluteFill} onPress={onClose} />
       {draft ? <Animated.View style={[styles.editor, mobile && styles.editorMobile, { backgroundColor: colors.surface, borderColor: colors.border, transform: [{ translateY }] }]}>
         <View {...panResponder.panHandlers} accessibilityRole="adjustable" accessibilityLabel="Trage în jos pentru a închide" style={styles.draggableModalHeader}>
@@ -167,12 +169,13 @@ function EditorModal({ draft, saving, onChange, onSave, onClose }: { draft: Draf
         <View style={styles.modalActions}><Button label="Renunță" variant="outline" disabled={saving} onPress={onClose} style={styles.actionButton} /><Button label={draft.id ? 'Salvează' : 'Adaugă mesajul'} icon="checkmark-circle-outline" loading={saving} onPress={onSave} style={styles.actionPrimary} /></View>
       </Animated.View> : null}
     </KeyboardAvoidingView>
+    </ModalSafeBottom>
   </Modal>;
 }
 
 function DeleteModal({ message, loading, onClose, onConfirm }: { message: WhatsAppMessage | null; loading: boolean; onClose: () => void; onConfirm: () => void }) {
   const { colors } = useAppTheme();
-  return <Modal visible={Boolean(message)} transparent animationType="fade" onRequestClose={onClose}><View style={[styles.modalOverlay, styles.deleteOverlay, { backgroundColor: colors.overlay }]}><Pressable style={StyleSheet.absoluteFill} onPress={onClose} />{message ? <View style={[styles.deleteCard, { backgroundColor: colors.surface, borderColor: colors.border }]}><View style={[styles.deleteIcon, { backgroundColor: palette.dangerSoft }]}><Ionicons name="trash-outline" size={28} color={palette.danger} /></View><AppText variant="title" style={styles.deleteTitle}>Ștergi mesajul?</AppText><AppText muted style={styles.deleteCopy}>„{message.title}” va dispărea imediat din mesajele rapide ale clienților.</AppText><View style={styles.modalActions}><Button label="Păstrează" variant="outline" disabled={loading} onPress={onClose} style={styles.actionButton} /><Button label="Șterge" variant="danger" icon="trash-outline" loading={loading} onPress={onConfirm} style={styles.actionPrimary} /></View></View> : null}</View></Modal>;
+  return <Modal visible={Boolean(message)} transparent animationType="fade" onRequestClose={onClose}><ModalSafeBottom style={[styles.modalOverlay, styles.deleteOverlay, { backgroundColor: colors.overlay }]}><Pressable style={StyleSheet.absoluteFill} onPress={onClose} />{message ? <View style={[styles.deleteCard, { backgroundColor: colors.surface, borderColor: colors.border }]}><View style={[styles.deleteIcon, { backgroundColor: palette.dangerSoft }]}><Ionicons name="trash-outline" size={28} color={palette.danger} /></View><AppText variant="title" style={styles.deleteTitle}>Ștergi mesajul?</AppText><AppText muted style={styles.deleteCopy}>„{message.title}” va dispărea imediat din mesajele rapide ale clienților.</AppText><View style={styles.modalActions}><Button label="Păstrează" variant="outline" disabled={loading} onPress={onClose} style={styles.actionButton} /><Button label="Șterge" variant="danger" icon="trash-outline" loading={loading} onPress={onConfirm} style={styles.actionPrimary} /></View></View> : null}</ModalSafeBottom></Modal>;
 }
 
 const styles = StyleSheet.create({

@@ -4,6 +4,7 @@ import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
+import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { Screen } from '@/components/ui/Screen';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
 import { useAuth } from '@/contexts/AuthContext';
@@ -491,7 +492,7 @@ function ActionSheet({ collaborator, canManage, onClose, onFinance, onEdit, onDe
   const email = () => collaborator.email && void Linking.openURL(`mailto:${collaborator.email}`);
 
   return <Modal visible transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-    <View style={styles.modalRoot}>
+    <ModalSafeBottom style={styles.modalRoot}>
       <Pressable accessibilityRole="button" accessibilityLabel="Închide meniul" style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }]} onPress={onClose} />
       <View style={[styles.actionSheet, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
         <View style={styles.actionHandle} />
@@ -520,7 +521,7 @@ function ActionSheet({ collaborator, canManage, onClose, onFinance, onEdit, onDe
           </View> : null}
         </View>
       </View>
-    </View>
+    </ModalSafeBottom>
   </Modal>;
 }
 
@@ -552,6 +553,7 @@ function EditorModal({ visible, isEditing, compact, form, saving, onChange, onSa
   const commissionValue = Number(form.commissionValue.replace(',', '.')) || 0;
 
   return <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+    <ModalSafeBottom>
     <KeyboardAvoidingView style={styles.modalRoot} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <Pressable accessibilityRole="button" accessibilityLabel="Închide formularul" style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }]} onPress={onClose} />
       <View style={[
@@ -686,6 +688,7 @@ function EditorModal({ visible, isEditing, compact, form, saving, onChange, onSa
         </View>
       </View>
     </KeyboardAvoidingView>
+    </ModalSafeBottom>
   </Modal>;
 }
 
@@ -723,7 +726,7 @@ function ConfirmDeleteModal({ collaborator, loading, onConfirm, onClose }: {
   const { colors, isDark } = useAppTheme();
   if (!collaborator) return null;
   return <Modal visible transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-    <View style={[styles.confirmOverlay, { backgroundColor: colors.overlay }]}>
+    <ModalSafeBottom style={[styles.confirmOverlay, { backgroundColor: colors.overlay }]}>
       <View style={[styles.confirm, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
         <View style={[styles.confirmIcon, { backgroundColor: isDark ? `${palette.danger}22` : palette.dangerSoft }]}>
           <Ionicons name="trash-outline" size={28} color={palette.danger} />
@@ -741,7 +744,7 @@ function ConfirmDeleteModal({ collaborator, loading, onConfirm, onClose }: {
           <Button variant="danger" label="Șterge" icon="trash-outline" loading={loading} onPress={onConfirm} style={styles.footerPrimary} />
         </View>
       </View>
-    </View>
+    </ModalSafeBottom>
   </Modal>;
 }
 

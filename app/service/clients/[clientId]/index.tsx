@@ -10,6 +10,7 @@ import { QuickSignatureModal } from '@/components/service-sheets/ScanServiceShee
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { Screen } from '@/components/ui/Screen';
 import { ErrorState, LoadingState } from '@/components/ui/States';
 import { useAppTheme } from '@/contexts/ThemeContext';
@@ -312,14 +313,14 @@ function ClientLifecycleAction({ finalized, loading, onConfirm }: { finalized: b
         </Card>}
     </Pressable>
     <Modal visible={open} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setOpen(false)}>
-      <View style={[styles.lifecycleOverlay, { backgroundColor: colors.overlay }]}>
+      <ModalSafeBottom style={[styles.lifecycleOverlay, { backgroundColor: colors.overlay }]}>
         <Pressable accessibilityLabel="Închide confirmarea" style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} />
         <Card style={styles.lifecycleModal} elevated>
           <View style={[styles.lifecycleModalIcon, { backgroundColor: `${tone}18` }]}><Ionicons name={finalized ? 'refresh-outline' : 'checkmark-done-outline'} size={30} color={tone} /></View>
           <View style={styles.lifecycleModalCopy}><AppText variant="title">{finalized ? 'Redeschizi clientul?' : 'Finalizezi clientul?'}</AppText><AppText muted>{finalized ? 'Clientul va reveni în lista Activii și va putea fi lucrat în continuare.' : 'Clientul va apărea în lista Finalizați. Datele, fișa și istoricul rămân păstrate.'}</AppText></View>
           <View style={styles.lifecycleModalActions}><Button variant="outline" label="Anulează" disabled={loading} onPress={() => setOpen(false)} style={styles.lifecycleModalButton} /><Button variant={finalized ? 'primary' : 'danger'} label={finalized ? 'Redeschide clientul' : 'Finalizează clientul'} icon={finalized ? 'refresh-outline' : 'checkmark-done-outline'} loading={loading} onPress={() => void submit()} style={styles.lifecycleModalButton} /></View>
         </Card>
-      </View>
+      </ModalSafeBottom>
     </Modal>
   </>;
 }

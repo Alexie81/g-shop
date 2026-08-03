@@ -1,4 +1,5 @@
 import { AppText } from '@/components/ui/AppText';
+import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useProperty } from '@/contexts/PropertyContext';
@@ -45,13 +46,14 @@ export function AppHeader({ title, showProperty = true, back = false, onBack }: 
       <View style={styles.themeSlot}><ThemeToggle compact dense={narrow} /></View>
     </View>
     <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-      <Pressable style={[styles.overlay, { backgroundColor: colors.overlay }]} onPress={() => setOpen(false)}>
+      <ModalSafeBottom style={[styles.overlay, { backgroundColor: colors.overlay }]}>
+      <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} />
         <View style={[styles.sheet, { backgroundColor: colors.surface }]}>
           <AppText variant="title">Schimbă proprietatea</AppText>
           <AppText muted>Alege workspace-ul în care vrei să lucrezi.</AppText>
           <View style={styles.list}>{properties.map((property) => <Pressable key={property.id} onPress={() => void switchTo(property.id)} style={[styles.propertyCard, { borderColor: property.id === activeProperty?.id ? colors.primary : colors.border, backgroundColor: property.id === activeProperty?.id ? colors.primarySoft : colors.surfaceMuted }]}><View style={[styles.propertyIcon, { backgroundColor: colors.primary }]}><Ionicons name={property.type === 'SERVICE' ? 'construct-outline' : 'storefront-outline'} size={20} color="#fff" /></View><View style={styles.propertyInfo}><AppText variant="label">{property.name}</AppText><AppText variant="caption" muted>{property.domain}</AppText></View>{property.id === activeProperty?.id ? <Ionicons name="checkmark-circle" size={22} color={colors.primary} /> : null}</Pressable>)}</View>
         </View>
-      </Pressable>
+      </ModalSafeBottom>
     </Modal>
   </>;
 }
