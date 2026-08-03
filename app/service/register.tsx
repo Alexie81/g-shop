@@ -25,7 +25,7 @@ import * as XLSX from 'xlsx';
 
 type RegisterFilter = 'ALL' | 'COMPLETE' | 'INCOMPLETE';
 type RegisterDocument = {
-  sheetName: 'Fișe de intrare' | 'Devize finale' | 'Fișe de ieșire';
+  sheetName: 'Fișe de intrare' | 'Devize finale' | 'Fișe de ieșire' | 'Certificate garanție';
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
@@ -37,6 +37,7 @@ const documentColumns: RegisterDocument[] = [
   { sheetName: 'Fișe de intrare', label: 'Fișă de intrare', icon: 'enter-outline', color: palette.electric, number: (row) => row.intakeNumber, at: (row) => row.intakeAt },
   { sheetName: 'Devize finale', label: 'Deviz final', icon: 'calculator-outline', color: palette.purple, number: (row) => row.finalEstimateNumber, at: (row) => row.finalEstimateAt },
   { sheetName: 'Fișe de ieșire', label: 'Fișă de ieșire', icon: 'exit-outline', color: palette.success, number: (row) => row.exitNumber, at: (row) => row.exitAt },
+  { sheetName: 'Certificate garanție', label: 'Garanție', icon: 'shield-checkmark-outline', color: palette.cyan, number: (row) => row.warrantyNumber, at: (row) => row.warrantyAt },
 ];
 
 const filters: { key: RegisterFilter; label: string }[] = [
@@ -79,6 +80,7 @@ export default function RegisterScreen() {
         row.intakeNumber,
         row.finalEstimateNumber,
         row.exitNumber,
+        row.warrantyNumber,
       ].filter(Boolean).join(' ')).includes(needle);
     });
   }, [allRows, filter, query]);
@@ -178,7 +180,7 @@ export default function RegisterScreen() {
 
       {!state.loading && !state.error && rows.length ? <View style={[styles.exportHint, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
         <Ionicons name="information-circle-outline" size={19} color={colors.primary} />
-        <AppText variant="caption" muted style={styles.exportHintText}>Exportul include filtrarea curentă într-un singur fișier Excel, cu foile „Fișe de intrare”, „Devize finale” și „Fișe de ieșire”.</AppText>
+        <AppText variant="caption" muted style={styles.exportHintText}>Exportul include filtrarea curentă într-un singur fișier Excel, cu foi separate pentru intrări, devize, ieșiri și certificate de garanție.</AppText>
       </View> : null}
     </View>
   </Screen>;
@@ -238,7 +240,7 @@ function MobileRegisterCard({ row, onPress }: { row: ServiceDocumentRegisterRow;
       <View style={styles.mobileTop}>
         <View style={[styles.mobileRepairIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="construct-outline" size={20} color={colors.primary} /></View>
         <View style={styles.mobileHeading}>
-          <View style={styles.mobileNumberLine}><AppText variant="heading" numberOfLines={1}>{row.serviceSheetNumber}</AppText><View style={[styles.completionBadge, { backgroundColor: completed ? palette.successSoft : palette.warningSoft }]}><Ionicons name={completed ? 'checkmark-circle' : 'time-outline'} size={14} color={completed ? palette.success : palette.warning} /><AppText variant="caption" style={{ color: completed ? palette.success : '#B56A00', fontWeight: '800' }}>{completed ? 'Complet' : `${3 - countDocuments(row)} lipsă`}</AppText></View></View>
+          <View style={styles.mobileNumberLine}><AppText variant="heading" numberOfLines={1}>{row.serviceSheetNumber}</AppText><View style={[styles.completionBadge, { backgroundColor: completed ? palette.successSoft : palette.warningSoft }]}><Ionicons name={completed ? 'checkmark-circle' : 'time-outline'} size={14} color={completed ? palette.success : palette.warning} /><AppText variant="caption" style={{ color: completed ? palette.success : '#B56A00', fontWeight: '800' }}>{completed ? 'Complet' : `${documentColumns.length - countDocuments(row)} lipsă`}</AppText></View></View>
           <AppText variant="label" numberOfLines={1}>{row.clientName || 'Client nespecificat'}</AppText>
           <AppText variant="caption" muted numberOfLines={1}>{equipmentLabel(row)}</AppText>
         </View>
@@ -318,7 +320,7 @@ function statusLabel(row: ServiceDocumentRegisterRow) {
 
 function buildWorkbook(rows: ServiceDocumentRegisterRow[]) {
   const workbook = XLSX.utils.book_new();
-  workbook.Props = { Title: 'Registru documente service', Subject: 'Fișe de intrare, devize finale și fișe de ieșire', Author: 'G-Shop', CreatedDate: new Date() };
+  workbook.Props = { Title: 'Registru documente service', Subject: 'Fișe de intrare, devize finale, fișe de ieșire și certificate de garanție', Author: 'G-Shop', CreatedDate: new Date() };
   for (const document of documentColumns) {
     const data: (string | number)[][] = [[
       'Nr. document',
