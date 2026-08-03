@@ -10,7 +10,7 @@ import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Animated, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 export default function LoginScreen() {
   const { colors, isDark } = useAppTheme();
@@ -20,12 +20,18 @@ export default function LoginScreen() {
   const [remember, setRemember] = useState(Boolean(savedUsername));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const entrance = useRef(new Animated.Value(0)).current;
 
   useEffect(() => { if (savedUsername) { setUsername(savedUsername); setRemember(true); } }, [savedUsername]);
   useEffect(() => {
     Animated.spring(entrance, { toValue: 1, damping: 18, stiffness: 110, mass: 0.8, useNativeDriver: true }).start();
   }, [entrance]);
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   const submit = async () => {
     if (!username.trim() || !password) { setError('Completează utilizatorul și parola.'); return; }
@@ -46,9 +52,9 @@ export default function LoginScreen() {
     <LinearGradient pointerEvents="none" colors={['transparent', isDark ? 'rgba(32,111,255,0.30)' : 'rgba(32,111,255,0.16)', 'transparent']} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={styles.lightBeam} />
 
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        <Animated.View style={[styles.shell, { opacity: entrance, transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }, { scale: entrance.interpolate({ inputRange: [0, 1], outputRange: [0.98, 1] }) }] }]}>
-          <View style={styles.logoArea}>
+      <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={[styles.scroll, keyboardVisible && styles.scrollKeyboard]} keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <Animated.View style={[styles.shell, keyboardVisible && styles.shellKeyboard, { opacity: entrance, transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }, { scale: entrance.interpolate({ inputRange: [0, 1], outputRange: [0.98, 1] }) }] }]}>
+          <View style={[styles.logoArea, keyboardVisible && styles.hiddenWhileTyping]}>
             <LinearGradient colors={isDark ? ['rgba(38,113,255,0.36)', 'rgba(7,33,77,0.52)'] : ['rgba(255,255,255,0.98)', 'rgba(226,238,255,0.94)']} style={[styles.logoHalo, { borderColor: isDark ? 'rgba(91,151,255,0.40)' : 'rgba(7,92,255,0.16)' }]}>
               <View style={styles.logoCrop}><Image source={require('@/logo/logo.png')} resizeMode="cover" style={styles.logo} /></View>
             </LinearGradient>
@@ -58,7 +64,7 @@ export default function LoginScreen() {
             </View>
           </View>
 
-          <View style={[styles.card, { backgroundColor: isDark ? 'rgba(8,25,49,0.92)' : 'rgba(255,255,255,0.94)', borderColor: isDark ? 'rgba(91,138,203,0.30)' : 'rgba(146,168,202,0.30)', shadowColor: colors.shadow }]}>
+          <View style={[styles.card, keyboardVisible && styles.cardKeyboard, { backgroundColor: isDark ? 'rgba(8,25,49,0.92)' : 'rgba(255,255,255,0.94)', borderColor: isDark ? 'rgba(91,138,203,0.30)' : 'rgba(146,168,202,0.30)', shadowColor: colors.shadow }]}>
             <View style={[styles.cardGlow, { backgroundColor: isDark ? 'rgba(28,105,255,0.18)' : 'rgba(28,105,255,0.09)' }]} />
             <View style={styles.heading}>
               <LinearGradient colors={['#4A8CFF', '#075CFF']} style={styles.shield}>
@@ -70,7 +76,7 @@ export default function LoginScreen() {
 
             <View style={styles.form}>
               <Input label="Utilizator" icon="person-outline" autoCapitalize="none" autoCorrect={false} value={username} onChangeText={setUsername} returnKeyType="next" />
-              <Input label="Parolă" icon="lock-closed-outline" secureTextEntry value={password} onChangeText={setPassword} onSubmitEditing={() => void submit()} returnKeyType="done" />
+              <Input label="Parolă" icon="lock-closed-outline" secureTextEntry autoCapitalize="none" autoCorrect={false} value={password} onChangeText={setPassword} onSubmitEditing={() => void submit()} returnKeyType="done" />
 
               <View style={styles.row}>
                 <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: remember }} onPress={toggleRemember} style={({ pressed }) => [styles.remember, pressed && styles.pressed]}>
@@ -99,7 +105,7 @@ export default function LoginScreen() {
             </View>
           </View>
 
-          <View style={styles.themeArea}>
+          <View style={[styles.themeArea, keyboardVisible && styles.hiddenWhileTyping]}>
             <AppText variant="caption" muted style={styles.themeLabel}>ASPECT INTERFAȚĂ</AppText>
             <ThemeToggle />
           </View>
@@ -113,7 +119,10 @@ const styles = StyleSheet.create({
   root: { flex: 1, overflow: 'hidden' },
   flex: { flex: 1 },
   scroll: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.xxxl },
+  scrollKeyboard: { justifyContent: 'flex-start', paddingTop: spacing.md, paddingBottom: spacing.xl },
   shell: { width: '100%', maxWidth: 440, alignItems: 'center', gap: spacing.xl },
+  shellKeyboard: { gap: spacing.sm },
+  hiddenWhileTyping: { display: 'none' },
   orb: { position: 'absolute', borderRadius: radius.pill },
   orbTop: { width: 330, height: 330, top: -190, right: -130 },
   orbBottom: { width: 390, height: 390, bottom: -250, left: -190 },
@@ -126,6 +135,7 @@ const styles = StyleSheet.create({
   onlineDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: palette.success, shadowOpacity: 0.65, shadowRadius: 5 },
   badgeText: { fontSize: 10, letterSpacing: 1.45, fontWeight: '800' },
   card: { width: '100%', borderRadius: 28, borderWidth: 1, padding: spacing.xxl, overflow: 'hidden', shadowOpacity: 0.14, shadowRadius: 30, shadowOffset: { width: 0, height: 18 }, elevation: 10 },
+  cardKeyboard: { padding: spacing.lg },
   cardGlow: { position: 'absolute', width: 180, height: 180, borderRadius: 90, top: -120, right: -70 },
   heading: { alignItems: 'center', gap: spacing.sm },
   shield: { width: 46, height: 46, borderRadius: 15, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.xs, shadowColor: palette.electric, shadowOpacity: 0.30, shadowRadius: 14, shadowOffset: { width: 0, height: 8 }, elevation: 5 },
