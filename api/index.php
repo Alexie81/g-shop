@@ -476,6 +476,45 @@ function ensure_property_companies_table(PDO $pdo): void {
     $pdo->exec('UPDATE service_sheets s JOIN property_companies pc ON pc.property_id=s.property_id AND pc.is_active=1 AND pc.is_default=1 SET s.company_id=pc.id WHERE s.company_id IS NULL');
     $ready = true;
 }
+function ensure_service_documents_table(PDO $pdo): void {
+    static $ready = false;
+    if ($ready) return;
+    ensure_property_companies_table($pdo);
+    $pdo->exec("CREATE TABLE IF NOT EXISTS service_documents (
+        id BINARY(16) PRIMARY KEY,
+        service_sheet_id BINARY(16) NOT NULL,
+        client_id BINARY(16) NOT NULL,
+        property_id BINARY(16) NOT NULL,
+        type ENUM('INTAKE','FINAL_ESTIMATE','EXIT') NOT NULL,
+        number VARCHAR(40) NOT NULL,
+        status ENUM('PUBLISHED') NOT NULL DEFAULT 'PUBLISHED',
+        document_at DATETIME NOT NULL,
+        agreement_at DATETIME NULL,
+        agreement_status ENUM('ACCEPTED','REFUSED') NULL,
+        estimated_repair_days SMALLINT UNSIGNED NULL,
+        product_state ENUM('REPAIRED','INITIAL') NULL,
+        defect_cause VARCHAR(40) NULL,
+        final_notes TEXT NULL,
+        parts_json LONGTEXT NULL,
+        labor_json LONGTEXT NULL,
+        snapshot_json LONGTEXT NOT NULL,
+        signature_path VARCHAR(255) NULL,
+        file_path VARCHAR(255) NULL,
+        file_sha256 CHAR(64) NULL,
+        generated_at DATETIME NULL,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        created_by BINARY(16) NOT NULL,
+        updated_by BINARY(16) NOT NULL,
+        UNIQUE KEY uq_service_document_type (service_sheet_id,type),
+        INDEX idx_service_documents_public (client_id,property_id,status,is_active),
+        CONSTRAINT fk_service_document_sheet FOREIGN KEY (service_sheet_id) REFERENCES service_sheets(id) ON DELETE CASCADE,
+        CONSTRAINT fk_service_document_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+        CONSTRAINT fk_service_document_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $ready = true;
+}
 function company_detail_text(mixed $value, string $label, int $maximum, bool $required = false): ?string {
     if ($value === null || $value === '') {
         if ($required) fail($label . ' este obligatoriu.', 422);
@@ -586,9 +625,150 @@ function map_sheet(array $row): array {
 function get_sheet(string $id): array { $stmt = db()->prepare(sheet_select() . ' WHERE s.id=? LIMIT 1'); $stmt->execute([uuid_bin($id)]); $row = $stmt->fetch(); if (!$row) fail('Fișa nu există.', 404); return map_sheet($row); }
 function company_for_service_sheet(array $sheet): array {
     $company=is_array($sheet['companySnapshot']??null)?$sheet['companySnapshot']:null;
-    if(!$company&&!empty($sheet['companyId']))$company=company_details_by_id((string)$sheet['companyId'],(string)$sheet['propertyId'],true);
+    $liveCompany=null;if(!empty($sheet['companyId'])){$stmt=db()->prepare(company_select().' WHERE id=? AND property_id=? AND is_active=1 LIMIT 1');$stmt->execute([uuid_bin((string)$sheet['companyId']),uuid_bin((string)$sheet['propertyId'])]);$row=$stmt->fetch();if($row)$liveCompany=map_company_details($row,true);}
+    if(!$company&&$liveCompany)$company=$liveCompany;
     if(!$company){$default=company_details_record((string)$sheet['propertyId']);$company=!empty($default['id'])?company_details_by_id((string)$default['id'],(string)$sheet['propertyId'],true):$default;}
+    if($liveCompany&&!empty($liveCompany['stampPath']))$company['stampPath']=$liveCompany['stampPath'];
     $company['propertyName']=(string)property_record((string)$sheet['propertyId'])['name'];return$company;
+}
+
+function service_document_definitions(): array {
+    return [
+        'INTAKE'=>['label'=>'Fișă de intrare','slug'=>'intake','prefix'=>'IN'],
+        'FINAL_ESTIMATE'=>['label'=>'Deviz final','slug'=>'final-estimate','prefix'=>'DV'],
+        'EXIT'=>['label'=>'Fișă de ieșire','slug'=>'exit','prefix'=>'OUT'],
+    ];
+}
+function validated_service_document_type(mixed $value): string {
+    $normalized=strtoupper(str_replace('-','_',trim((string)$value)));
+    if(!array_key_exists($normalized,service_document_definitions()))fail('Tipul documentului nu este valid.',422);
+    return$normalized;
+}
+function service_document_select(): string {
+    return 'SELECT '.uuid_sql('d.id').' id,'.uuid_sql('d.service_sheet_id').' service_sheet_id,'.uuid_sql('d.client_id').' client_id,'.uuid_sql('d.property_id').' property_id,d.type,d.number,d.status,d.document_at,d.agreement_at,d.agreement_status,d.estimated_repair_days,d.product_state,d.defect_cause,d.final_notes,d.parts_json,d.labor_json,d.snapshot_json,d.signature_path,d.file_path,d.file_sha256,d.generated_at,d.is_active,d.created_at,d.updated_at,'.uuid_sql('d.created_by').' created_by,'.uuid_sql('d.updated_by').' updated_by FROM service_documents d';
+}
+function service_document_absolute_path(?string $relativePath): ?string {
+    if(!$relativePath)return null;$root=realpath(__DIR__.'/storage/service-documents');$candidate=realpath(__DIR__.'/'.ltrim($relativePath,'/\\'));
+    $rootPrefix=$root===false?null:rtrim($root,'/\\').DIRECTORY_SEPARATOR;
+    if($rootPrefix===null||$candidate===false||!str_starts_with($candidate,$rootPrefix)||!is_file($candidate))return null;return$candidate;
+}
+function remove_obsolete_service_document_file(?string $oldRelativePath, ?string $keepRelativePath = null): void {
+    if(!$oldRelativePath||$oldRelativePath===$keepRelativePath)return;$path=service_document_absolute_path($oldRelativePath);if($path===null)return;foreach([$path,$path.'.sha256']as$file)if(is_file($file))@unlink($file);
+}
+function service_document_client_token(string $clientId): ?string {
+    $stmt=db()->prepare('SELECT '.uuid_sql('token').' token FROM client_qr WHERE client_id=? AND is_active=1 ORDER BY created_at DESC LIMIT 1');$stmt->execute([uuid_bin($clientId)]);$token=$stmt->fetchColumn();return$token?(string)$token:null;
+}
+function service_document_snapshot_amount(mixed $value, float $fallback = 0): float {
+    if(!is_int($value)&&!is_float($value)&&!is_string($value))return round(max(0,$fallback),2);$normalized=is_string($value)?str_replace(',','.',trim($value)):$value;if($normalized===''||!is_numeric($normalized))return round(max(0,$fallback),2);$number=(float)$normalized;return is_finite($number)?round(max(0,$number),2):round(max(0,$fallback),2);
+}
+function service_document_estimated_costs_from_snapshot(array $snapshot): array {
+    $financials=is_array($snapshot['financials']??null)?$snapshot['financials']:[];$summary=is_array($snapshot['summary']??null)?$snapshot['summary']:[];$sheet=is_array($snapshot['sheet']??null)?$snapshot['sheet']:[];
+    $diagnostic=service_document_snapshot_amount($financials['diagnosticFee']??0);$parts=service_document_snapshot_amount(array_key_exists('displayedPartsCost',$financials)?$financials['displayedPartsCost']:($sheet['partsCost']??0));$labor=service_document_snapshot_amount(array_key_exists('displayedLaborCost',$financials)?$financials['displayedLaborCost']:($sheet['laborCost']??0));$advance=service_document_snapshot_amount($financials['advancePaid']??0);$discount=min(100,service_document_snapshot_amount($financials['discountPercent']??0));
+    $workPrice=service_document_snapshot_amount($financials['workPrice']??($parts+$labor));$calculatedSubtotal=round($workPrice+$diagnostic,2);$subtotal=service_document_snapshot_amount($summary['subtotal']??$calculatedSubtotal,$calculatedSubtotal);$calculatedDiscount=round($subtotal*$discount/100,2);$discountAmount=service_document_snapshot_amount($summary['discountAmount']??$calculatedDiscount,$calculatedDiscount);$calculatedTotal=round(max(0,$subtotal-$discountAmount),2);$total=service_document_snapshot_amount($summary['totalDue']??($sheet['estimatedTotal']??($sheet['totalCost']??$calculatedTotal)),$calculatedTotal);$calculatedReceived=round(min($advance,$total),2);$received=service_document_snapshot_amount($summary['receivedAmount']??$calculatedReceived,$calculatedReceived);$received=min($received,$total);$remaining=service_document_snapshot_amount($summary['remainingDue']??max(0,$total-$received),max(0,$total-$received));
+    $currency=strtoupper(trim((string)($financials['currencyCode']??$sheet['currencyCode']??'RON')));if(preg_match('/^[A-Z]{3}$/',$currency)!==1)$currency='RON';
+    return['diagnosticFee'=>$diagnostic,'partsCost'=>$parts,'laborCost'=>$labor,'advancePaid'=>$advance,'discountPercent'=>$discount,'currencyCode'=>$currency,'subtotal'=>$subtotal,'discountAmount'=>$discountAmount,'totalDue'=>$total,'receivedAmount'=>$received,'remainingDue'=>$remaining];
+}
+function validated_service_document_estimated_costs(mixed $value, array $base): array {
+    if(!is_array($value))fail('Costurile estimative nu sunt valide.',422);$currency=validated_currency($value['currencyCode']??$base['currencyCode']??'RON');$diagnostic=validated_amount($value['diagnosticFee']??$base['diagnosticFee']??0,'Costul diagnosticării');$parts=validated_amount($value['partsCost']??$base['partsCost']??0,'Costul estimativ al pieselor');$labor=validated_amount($value['laborCost']??$base['laborCost']??0,'Costul estimativ al manoperei');$advance=validated_amount($value['advancePaid']??$base['advancePaid']??0,'Avansul');$discount=validated_amount($value['discountPercent']??$base['discountPercent']??0,'Reducerea',100);
+    $subtotal=round($diagnostic+$parts+$labor,2);$discountAmount=round($subtotal*$discount/100,2);$total=round(max(0,$subtotal-$discountAmount),2);$received=round(min($advance,$total),2);$remaining=round(max(0,$total-$received),2);foreach([$subtotal,$discountAmount,$total,$received,$remaining]as$amount)if(!is_finite($amount)||$amount>9999999999.99)fail('Totalurile estimative depășesc limita permisă.',422);
+    return['diagnosticFee'=>$diagnostic,'partsCost'=>$parts,'laborCost'=>$labor,'advancePaid'=>$advance,'discountPercent'=>$discount,'currencyCode'=>$currency,'subtotal'=>$subtotal,'discountAmount'=>$discountAmount,'totalDue'=>$total,'receivedAmount'=>$received,'remainingDue'=>$remaining];
+}
+function map_service_document(array $row, ?string $publicToken = null, bool $public = false): array {
+    $item=entity_base($row);$definition=service_document_definitions()[$item['type']];
+    $item['documentAt']=iso_date($row['document_at']??null);$item['agreementAt']=iso_date($row['agreement_at']??null);$item['generatedAt']=iso_date($row['generated_at']??null);
+    $item['estimatedRepairDays']=$item['estimatedRepairDays']!==null?(int)$item['estimatedRepairDays']:null;
+    $item['parts']=json_decode((string)($row['parts_json']??'[]'),true)?:[];$item['labor']=json_decode((string)($row['labor_json']??'[]'),true)?:[];
+    $item['label']=$definition['label'];$item['available']=$item['status']==='PUBLISHED'&&service_document_absolute_path($row['file_path']??null)!==null;
+    $token=$publicToken??service_document_client_token((string)$item['clientId']);$item['url']=$item['available']&&$token?public_base_url().'/index.php/public/client-form/'.rawurlencode($token).'/documents/'.$definition['slug']:null;
+    if($public){return['type'=>$item['type'],'label'=>$item['label'],'status'=>$item['status'],'available'=>$item['available'],'number'=>$item['number']??null,'documentAt'=>$item['documentAt']??null,'generatedAt'=>$item['generatedAt']??null,'url'=>$item['url']??null];}
+    $snapshot=json_decode((string)($row['snapshot_json']??''),true);if($item['type']==='INTAKE'&&is_array($snapshot))$item['estimatedCosts']=service_document_estimated_costs_from_snapshot($snapshot);
+    foreach(['snapshotJson','partsJson','laborJson','signaturePath','filePath','fileSha256','isActive']as$key)unset($item[$key]);
+    return$item;
+}
+function service_document_record(string $sheetId, string $type, bool $required = true, ?string $publicToken = null): ?array {
+    ensure_service_documents_table(db());$stmt=db()->prepare(service_document_select().' WHERE d.service_sheet_id=? AND d.type=? AND d.is_active=1 LIMIT 1');$stmt->execute([uuid_bin($sheetId),$type]);$row=$stmt->fetch();
+    if(!$row){if($required)fail('Documentul nu a fost încă generat.',404);return null;}return map_service_document($row,$publicToken);
+}
+function service_document_slots(string $sheetId, ?string $publicToken = null, bool $public = false): array {
+    ensure_service_documents_table(db());$stmt=db()->prepare(service_document_select().' WHERE d.service_sheet_id=? AND d.is_active=1');$stmt->execute([uuid_bin($sheetId)]);$found=[];foreach($stmt->fetchAll()as$row)$found[$row['type']]=map_service_document($row,$publicToken,$public);
+    if($public)return array_values(array_filter($found,fn($document)=>!empty($document['available'])));
+    $slots=[];foreach(service_document_definitions()as$type=>$definition){$missing=['type'=>$type,'label'=>$definition['label'],'status'=>'MISSING','available'=>false,'parts'=>[],'labor'=>[],'url'=>null];if(!$public)$missing['serviceSheetId']=$sheetId;$slots[]=$found[$type]??$missing;}return$slots;
+}
+function service_document_db_date(mixed $value, string $fallback): string {
+    $raw=trim((string)($value??''));if($raw==='')return$fallback;$timestamp=strtotime($raw);if($timestamp===false)fail('Data documentului nu este validă.',422);return gmdate('Y-m-d H:i:s',$timestamp);
+}
+function service_document_item_number(mixed $value, string $label, float $maximum, bool $positive = false): float {
+    if(!is_int($value)&&!is_float($value)&&!is_string($value))fail($label.' nu este o valoare numerică validă.',422);$normalized=is_string($value)?str_replace(',','.',trim($value)):$value;if($normalized===''||!is_numeric($normalized))fail($label.' nu este o valoare numerică validă.',422);$number=(float)$normalized;if(!is_finite($number)||$number<0||($positive&&$number<=0)||$number>$maximum)fail($label.' este în afara limitelor permise.',422);return round($number,2);
+}
+function service_document_items(mixed $value, string $fallbackName, float $fallbackDisplayed = 0, float $fallbackDirect = 0): array {
+    if($value===null){if($fallbackDisplayed<=0&&$fallbackDirect<=0&&trim($fallbackName)==='')return[];$name=trim($fallbackName)!==''?trim($fallbackName):'Poziție service';return[['name'=>$name,'quantity'=>1.0,'unitPrice'=>round(max(0,$fallbackDisplayed),2),'totalPrice'=>round(max(0,$fallbackDisplayed),2),'directCost'=>round(max(0,$fallbackDirect),2)]];}
+    if(!is_array($value))fail('Lista de poziții nu este validă.',422);if(count($value)>60)fail('Un document poate conține maximum 60 de poziții per categorie.',422);$items=[];
+    foreach($value as$position){if(!is_array($position))fail('O poziție a documentului nu este validă.',422);$name=preg_replace('/\s+/u',' ',trim((string)($position['name']??'')))??'';$quantityRaw=$position['quantity']??null;$unitRaw=$position['unitPrice']??null;$directRaw=$position['directCost']??null;$totalRaw=$position['totalPrice']??null;$quantity=$quantityRaw===null||$quantityRaw===''?1.0:service_document_item_number($quantityRaw,'Cantitatea',100000,true);$unit=$unitRaw===null||$unitRaw===''?0.0:service_document_item_number($unitRaw,'Prețul unitar',999999999.99);$direct=$directRaw===null||$directRaw===''?0.0:service_document_item_number($directRaw,'Costul intern',999999999.99);$providedTotal=$totalRaw===null||$totalRaw===''?0.0:service_document_item_number($totalRaw,'Totalul poziției',999999999.99);if($name===''&&$unit<=0&&$direct<=0&&$providedTotal<=0)continue;if($name==='')fail('Denumirea fiecărei poziții cu valori este obligatorie.',422);$length=function_exists('mb_strlen')?mb_strlen($name,'UTF-8'):strlen($name);if($length<1||$length>180)fail('Denumirea unei poziții trebuie să aibă maximum 180 de caractere.',422);$total=round($quantity*$unit,2);if(!is_finite($total)||$total>999999999.99)fail('Totalul unei poziții este în afara limitelor permise.',422);$items[]=['name'=>$name,'quantity'=>$quantity,'unitPrice'=>$unit,'totalPrice'=>$total,'directCost'=>$direct];}
+    return$items;
+}
+function service_document_existing_row(string $sheetId, string $type): ?array {
+    ensure_service_documents_table(db());$stmt=db()->prepare(service_document_select().' WHERE d.service_sheet_id=? AND d.type=? AND d.is_active=1 LIMIT 1');$stmt->execute([uuid_bin($sheetId),$type]);$row=$stmt->fetch();return$row?:null;
+}
+function service_document_signature_path(string $sheetId): ?string {
+    $stmt=db()->prepare('SELECT signature_path FROM service_sheets WHERE id=? LIMIT 1');$stmt->execute([uuid_bin($sheetId)]);return$stmt->fetchColumn()?:null;
+}
+function service_document_reference(string $sheetId, string $type): ?array {
+    $row=service_document_existing_row($sheetId,$type);return$row?['number'=>$row['number'],'date'=>iso_date($row['document_at'])]:null;
+}
+function require_service_document_write(bool $existing = false): array {
+    $user=current_user();
+    $canUpdate=in_array('service_sheets.update',$user['permissions'],true);$canCreate=in_array('service_sheets.create',$user['permissions'],true);
+    if($user['role']!=='ADMIN'&&($existing?!$canUpdate:!$canUpdate&&!$canCreate))fail('Nu ai permisiunea necesară pentru generarea documentelor.',403);
+    return$user;
+}
+function stream_service_document_row(array $row): void {
+    $path=service_document_absolute_path($row['file_path']??null);if($path===null)fail('Documentul nu este disponibil.',404);
+    $definition=service_document_definitions()[$row['type']]??['slug'=>'document'];$safeNumber=preg_replace('/[^A-Za-z0-9_-]+/','-',(string)($row['number']??''))?:$definition['slug'];
+    header('Content-Type: application/pdf');header('Content-Disposition: inline; filename="'.strtolower($safeNumber).'.pdf"');header('Content-Length: '.filesize($path));header('Cache-Control: private, no-store, max-age=0');header('X-Content-Type-Options: nosniff');readfile($path);exit;
+}
+function public_service_document_row(string $token, string $rawType): array {
+    if(preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i',$token)!==1)fail('Documentul nu este disponibil.',404);
+    $type=strtoupper(str_replace('-','_',trim($rawType)));if(!array_key_exists($type,service_document_definitions()))fail('Documentul nu este disponibil.',404);
+    ensure_service_documents_table(db());$sql=service_document_select().' JOIN service_sheets s ON s.id=d.service_sheet_id AND s.client_id=d.client_id AND s.property_id=d.property_id AND s.is_active=1 JOIN client_qr q ON q.client_id=d.client_id AND q.property_id=d.property_id AND q.is_active=1 JOIN clients c ON c.id=d.client_id AND c.is_active=1 WHERE q.token=? AND d.type=? AND d.status=\'PUBLISHED\' AND d.is_active=1 ORDER BY s.updated_at DESC,d.generated_at DESC LIMIT 1';$stmt=db()->prepare($sql);$stmt->execute([uuid_bin($token),$type]);$row=$stmt->fetch();if(!$row)fail('Documentul nu este disponibil.',404);return$row;
+}
+function regenerate_existing_service_documents(string $sheetId, array $user): void {
+    ensure_service_documents_table(db());$sheet=get_sheet($sheetId);ensure_property((string)$sheet['propertyId'],$user);$signaturePath=service_document_signature_path($sheetId);$company=company_for_service_sheet($sheet);$stmt=db()->prepare(service_document_select().' WHERE d.service_sheet_id=? AND d.is_active=1 ORDER BY FIELD(d.type,\'INTAKE\',\'FINAL_ESTIMATE\',\'EXIT\')');$stmt->execute([uuid_bin($sheetId)]);$rows=$stmt->fetchAll();if(!$rows)return;require_once __DIR__.'/src/service_document_pdf.php';
+    foreach($rows as$row){$snapshot=json_decode((string)$row['snapshot_json'],true);if(!is_array($snapshot))throw new RuntimeException('Snapshotul documentului nu este valid.');$rendered=generate_service_document_pdf((string)$row['type'],['id'=>$row['id'],'number'=>$row['number'],'documentAt'=>iso_date($row['document_at']),'agreementAt'=>iso_date($row['agreement_at'])],$snapshot,$signaturePath,$company['stampPath']??null);$generatedAt=service_document_db_date($rendered['generatedAt']??null,now_utc());db()->prepare('UPDATE service_documents SET signature_path=?,file_path=?,file_sha256=?,generated_at=?,updated_at=?,updated_by=? WHERE id=?')->execute([$signaturePath,$rendered['filePath'],$rendered['sha256'],$generatedAt,now_utc(),uuid_bin($user['id']),uuid_bin((string)$row['id'])]);remove_obsolete_service_document_file($row['file_path']??null,$rendered['filePath']);}
+}
+function sync_final_document_financials(array $sheet, array $parts, array $labor, array $user): array {
+    $client=get_client((string)$sheet['clientId']);$partsDisplayed=round(array_sum(array_column($parts,'totalPrice')),2);$laborDisplayed=round(array_sum(array_column($labor,'totalPrice')),2);$internalParts=round(array_sum(array_column($parts,'directCost')),2);$workPrice=round($partsDisplayed+$laborDisplayed,2);foreach([$partsDisplayed,$laborDisplayed,$internalParts,$workPrice]as$total)if(!is_finite($total)||$total>9999999999.99)fail('Totalurile devizului depășesc limita permisă.',422);$now=now_utc();$pdo=db();$ownsTransaction=!$pdo->inTransaction();if($ownsTransaction)$pdo->beginTransaction();
+    try{$lock=$pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE');$lock->execute([uuid_bin($client['id'])]);ensure_client_financial_shell($pdo,$client,$user,$now);$pdo->prepare('UPDATE client_financials SET work_price=?,displayed_parts_cost=?,displayed_labor_cost=?,actual_parts_cost=?,updated_at=?,updated_by=? WHERE client_id=?')->execute([$workPrice,$partsDisplayed,$laborDisplayed,$internalParts,$now,uuid_bin($user['id']),uuid_bin($client['id'])]);$financial=client_financial_record($client);$expenses=client_expenses((string)$client['id']);sync_service_sheet_financials_from_client($pdo,$client,$financial,$expenses,$user);sync_client_commission($pdo,$client,$financial,$expenses,$user,false);if($ownsTransaction)$pdo->commit();}catch(Throwable$e){if($ownsTransaction&&$pdo->inTransaction())$pdo->rollBack();throw$e;}
+    return get_sheet((string)$sheet['id']);
+}
+function generate_service_document_record(string $sheetId, string $type, array $body, array $user): array {
+    $type=validated_service_document_type($type);ensure_service_documents_table(db());$sheet=get_sheet($sheetId);ensure_property((string)$sheet['propertyId'],$user);$existing=service_document_existing_row($sheetId,$type);$existingSnapshot=$existing?json_decode((string)$existing['snapshot_json'],true):null;$now=now_utc();
+    if($type!=='INTAKE'&&array_key_exists('estimatedCosts',$body))fail('Costurile estimative pot fi modificate numai în fișa de intrare.',422);if($type==='INTAKE'&&$existing&&!is_array($existingSnapshot))throw new RuntimeException('Snapshotul fișei de intrare nu este valid.');
+    $client=get_client((string)$sheet['clientId']);$bundle=client_financial_bundle($client);$expenseTotal=round(array_sum(array_map(fn($expense)=>(float)$expense['amount'],$bundle['expenses'])),2);$fallbackActualParts=!empty($bundle['financials']['persisted'])?(float)$bundle['financials']['actualPartsCost']:max(0,(float)($sheet['directCosts']??0)-$expenseTotal);
+    $fallbackPartsName=trim((string)($sheet['partsUsed']??''));$fallbackLaborName=trim((string)($sheet['workPerformed']??''));
+    $parts=service_document_items(array_key_exists('parts',$body)?$body['parts']:($existingSnapshot['parts']??null),$fallbackPartsName,(float)($sheet['partsCost']??0),$fallbackActualParts);
+    $labor=service_document_items(array_key_exists('labor',$body)?$body['labor']:($existingSnapshot['labor']??null),$fallbackLaborName,(float)($sheet['laborCost']??0),0);
+    if($type==='FINAL_ESTIMATE'&&(array_key_exists('parts',$body)||array_key_exists('labor',$body)))$sheet=sync_final_document_financials($sheet,$parts,$labor,$user);
+    $client=get_client((string)$sheet['clientId']);$bundle=client_financial_bundle($client);$company=company_for_service_sheet($sheet);$definition=service_document_definitions()[$type];$number=$existing['number']??($definition['prefix'].'-'.$sheet['number']);
+    $defaultDocumentAt=$type==='INTAKE'?gmdate('Y-m-d H:i:s',strtotime((string)$sheet['receivedAt'])):($type==='EXIT'&&!empty($sheet['completedAt'])?gmdate('Y-m-d H:i:s',strtotime((string)$sheet['completedAt'])):$now);$documentAt=service_document_db_date($body['documentAt']??null,$existing['document_at']??$defaultDocumentAt);
+    $defaultAgreement=$type==='INTAKE'&&!empty($sheet['signedAt'])?gmdate('Y-m-d H:i:s',strtotime((string)$sheet['signedAt'])):($type==='EXIT'?$documentAt:$now);$agreementAt=service_document_db_date($body['agreementAt']??null,$existing['agreement_at']??$defaultAgreement);
+    $agreementStatus=strtoupper((string)($body['agreementStatus']??$existing['agreement_status']??(!empty($sheet['repairRefused'])?'REFUSED':'ACCEPTED')));if(!in_array($agreementStatus,['ACCEPTED','REFUSED'],true))fail('Starea acordului nu este validă.',422);
+    $estimatedDays=(int)($body['estimatedRepairDays']??$existing['estimated_repair_days']??0);if($estimatedDays<0||$estimatedDays>730)fail('Termenul estimat trebuie să fie între 0 și 730 de zile.',422);if($estimatedDays===0&&!empty($sheet['estimatedAt']))$estimatedDays=max(1,(int)ceil((strtotime((string)$sheet['estimatedAt'])-strtotime((string)$sheet['receivedAt']))/86400));
+    $productState=strtoupper((string)($body['productState']??$existing['product_state']??(!empty($sheet['workPerformed'])?'REPAIRED':'INITIAL')));if(!in_array($productState,['REPAIRED','INITIAL'],true))fail('Starea produsului nu este validă.',422);
+    $defectCause=company_detail_text($body['defectCause']??$existing['defect_cause']??null,'Cauza defectului',40);$finalNotes=company_detail_text($body['finalNotes']??$existing['final_notes']??null,'Observațiile finale',2000);
+    $intake=service_document_reference($sheetId,'INTAKE');$estimate=service_document_reference($sheetId,'FINAL_ESTIMATE');$signaturePath=service_document_signature_path($sheetId);
+    $snapshotSheet=array_merge($sheet,['estimatedRepairDays'=>$estimatedDays,'estimatedTotal'=>$bundle['summary']['totalDue'],'finalNotes'=>$finalNotes,'defectCause'=>$defectCause,'finalAgreementAt'=>iso_date($agreementAt),'deliveredAt'=>$type==='EXIT'?iso_date($documentAt):($sheet['completedAt']??null)]);$snapshotFinancials=$bundle['financials'];$snapshotSummary=$bundle['summary'];$snapshotEstimate=$estimate??['number'=>$type==='FINAL_ESTIMATE'?$number:'','date'=>$type==='FINAL_ESTIMATE'?iso_date($documentAt):'','total'=>$bundle['summary']['totalDue'],'remaining'=>$bundle['summary']['remainingDue']];
+    if($type==='INTAKE'&&is_array($existingSnapshot)){
+        if(is_array($existingSnapshot['financials']??null))$snapshotFinancials=$existingSnapshot['financials'];if(is_array($existingSnapshot['summary']??null))$snapshotSummary=$existingSnapshot['summary'];if(is_array($existingSnapshot['estimate']??null))$snapshotEstimate=$existingSnapshot['estimate'];$frozenSheet=is_array($existingSnapshot['sheet']??null)?$existingSnapshot['sheet']:[];foreach(['partsCost','laborCost','totalCost','estimatedTotal','currencyCode']as$key)if(array_key_exists($key,$frozenSheet))$snapshotSheet[$key]=$frozenSheet[$key];
+    }
+    if($type==='INTAKE'&&array_key_exists('estimatedCosts',$body)){
+        $baseCosts=service_document_estimated_costs_from_snapshot(['financials'=>$snapshotFinancials,'summary'=>$snapshotSummary,'sheet'=>$snapshotSheet]);$costs=validated_service_document_estimated_costs($body['estimatedCosts'],$baseCosts);$workPrice=round($costs['partsCost']+$costs['laborCost'],2);$snapshotFinancials=array_merge($snapshotFinancials,['currencyCode'=>$costs['currencyCode'],'workPrice'=>$workPrice,'diagnosticFee'=>$costs['diagnosticFee'],'advancePaid'=>$costs['advancePaid'],'discountPercent'=>$costs['discountPercent'],'displayedPartsCost'=>$costs['partsCost'],'displayedLaborCost'=>$costs['laborCost'],'paymentStatus'=>$costs['totalDue']>0&&$costs['receivedAmount']>=$costs['totalDue']?'PAID':'UNPAID']);$snapshotSummary=array_merge($snapshotSummary,['subtotal'=>$costs['subtotal'],'discountAmount'=>$costs['discountAmount'],'totalDue'=>$costs['totalDue'],'receivedAmount'=>$costs['receivedAmount'],'remainingDue'=>$costs['remainingDue']]);$snapshotSheet=array_merge($snapshotSheet,['partsCost'=>$costs['partsCost'],'laborCost'=>$costs['laborCost'],'totalCost'=>$costs['totalDue'],'estimatedTotal'=>$costs['totalDue'],'currencyCode'=>$costs['currencyCode']]);$snapshotEstimate=array_merge($snapshotEstimate,['total'=>$costs['totalDue'],'remaining'=>$costs['remainingDue']]);
+    }
+    $snapshot=['company'=>$company,'client'=>$client,'sheet'=>$snapshotSheet,'intake'=>$intake??['number'=>$type==='INTAKE'?$number:$sheet['number'],'date'=>$type==='INTAKE'?iso_date($documentAt):$sheet['receivedAt']],'estimate'=>$snapshotEstimate,'parts'=>$parts,'labor'=>$labor,'financials'=>$snapshotFinancials,'summary'=>$snapshotSummary,'agreement'=>['status'=>$agreementStatus,'date'=>iso_date($agreementAt)],'exit'=>['number'=>$type==='EXIT'?$number:'','date'=>$type==='EXIT'?iso_date($documentAt):'','productState'=>$productState]];
+    $id=$existing['id']??uuid_v4();$encoded=json_encode($snapshot,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);$partsJson=json_encode($parts,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);$laborJson=json_encode($labor,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+    require_once __DIR__.'/src/service_document_pdf.php';$rendered=generate_service_document_pdf($type,['id'=>$id,'number'=>$number,'documentAt'=>iso_date($documentAt),'agreementAt'=>iso_date($agreementAt)],$snapshot,$signaturePath,$company['stampPath']??null);
+    $generatedAt=service_document_db_date($rendered['generatedAt']??null,$now);$columns=['id','service_sheet_id','client_id','property_id','type','number','status','document_at','agreement_at','agreement_status','estimated_repair_days','product_state','defect_cause','final_notes','parts_json','labor_json','snapshot_json','signature_path','file_path','file_sha256','generated_at','is_active','created_at','updated_at','created_by','updated_by'];
+    $args=[uuid_bin($id),uuid_bin($sheetId),uuid_bin((string)$sheet['clientId']),uuid_bin((string)$sheet['propertyId']),$type,$number,'PUBLISHED',$documentAt,$agreementAt,$agreementStatus,$estimatedDays,$productState,$defectCause,$finalNotes,$partsJson,$laborJson,$encoded,$signaturePath,$rendered['filePath'],$rendered['sha256'],$generatedAt,1,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])];
+    $pdo=db();$pdo->beginTransaction();try{$pdo->prepare('INSERT INTO service_documents ('.implode(',',$columns).') VALUES ('.implode(',',array_fill(0,count($args),'?')).") ON DUPLICATE KEY UPDATE number=VALUES(number),status='PUBLISHED',document_at=VALUES(document_at),agreement_at=VALUES(agreement_at),agreement_status=VALUES(agreement_status),estimated_repair_days=VALUES(estimated_repair_days),product_state=VALUES(product_state),defect_cause=VALUES(defect_cause),final_notes=VALUES(final_notes),parts_json=VALUES(parts_json),labor_json=VALUES(labor_json),snapshot_json=VALUES(snapshot_json),signature_path=VALUES(signature_path),file_path=VALUES(file_path),file_sha256=VALUES(file_sha256),generated_at=VALUES(generated_at),is_active=1,updated_at=VALUES(updated_at),updated_by=VALUES(updated_by)")->execute($args);$pdo->commit();}catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}remove_obsolete_service_document_file($existing['file_path']??null,$rendered['filePath']);return service_document_record($sheetId,$type,true);
 }
 
 function gshop_regenerate_service_sheet_pdf(string $sheetId): array {
@@ -599,7 +779,7 @@ function gshop_regenerate_service_sheet_pdf(string $sheetId): array {
     require_once __DIR__.'/src/service_sheet_pdf.php';
     return generate_service_sheet_pdf($sheet,$client,$bundle['financials'],$bundle['summary'],$company,$signaturePath,$stampPath);
 }
-function gshop_queue_service_sheet_pdf(string $sheetId): void { $GLOBALS['gshop_pending_service_sheet_pdfs'][$sheetId]=true; }
+function gshop_queue_service_sheet_pdf(string $sheetId): void { /* PDF-urile legacy publice sunt dezactivate; documentele noi sunt servite doar prin rute protejate. */ }
 function gshop_queue_client_service_sheet_pdf(string $clientId): void {
     $stmt=db()->prepare('SELECT '.uuid_sql('id').' id FROM service_sheets WHERE client_id=? AND is_active=1');$stmt->execute([uuid_bin($clientId)]);
     foreach($stmt->fetchAll()as$row)gshop_queue_service_sheet_pdf((string)$row['id']);
@@ -1375,7 +1555,7 @@ try {
     if ($method === 'DELETE' && path_match('/clients/{id}', $path, $params)) {
         $user=require_permission('clients.update');$clientId=validated_uuid($params['id'],'Clientul');$before=get_client($clientId);ensure_property($before['propertyId'],$user);
         if(empty($before['isActive']))respond(['deleted'=>true,'id'=>$clientId]);
-        $pdo=db();$pdo->beginTransaction();$now=now_utc();
+        $pdo=db();ensure_service_documents_table($pdo);$pdo->beginTransaction();$now=now_utc();
         $clientLock=$pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE');$clientLock->execute([uuid_bin($clientId)]);$locked=get_client($clientId);
         if(empty($locked['isActive'])){$pdo->rollBack();respond(['deleted'=>true,'id'=>$clientId]);}
         $paidStmt=$pdo->prepare("SELECT 1 FROM commissions WHERE client_id=? AND is_active=1 AND status='PAID' AND paid_at IS NOT NULL LIMIT 1");$paidStmt->execute([uuid_bin($clientId)]);
@@ -1422,14 +1602,11 @@ try {
     if ($method === 'POST' && path_match('/clients/{id}/qr/use', $path, $params)) { $user=require_permission('qr.generate');$client=get_client($params['id']);ensure_property($client['propertyId'],$user);if(empty($client['qr']))fail('QR inexistent.',404);$now=now_utc();db()->prepare("UPDATE client_qr SET status='USED',used_at=?,updated_at=?,updated_by=? WHERE id=?")->execute([$now,$now,uuid_bin($user['id']),uuid_bin($client['qr']['id'])]);audit_log('QR_MARKED_USED','qr','Cod QR marcat ca folosit','ClientQR',$client['qr']['id'],$client['propertyId'],null,null,$user);respond(client_for_user(get_client($client['id']),$user)); }
     if ($method === 'GET' && path_match('/clients/{id}/intake', $path, $params)) { $user=require_permission('clients.view');$client=get_client($params['id']);ensure_property($client['propertyId'],$user);$stmt=db()->prepare('SELECT payload FROM client_intakes WHERE client_id=? AND is_active=1 ORDER BY submitted_at DESC LIMIT 1');$stmt->execute([uuid_bin($client['id'])]);$payload=$stmt->fetchColumn();respond($payload?json_decode($payload,true):null); }
 
-    if ($method==='GET' && path_match('/public/client-form/{token}/service-sheet', $path, $params)) {
-        $token=$params['token'];$stmt=db()->prepare('SELECT '.uuid_sql('s.id').' sheet_id,s.number FROM client_qr q JOIN clients c ON c.id=q.client_id JOIN service_sheets s ON s.client_id=c.id AND s.property_id=q.property_id AND s.is_active=1 WHERE q.token=? AND q.is_active=1 AND c.is_active=1 ORDER BY s.updated_at DESC LIMIT 1');$stmt->execute([uuid_bin($token)]);$row=$stmt->fetch();
-        if(!$row)fail('Fișa de service nu este disponibilă.',404);
-        $document=gshop_regenerate_service_sheet_pdf((string)$row['sheet_id']);$downloadName=preg_replace('/[^A-Za-z0-9_-]+/','-',(string)$row['number'])?:'fisa-service';
-        header('Content-Type: application/pdf');header('Content-Disposition: inline; filename="'.strtolower($downloadName).'.pdf"');header('Content-Length: '.filesize($document['path']));header('Cache-Control: private, no-store, max-age=0');header('X-Content-Type-Options: nosniff');readfile($document['path']);exit;
-    }
+    if ($method==='GET' && path_match('/public/client-form/{token}/documents/{type}', $path, $params))stream_service_document_row(public_service_document_row((string)$params['token'],(string)$params['type']));
+    if ($method==='GET' && path_match('/public/client-form/{token}/service-sheet', $path, $params))stream_service_document_row(public_service_document_row((string)$params['token'],'INTAKE'));
     if ($method==='GET' && path_match('/public/client-form/{token}', $path, $params)) {
         $token=$params['token'];
+        if(preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i',$token)!==1)fail('Linkul este invalid sau nu mai este disponibil.',404);
         $stmt=db()->prepare(
             'SELECT '.uuid_sql('q.id').' id,'.uuid_sql('q.client_id').' client_id,'.uuid_sql('q.property_id').' property_id,' .
             'c.first_name,c.last_name,c.status client_status,c.updated_at client_updated_at,p.name property_name,p.domain property_domain ' .
@@ -1450,8 +1627,9 @@ try {
         );
         $sheetStmt->execute([uuid_bin($qr['client_id']),uuid_bin($qr['property_id'])]);
         $sheet=$sheetStmt->fetch();
-        $company=company_details_record($qr['property_id']);
+        $sheetModel=$sheet?get_sheet((string)$sheet['id']):null;$company=$sheetModel?company_for_service_sheet($sheetModel):company_details_record($qr['property_id']);
         $contactPhone=$company['phone'];$contactEmail=$company['email'];
+        $documents=$sheet?service_document_slots((string)$sheet['id'],$token,true):[];$intakeUrl=null;foreach($documents as$document)if($document['type']==='INTAKE'&&!empty($document['available'])){$intakeUrl=$document['url'];break;}
 
         respond([
             'propertyName'=>$qr['property_name'],
@@ -1476,7 +1654,8 @@ try {
                 'estimatedAt'=>iso_date($sheet['estimated_at']),
                 'completedAt'=>iso_date($sheet['completed_at']),
                 'updatedAt'=>iso_date($sheet['updated_at']),
-                'serviceSheetUrl'=>public_base_url().'/index.php/public/client-form/'.rawurlencode($token).'/service-sheet',
+                'documents'=>$documents,
+                'serviceSheetUrl'=>$intakeUrl,
             ]:null,
         ]);
     }
@@ -1500,8 +1679,15 @@ try {
         respond(['clientId'=>$qr['client_id'],'clientName'=>$qr['first_name'].' '.$qr['last_name'],'qrStatus'=>'USED']);
     }
 
+    if ($method==='GET'&&$path==='/service-documents/register') {
+        $user=require_permission('service_sheets.view');$propertyId=validated_uuid((string)($_GET['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);ensure_service_documents_table(db());
+        $sql='SELECT '.uuid_sql('s.id').' service_sheet_id,s.number service_sheet_number,'.uuid_sql('c.id').' client_id,TRIM(CONCAT(c.first_name,\' \',c.last_name)) client_name,s.equipment,s.brand,s.model,s.status,s.received_at,MAX(CASE WHEN d.type=\'INTAKE\' THEN d.number END) intake_number,MAX(CASE WHEN d.type=\'INTAKE\' THEN d.document_at END) intake_at,MAX(CASE WHEN d.type=\'FINAL_ESTIMATE\' THEN d.number END) final_estimate_number,MAX(CASE WHEN d.type=\'FINAL_ESTIMATE\' THEN d.document_at END) final_estimate_at,MAX(CASE WHEN d.type=\'EXIT\' THEN d.number END) exit_number,MAX(CASE WHEN d.type=\'EXIT\' THEN d.document_at END) exit_at FROM service_sheets s JOIN clients c ON c.id=s.client_id AND c.is_active=1 LEFT JOIN service_documents d ON d.service_sheet_id=s.id AND d.is_active=1 AND d.status=\'PUBLISHED\' WHERE s.property_id=? AND s.is_active=1 GROUP BY s.id,s.number,c.id,c.first_name,c.last_name,s.equipment,s.brand,s.model,s.status,s.received_at ORDER BY s.received_at DESC,s.number DESC LIMIT 5000';$stmt=db()->prepare($sql);$stmt->execute([uuid_bin($propertyId)]);$rows=[];foreach($stmt->fetchAll()as$row)$rows[]=camel_row($row);respond($rows);
+    }
     if ($method==='GET'&&$path==='/service-sheets') { $user=require_permission('service_sheets.view');$propertyId=(string)($_GET['propertyId']??'');ensure_property($propertyId,$user);$stmt=db()->prepare(sheet_select().' WHERE s.property_id=? AND s.is_active=1 ORDER BY s.received_at DESC,s.created_at DESC LIMIT 100');$stmt->execute([uuid_bin($propertyId)]);$data=array_map('map_sheet',$stmt->fetchAll());respond(['data'=>$data,'page'=>1,'pageSize'=>100,'total'=>count($data),'totalPages'=>1]); }
     if ($method==='GET'&&path_match('/service-sheets/{id}',$path,$params)) { $user=require_permission('service_sheets.view');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);respond($sheet); }
+    if ($method==='GET'&&path_match('/service-sheets/{id}/documents',$path,$params)) { $user=require_permission('service_sheets.view');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);respond(service_document_slots($sheet['id'])); }
+    if ($method==='GET'&&path_match('/service-sheets/{id}/documents/{type}/pdf',$path,$params)) { $user=require_permission('service_sheets.view');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);$type=validated_service_document_type($params['type']);$row=service_document_existing_row($sheet['id'],$type);if(!$row)fail('Documentul nu a fost încă generat.',404);stream_service_document_row($row); }
+    if ($method==='POST'&&path_match('/service-sheets/{id}/documents/{type}',$path,$params)) { current_user();$sheet=get_sheet($params['id']);$type=validated_service_document_type($params['type']);$before=service_document_record($sheet['id'],$type,false);$user=require_service_document_write($before!==null);ensure_property($sheet['propertyId'],$user);$document=generate_service_document_record($sheet['id'],$type,json_body(),$user);audit_log($before?'SERVICE_DOCUMENT_REGENERATED':'SERVICE_DOCUMENT_GENERATED','service_documents',($before?'Document actualizat: ':'Document generat: ').$document['label'],'ServiceSheet',$sheet['id'],$sheet['propertyId'],$before,$document,$user);respond($document,$before?200:201); }
     if ($method==='POST'&&$path==='/service-sheets') {
         $user=require_permission('service_sheets.create');$body=json_body();$propertyId=(string)($body['propertyId']??'');ensure_property($propertyId,$user);
         if(empty($body['clientId'])||empty($body['reportedIssue']))fail('Clientul și problema sunt obligatorii.',422);
@@ -1566,6 +1752,7 @@ try {
         $paidStmt=$pdo->prepare("SELECT 1 FROM commissions WHERE service_sheet_id=? AND is_active=1 AND status='PAID' AND paid_at IS NOT NULL LIMIT 1");$paidStmt->execute([uuid_bin($before['id'])]);
         if($paidStmt->fetchColumn()){$pdo->rollBack();fail('Fișa are un comision de colaborator achitat. Marchează-l neachitat înainte să ștergi fișa.',409,['code'=>'COLLABORATOR_COMMISSION_PAID']);}
         $signatureStmt=$pdo->prepare('SELECT signature_path FROM service_sheets WHERE id=? LIMIT 1');$signatureStmt->execute([uuid_bin($before['id'])]);$signaturePath=$signatureStmt->fetchColumn()?:null;
+        $documentFilesStmt=$pdo->prepare('SELECT file_path FROM service_documents WHERE service_sheet_id=?');$documentFilesStmt->execute([uuid_bin($before['id'])]);$documentPaths=array_values(array_filter(array_column($documentFilesStmt->fetchAll(),'file_path')));
         try{
             $pdo->prepare('UPDATE interventions SET service_sheet_id=NULL WHERE service_sheet_id=?')->execute([uuid_bin($before['id'])]);
             $pdo->prepare('DELETE FROM commissions WHERE service_sheet_id=?')->execute([uuid_bin($before['id'])]);
@@ -1575,21 +1762,22 @@ try {
         }catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}
         $safeNumber=preg_replace('/[^A-Za-z0-9_-]+/','-',(string)$before['number'])?:'fisa-service';$fileStem=strtolower($safeNumber);$pdfDirectory=__DIR__.'/uploads/service-sheets';
         $files=array_merge([$pdfDirectory.'/'.$fileStem.'.pdf',$pdfDirectory.'/'.$fileStem.'.pdf.sha256'],glob($pdfDirectory.'/'.$fileStem.'-*.pdf')?:[]);
+        foreach($documentPaths as$relativePath){$candidate=service_document_absolute_path((string)$relativePath);if($candidate!==null){$files[]=$candidate;$files[]=$candidate.'.sha256';}}
         if($signaturePath){$candidate=realpath(__DIR__.'/'.ltrim((string)$signaturePath,'/\\'));$apiRoot=realpath(__DIR__);if($candidate!==false&&$apiRoot!==false&&str_starts_with($candidate,$apiRoot))$files[]=$candidate;}
         $removedFiles=0;foreach(array_unique($files)as$file)if(is_file($file)&&@unlink($file))$removedFiles++;
         audit_log('SERVICE_SHEET_DELETED','service_sheets','Fișă ștearsă definitiv: '.$before['number'],'ServiceSheet',$before['id'],$before['propertyId'],$before,['deleted'=>true,'removedFiles'=>$removedFiles],$user);
         respond(['deleted'=>true,'id'=>$before['id']]);
     }
-    if ($method==='POST'&&path_match('/service-sheets/{id}/signature',$path,$params)) { $user=require_permission('service_sheets.sign');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);$body=json_body();$data=(string)($body['signature']??'');if(!preg_match('#^data:image/png;base64,(.+)$#',$data,$match))fail('Formatul semnăturii nu este valid.',422);$binary=base64_decode($match[1],true);if($binary===false||strlen($binary)<100||strlen($binary)>1500000)fail('Semnătura este invalidă sau prea mare.',422);$directory=__DIR__.'/uploads/signatures';if(!is_dir($directory)&&!mkdir($directory,0755,true)&&!is_dir($directory))throw new RuntimeException('Directorul pentru semnături nu poate fi creat.');$filename=$sheet['id'].'.png';if(file_put_contents($directory.'/'.$filename,$binary,LOCK_EX)===false)throw new RuntimeException('Semnătura nu poate fi salvată.');$pathValue='uploads/signatures/'.$filename;$now=now_utc();db()->prepare('UPDATE service_sheets SET signature_path=?,signed_at=?,updated_at=?,updated_by=? WHERE id=?')->execute([$pathValue,$now,$now,uuid_bin($user['id']),uuid_bin($sheet['id'])]);audit_log('SERVICE_SHEET_SIGNED','service_sheets','Semnătură client salvată pentru '.$sheet['number'],'ServiceSheet',$sheet['id'],$sheet['propertyId'],null,['signedAt'=>$now],$user);gshop_queue_service_sheet_pdf($sheet['id']);respond(get_sheet($sheet['id'])); }
+    if ($method==='POST'&&path_match('/service-sheets/{id}/signature',$path,$params)) {
+        $user=require_permission('service_sheets.sign');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);$body=json_body();$data=(string)($body['signature']??'');if(!preg_match('#^data:image/png;base64,(.+)$#',$data,$match))fail('Formatul semnăturii nu este valid.',422);$binary=base64_decode($match[1],true);if($binary===false||strlen($binary)<100||strlen($binary)>1500000)fail('Semnătura este invalidă sau prea mare.',422);
+        $directory=__DIR__.'/uploads/signatures';if(!is_dir($directory)&&!mkdir($directory,0755,true)&&!is_dir($directory))throw new RuntimeException('Directorul pentru semnături nu poate fi creat.');$filename=$sheet['id'].'.png';if(file_put_contents($directory.'/'.$filename,$binary,LOCK_EX)===false)throw new RuntimeException('Semnătura nu poate fi salvată.');$pathValue='uploads/signatures/'.$filename;$now=now_utc();db()->prepare('UPDATE service_sheets SET signature_path=?,signed_at=?,updated_at=?,updated_by=? WHERE id=?')->execute([$pathValue,$now,$now,uuid_bin($user['id']),uuid_bin($sheet['id'])]);
+        regenerate_existing_service_documents($sheet['id'],$user);audit_log('SERVICE_SHEET_SIGNED','service_sheets','Semnătură client salvată și reutilizată în documentele reparației '.$sheet['number'],'ServiceSheet',$sheet['id'],$sheet['propertyId'],null,['signedAt'=>$now,'documentsRegenerated'=>true],$user);gshop_queue_service_sheet_pdf($sheet['id']);respond(get_sheet($sheet['id']));
+    }
     if ($method==='POST'&&path_match('/service-sheets/{id}/pdf',$path,$params)) {
-        $user=require_permission('service_sheets.view');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);
-        $client=get_client($sheet['clientId']);$bundle=client_financial_bundle($client);$company=company_for_service_sheet($sheet);
-        $pathStmt=db()->prepare('SELECT signature_path FROM service_sheets WHERE id=? LIMIT 1');$pathStmt->execute([uuid_bin($sheet['id'])]);$signaturePath=$pathStmt->fetchColumn()?:null;
-        $stampPath=$company['stampPath']??null;
-        require_once __DIR__.'/src/service_sheet_pdf.php';
-        $document=generate_service_sheet_pdf($sheet,$client,$bundle['financials'],$bundle['summary'],$company,$signaturePath,$stampPath);
-        $result=['url'=>public_base_url().'/uploads/service-sheets/'.rawurlencode($document['fileName']).'?v='.rawurlencode($document['generatedAt']),'fileName'=>$document['fileName'],'generatedAt'=>$document['generatedAt']];
-        audit_log('SERVICE_SHEET_PDF_GENERATED','service_sheets','PDF generat pentru '.$sheet['number'],'ServiceSheet',$sheet['id'],$sheet['propertyId'],null,['fileName'=>$document['fileName'],'showCompanyDetails'=>$sheet['showCompanyDetails']],$user);
+        current_user();$sheet=get_sheet($params['id']);$existingDocument=service_document_record($sheet['id'],'INTAKE',false);$user=require_service_document_write($existingDocument!==null);ensure_property($sheet['propertyId'],$user);
+        $document=generate_service_document_record($sheet['id'],'INTAKE',[],$user);if(empty($document['url']))fail('Documentul a fost generat, dar clientul nu are un link QR activ pentru trimitere.',409);
+        $fileName=strtolower((preg_replace('/[^A-Za-z0-9_-]+/','-',(string)$document['number'])?:'fisa-intrare').'.pdf');$result=['url'=>$document['url'],'fileName'=>$fileName,'generatedAt'=>$document['generatedAt']];
+        audit_log('SERVICE_DOCUMENT_GENERATED','service_documents','Fișa de intrare a fost generată pentru '.$sheet['number'],'ServiceSheet',$sheet['id'],$sheet['propertyId'],null,['type'=>'INTAKE','fileName'=>$fileName],$user);
         respond($result,201);
     }
 

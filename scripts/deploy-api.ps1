@@ -49,10 +49,12 @@ function Send-FtpFile {
 }
 
 $uploadsRoot = Join-Path $apiRoot 'uploads'
+$documentStorageRoot = Join-Path $apiRoot 'storage\service-documents'
 $files = Get-ChildItem -LiteralPath $apiRoot -File -Recurse | Where-Object {
   $_.Name -ne '.env' -and
   $_.Name -ne '.installed' -and
-  -not $_.FullName.StartsWith($uploadsRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)
+  -not $_.FullName.StartsWith($uploadsRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase) -and
+  -not $_.FullName.StartsWith($documentStorageRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)
 }
 foreach ($file in $files) {
   $relative = $file.FullName.Substring($apiRoot.Length).TrimStart('\').Replace('\', '/')

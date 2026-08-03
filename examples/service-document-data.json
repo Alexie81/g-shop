@@ -1,0 +1,110 @@
+{
+  "templateMode": false,
+  "company": {
+    "legalName": "G-Shop Service SRL",
+    "taxId": "RO12345678",
+    "tradeRegisterNumber": "J40/1234/2024",
+    "address": "Str. Exemplu nr. 10",
+    "city": "București",
+    "county": "București",
+    "postalCode": "010101",
+    "country": "România",
+    "phone": "0722 000 000",
+    "email": "service@g-shop.ro"
+  },
+  "client": {
+    "firstName": "Andrei",
+    "lastName": "Popescu",
+    "phone": "0723 111 222",
+    "secondaryPhone": "",
+    "email": "andrei.popescu@example.ro",
+    "address": "Bd. Independenței nr. 25",
+    "city": "București",
+    "county": "București",
+    "postalCode": "060042",
+    "country": "România"
+  },
+  "sheet": {
+    "number": "FS-2026-0001",
+    "receivedAt": "03.08.2026 10:30",
+    "equipment": "Laptop",
+    "brand": "Lenovo",
+    "model": "ThinkPad T14",
+    "serialNumber": "PF-EXAMPLE-001",
+    "accessories": "Încărcător original",
+    "reportedIssue": "Laptopul pornește greu, se încălzește și se oprește în sarcină.",
+    "technicalAssessment": "Sistemul de răcire este blocat, iar unitatea de stocare prezintă erori de citire.",
+    "estimatedRepairDays": "3",
+    "estimatedTotal": "1220",
+    "partsCost": "850",
+    "laborCost": "300",
+    "currencyCode": "RON",
+    "defectCause": "PRODUCER",
+    "finalNotes": "Echipamentul a fost curățat, testat și predat în stare de funcționare.",
+    "signedAt": "03.08.2026 10:35",
+    "finalAgreementAt": "03.08.2026 15:10",
+    "deliveredAt": "06.08.2026 17:20"
+  },
+  "intake": {
+    "number": "FS-2026-0001",
+    "date": "03.08.2026 10:30"
+  },
+  "estimate": {
+    "number": "DEV-2026-0001",
+    "date": "03.08.2026 15:00",
+    "total": "1220",
+    "remaining": "920"
+  },
+  "parts": [
+    {
+      "name": "SSD NVMe 1 TB",
+      "quantity": "1",
+      "unitPrice": "650",
+      "totalPrice": "650",
+      "directCost": "430"
+    },
+    {
+      "name": "Ventilator sistem răcire",
+      "quantity": "1",
+      "unitPrice": "200",
+      "totalPrice": "200",
+      "directCost": "110"
+    }
+  ],
+  "labor": [
+    {
+      "name": "Diagnosticare completă",
+      "quantity": "1",
+      "unitPrice": "120",
+      "totalPrice": "120"
+    },
+    {
+      "name": "Montaj, configurare și testare",
+      "quantity": "1",
+      "unitPrice": "180",
+      "totalPrice": "180"
+    }
+  ],
+  "financials": {
+    "diagnosticFee": "70",
+    "displayedPartsCost": "850",
+    "displayedLaborCost": "300",
+    "advancePaid": "300",
+    "discountPercent": "0",
+    "currencyCode": "RON"
+  },
+  "summary": {
+    "totalDue": "1220",
+    "receivedAmount": "300",
+    "remainingDue": "920"
+  },
+  "agreement": {
+    "status": "ACCEPTED",
+    "date": "03.08.2026 15:10"
+  },
+  "exit": {
+    "number": "IES-2026-0001",
+    "date": "06.08.2026 17:20",
+    "productState": "REPAIRED"
+  }
+}

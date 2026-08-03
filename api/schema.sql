@@ -347,6 +347,40 @@ CREATE TABLE IF NOT EXISTS service_sheets (
   CONSTRAINT fk_sheet_company FOREIGN KEY (company_id) REFERENCES property_companies(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS service_documents (
+  id BINARY(16) PRIMARY KEY,
+  service_sheet_id BINARY(16) NOT NULL,
+  client_id BINARY(16) NOT NULL,
+  property_id BINARY(16) NOT NULL,
+  type ENUM('INTAKE','FINAL_ESTIMATE','EXIT') NOT NULL,
+  number VARCHAR(40) NOT NULL,
+  status ENUM('PUBLISHED') NOT NULL DEFAULT 'PUBLISHED',
+  document_at DATETIME NOT NULL,
+  agreement_at DATETIME NULL,
+  agreement_status ENUM('ACCEPTED','REFUSED') NULL,
+  estimated_repair_days SMALLINT UNSIGNED NULL,
+  product_state ENUM('REPAIRED','INITIAL') NULL,
+  defect_cause VARCHAR(40) NULL,
+  final_notes TEXT NULL,
+  parts_json LONGTEXT NULL,
+  labor_json LONGTEXT NULL,
+  snapshot_json LONGTEXT NOT NULL,
+  signature_path VARCHAR(255) NULL,
+  file_path VARCHAR(255) NULL,
+  file_sha256 CHAR(64) NULL,
+  generated_at DATETIME NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  created_by BINARY(16) NOT NULL,
+  updated_by BINARY(16) NOT NULL,
+  UNIQUE KEY uq_service_document_type (service_sheet_id, type),
+  INDEX idx_service_documents_public (client_id, property_id, status, is_active),
+  CONSTRAINT fk_service_document_sheet FOREIGN KEY (service_sheet_id) REFERENCES service_sheets(id) ON DELETE CASCADE,
+  CONSTRAINT fk_service_document_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+  CONSTRAINT fk_service_document_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS service_sheet_status_history (
   id BINARY(16) PRIMARY KEY,
   service_sheet_id BINARY(16) NOT NULL,
