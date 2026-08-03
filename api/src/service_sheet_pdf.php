@@ -101,6 +101,73 @@ function gshop_pdf_image_path(?string $relativePath): ?string {
     return $png;
 }
 
+function gshop_pdf_stamp_image(?string $relativePath): ?string {
+    if (!$relativePath) return null;
+    $candidate = realpath(__DIR__ . '/../' . ltrim($relativePath, '/\\'));
+    $apiRoot = realpath(__DIR__ . '/..');
+    if ($candidate === false || $apiRoot === false || !str_starts_with($candidate, $apiRoot) || !is_file($candidate)) return null;
+    if (!function_exists('imagecreatefromstring') || !function_exists('imagecrop')) {
+        return gshop_pdf_stamp_png_crop($candidate) ?? gshop_pdf_image_path($relativePath);
+    }
+
+    $binary = @file_get_contents($candidate);
+    $image = is_string($binary) ? @imagecreatefromstring($binary) : false;
+    if (!$image) return gshop_pdf_image_path($relativePath);
+    $width = imagesx($image);
+    $height = imagesy($image);
+    if ($width < 1 || $height < 1) { imagedestroy($image); return gshop_pdf_image_path($relativePath); }
+
+    $minX = $width;
+    $minY = $height;
+    $maxX = -1;
+    $maxY = -1;
+    $trueColor = imageistruecolor($image);
+    for ($y = 0; $y < $height; $y++) {
+        for ($x = 0; $x < $width; $x++) {
+            $pixel = imagecolorat($image, $x, $y);
+            if ($trueColor) {
+                $alpha = ($pixel >> 24) & 0x7f;
+                $red = ($pixel >> 16) & 0xff;
+                $green = ($pixel >> 8) & 0xff;
+                $blue = $pixel & 0xff;
+            } else {
+                $color = imagecolorsforindex($image, $pixel);
+                $alpha = (int)($color['alpha'] ?? 0);
+                $red = (int)($color['red'] ?? 255);
+                $green = (int)($color['green'] ?? 255);
+                $blue = (int)($color['blue'] ?? 255);
+            }
+            if ($alpha >= 120 || ($red >= 245 && $green >= 245 && $blue >= 245)) continue;
+            $minX = min($minX, $x);
+            $minY = min($minY, $y);
+            $maxX = max($maxX, $x);
+            $maxY = max($maxY, $y);
+        }
+    }
+
+    if ($maxX < $minX || $maxY < $minY) { imagedestroy($image); return gshop_pdf_image_path($relativePath); }
+    $contentWidth = $maxX - $minX + 1;
+    $contentHeight = $maxY - $minY + 1;
+    $padding = max(2, min(24, (int)round(max($contentWidth, $contentHeight) * .06)));
+    $cropX = max(0, $minX - $padding);
+    $cropY = max(0, $minY - $padding);
+    $cropWidth = min($width - $cropX, $contentWidth + $padding * 2);
+    $cropHeight = min($height - $cropY, $contentHeight + $padding * 2);
+    $cropped = imagecrop($image, ['x' => $cropX, 'y' => $cropY, 'width' => $cropWidth, 'height' => $cropHeight]);
+    imagedestroy($image);
+    if (!$cropped) return gshop_pdf_image_path($relativePath);
+
+    $temporary = tempnam(sys_get_temp_dir(), 'gshop-pdf-stamp-');
+    if ($temporary === false) { imagedestroy($cropped); return gshop_pdf_image_path($relativePath); }
+    $png = $temporary . '.png';
+    @unlink($temporary);
+    imagealphablending($cropped, false);
+    imagesavealpha($cropped, true);
+    $saved = imagepng($cropped, $png, 7);
+    imagedestroy($cropped);
+    return $saved ? $png : gshop_pdf_image_path($relativePath);
+}
+
 function gshop_pdf_png_paeth(int $left, int $above, int $upperLeft): int {
     $estimate = $left + $above - $upperLeft;
     $leftDistance = abs($estimate - $left);
@@ -108,6 +175,118 @@ function gshop_pdf_png_paeth(int $left, int $above, int $upperLeft): int {
     $upperLeftDistance = abs($estimate - $upperLeft);
     if ($leftDistance <= $aboveDistance && $leftDistance <= $upperLeftDistance) return $left;
     return $aboveDistance <= $upperLeftDistance ? $above : $upperLeft;
+}
+
+function gshop_pdf_stamp_png_crop(string $candidate): ?string {
+    $binary = @file_get_contents($candidate);
+    if (!is_string($binary) || !str_starts_with($binary, "\x89PNG\r\n\x1a\n")) return null;
+    $offset = 8;
+    $ihdr = null;
+    $compressed = '';
+    $binaryLength = strlen($binary);
+    while ($offset + 12 <= $binaryLength) {
+        $lengthData = unpack('Nlength', substr($binary, $offset, 4));
+        $length = (int)($lengthData['length'] ?? -1);
+        $type = substr($binary, $offset + 4, 4);
+        if ($length < 0 || $offset + 12 + $length > $binaryLength) return null;
+        $chunk = substr($binary, $offset + 8, $length);
+        if ($type === 'IHDR') $ihdr = $chunk;
+        if ($type === 'IDAT') $compressed .= $chunk;
+        $offset += 12 + $length;
+        if ($type === 'IEND') break;
+    }
+    if (!is_string($ihdr) || strlen($ihdr) !== 13 || $compressed === '') return null;
+    $header = unpack('Nwidth/Nheight/CbitDepth/CcolorType/Ccompression/Cfilter/Cinterlace', $ihdr);
+    $width = (int)($header['width'] ?? 0);
+    $height = (int)($header['height'] ?? 0);
+    if ($width < 1 || $height < 1 || $width > 4096 || $height > 4096 || (int)($header['bitDepth'] ?? 0) !== 8 || (int)($header['colorType'] ?? -1) !== 6 || (int)($header['interlace'] ?? 1) !== 0) return null;
+    $inflated = @gzuncompress($compressed);
+    $stride = $width * 4;
+    if (!is_string($inflated) || strlen($inflated) < ($stride + 1) * $height) return null;
+
+    $rows = [];
+    $previous = '';
+    $cursor = 0;
+    for ($y = 0; $y < $height; $y++) {
+        $filter = ord($inflated[$cursor]);
+        $filtered = substr($inflated, $cursor + 1, $stride);
+        $cursor += $stride + 1;
+        $decoded = '';
+        for ($i = 0; $i < $stride; $i++) {
+            $value = ord($filtered[$i]);
+            $left = $i >= 4 ? ord($decoded[$i - 4]) : 0;
+            $above = $previous !== '' ? ord($previous[$i]) : 0;
+            $upperLeft = $previous !== '' && $i >= 4 ? ord($previous[$i - 4]) : 0;
+            $predictor = match ($filter) {
+                0 => 0,
+                1 => $left,
+                2 => $above,
+                3 => intdiv($left + $above, 2),
+                4 => gshop_pdf_png_paeth($left, $above, $upperLeft),
+                default => -1,
+            };
+            if ($predictor < 0) return null;
+            $decoded .= chr(($value + $predictor) & 255);
+        }
+        $rows[] = $decoded;
+        $previous = $decoded;
+    }
+
+    $corners = [[0, 0], [$width - 1, 0], [0, $height - 1], [$width - 1, $height - 1]];
+    $background = [0, 0, 0, 0];
+    foreach ($corners as [$x, $y]) {
+        $pixel = $x * 4;
+        for ($channel = 0; $channel < 4; $channel++) $background[$channel] += ord($rows[$y][$pixel + $channel]);
+    }
+    $background = array_map(static fn(int $value): int => intdiv($value, 4), $background);
+    $opaqueBackground = $background[3] > 240;
+    $isInk = static function (string $row, int $x) use ($background, $opaqueBackground): bool {
+        $pixel = $x * 4;
+        $alpha = ord($row[$pixel + 3]);
+        if (!$opaqueBackground) return $alpha > 8;
+        return max(
+            abs(ord($row[$pixel]) - $background[0]),
+            abs(ord($row[$pixel + 1]) - $background[1]),
+            abs(ord($row[$pixel + 2]) - $background[2])
+        ) > 8;
+    };
+
+    $minX = $width;
+    $minY = $height;
+    $maxX = -1;
+    $maxY = -1;
+    foreach ($rows as $y => $row) {
+        for ($x = 0; $x < $width; $x++) {
+            if (!$isInk($row, $x)) continue;
+            $minX = min($minX, $x);
+            $minY = min($minY, $y);
+            $maxX = max($maxX, $x);
+            $maxY = max($maxY, $y);
+        }
+    }
+    if ($maxX < $minX || $maxY < $minY) return null;
+    $padding = max(2, min(12, (int)round(max($maxX - $minX + 1, $maxY - $minY + 1) * .012)));
+    $minX = max(0, $minX - $padding);
+    $minY = max(0, $minY - $padding);
+    $maxX = min($width - 1, $maxX + $padding);
+    $maxY = min($height - 1, $maxY + $padding);
+    $croppedWidth = $maxX - $minX + 1;
+    $croppedHeight = $maxY - $minY + 1;
+    $scanlines = '';
+    for ($y = $minY; $y <= $maxY; $y++) $scanlines .= "\x00" . substr($rows[$y], $minX * 4, $croppedWidth * 4);
+    $pngChunk = static function (string $type, string $data): string {
+        return pack('N', strlen($data)) . $type . $data . pack('N', crc32($type . $data));
+    };
+    $normalized = "\x89PNG\r\n\x1a\n"
+        . $pngChunk('IHDR', pack('NNCCCCC', $croppedWidth, $croppedHeight, 8, 6, 0, 0, 0))
+        . $pngChunk('IDAT', gzcompress($scanlines, 7))
+        . $pngChunk('IEND', '');
+    $temporary = tempnam(sys_get_temp_dir(), 'gshop-pdf-stamp-');
+    if ($temporary === false) return null;
+    $png = $temporary . '.png';
+    @unlink($temporary);
+    if (@file_put_contents($png, $normalized, LOCK_EX) === false) return null;
+    return $png;
 }
 
 /** @return array{path:string,width:int,height:int}|null */
@@ -307,7 +486,11 @@ function gshop_pdf_overlay_page_one(Fpdi $pdf, array $sheet, array $client, arra
 }
 
 function gshop_pdf_overlay_page_two(Fpdi $pdf, array $sheet, array $client, string $propertyName, ?string $signaturePath, ?string $stampPath): void {
-    gshop_pdf_text($pdf, 98, 780, gshop_pdf_property_label($propertyName), 7.4, 'B', 420);
+    $pdf->SetFillColor(255, 255, 255);
+    $pdf->SetDrawColor(255, 255, 255);
+    $pdf->Rect(94, 30, 310, 54, 'F');
+    gshop_pdf_text($pdf, 98, 795, 'FIȘĂ DE SERVICE', 17.4, 'B', 290);
+    gshop_pdf_text($pdf, 98, 780, gshop_pdf_property_label($propertyName), 7.4, 'B', 290, 'L', [6, 70, 200]);
     $checkXs = [34.0, 165.75, 297.5, 429.25];
     $checks = ['approveDiagnostics','approveRepair','repairRefused','productDelivered'];
     foreach ($checks as $index => $key) if (!empty($sheet[$key])) gshop_pdf_text($pdf, $checkXs[$index] + 1, 517, '✓', 8.5, 'B');
@@ -341,8 +524,24 @@ function gshop_pdf_overlay_page_two(Fpdi $pdf, array $sheet, array $client, stri
         );
     }
     if (!empty($sheet['showCompanyDetails'])) {
-        $stamp = gshop_pdf_image_path($stampPath);
-        if ($stamp) $pdf->Image($stamp, 381, 517, 168, 38);
+        $pdf->SetFillColor(255, 255, 255);
+        $pdf->SetDrawColor(255, 255, 255);
+        $pdf->Rect(378, 493, 187, 70, 'F');
+        gshop_pdf_text($pdf, 381, 339, 'ȘTAMPILĂ', 5.8, 'B', 150, 'L', [98, 113, 138]);
+        $stamp = gshop_pdf_stamp_image($stampPath);
+        if ($stamp) {
+            $dimensions = @getimagesize($stamp);
+            if (is_array($dimensions) && (int)$dimensions[0] > 0 && (int)$dimensions[1] > 0) {
+                $boxX = 380.0;
+                $boxY = 513.0;
+                $boxWidth = 58.0;
+                $boxHeight = 58.0;
+                $scale = min($boxWidth / (int)$dimensions[0], $boxHeight / (int)$dimensions[1]);
+                $drawWidth = (int)$dimensions[0] * $scale;
+                $drawHeight = (int)$dimensions[1] * $scale;
+                $pdf->Image($stamp, $boxX + ($boxWidth - $drawWidth) / 2, $boxY + ($boxHeight - $drawHeight) / 2, $drawWidth, $drawHeight, 'PNG');
+            }
+        }
     }
     foreach ([$signature['path'] ?? null, isset($stamp) ? $stamp : null] as $temporary) {
         if ($temporary && str_starts_with($temporary, sys_get_temp_dir()) && is_file($temporary)) @unlink($temporary);
@@ -388,7 +587,7 @@ function generate_service_sheet_pdf(array $sheet, array $client, array $financia
     $output = $directory . '/' . $filename;
     $metadata = $output . '.sha256';
     $fingerprint = hash('sha256', serialize([
-        'version' => 2,
+        'version' => 7,
         'sheet' => $sheet,
         'client' => $client,
         'financial' => $financial,

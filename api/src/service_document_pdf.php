@@ -563,10 +563,10 @@ function gshop_document_overlay_intake(
         gshop_document_source_line($pdf, 427, 288, 527, 288, 'lineDark', .8);
         gshop_document_shrink_text($pdf, 431, 290, gshop_document_date($document['agreementAt'] ?? $sheet['signedAt'] ?? ''), 93, 6.5, 5.1, '');
         gshop_pdf_text($pdf, 33, 267, 'SEMNĂTURĂ CLIENT', 6.1, 'B', 150, 'L', gshop_document_color('slate'));
-        gshop_pdf_text($pdf, 403, 267, 'ȘTAMPILĂ', 6.1, 'B', 150, 'L', gshop_document_color('slate'));
+        gshop_pdf_text($pdf, 365, 267, 'ȘTAMPILĂ', 6.1, 'B', 150, 'L', gshop_document_color('slate'));
         gshop_document_source_line($pdf, 33, 220, 135, 220, 'lineDark', .85);
         gshop_document_place_image($pdf, $signature['path'] ?? null, 35, 222, 98, 27, $signature);
-        gshop_document_place_image($pdf, $stampPath, 405, 222, 98, 27);
+        gshop_document_place_image($pdf, $stampPath, 364, 158, 96, 96);
     }
     gshop_document_footer($pdf, $page, 2, 'G-SHOP | INTRARE SERVICE');
 }
@@ -888,10 +888,10 @@ function gshop_document_overlay_final_agreement(Fpdi $pdf, array $document, arra
     gshop_document_source_line($pdf, 428, 259, 528, 259, 'lineDark', .8);
     gshop_document_shrink_text($pdf, 432, 261, gshop_document_date($document['agreementAt'] ?? $agreement['date'] ?? ''), 93, 6.3, 5.0, '');
     gshop_pdf_text($pdf, 44, 234, 'SEMNĂTURĂ CLIENT', 6.2, 'B', 150, 'L', gshop_document_color('slate'));
-    gshop_pdf_text($pdf, 408, 234, 'ȘTAMPILĂ', 6.2, 'B', 143, 'L', gshop_document_color('slate'));
+    gshop_pdf_text($pdf, 370, 234, 'ȘTAMPILĂ', 6.2, 'B', 143, 'L', gshop_document_color('slate'));
     gshop_document_source_line($pdf, 44, 195, 146, 195, 'lineDark', .85);
     gshop_document_place_image($pdf, $signature['path'] ?? null, 46, 197, 98, 20, $signature);
-    gshop_document_place_image($pdf, $stampPath, 410, 197, 98, 20);
+    gshop_document_place_image($pdf, $stampPath, 369, 126, 96, 96);
 }
 
 /** @param array{path:string,width:int,height:int}|null $signature */
@@ -970,10 +970,10 @@ function gshop_document_overlay_exit(Fpdi $pdf, array $document, array $snapshot
     gshop_document_source_line($pdf, 452, 208, 552, 208, 'lineDark', .8);
     gshop_document_shrink_text($pdf, 456, 210, gshop_document_date($date), 93, 6.3, 4.9, '');
     gshop_pdf_text($pdf, 38, 181, 'SEMNĂTURĂ CLIENT', 6.3, 'B', 150, 'L', gshop_document_color('slate'));
-    gshop_pdf_text($pdf, 401, 181, 'ȘTAMPILĂ', 6.3, 'B', 155, 'L', gshop_document_color('slate'));
+    gshop_pdf_text($pdf, 390, 181, 'ȘTAMPILĂ', 6.3, 'B', 155, 'L', gshop_document_color('slate'));
     gshop_document_source_line($pdf, 38, 145, 140, 145, 'lineDark', .85);
     gshop_document_place_image($pdf, $signature['path'] ?? null, 40, 147, 98, 18, $signature);
-    gshop_document_place_image($pdf, $stampPath, 403, 147, 98, 18);
+    gshop_document_place_image($pdf, $stampPath, 389, 73, 96, 96);
     gshop_document_footer($pdf, 1, 1, 'G-SHOP | IEȘIRE SERVICE');
 }
 
@@ -1022,10 +1022,10 @@ function gshop_document_overlay_warranty(Fpdi $pdf, array $document, array $snap
     gshop_document_source_line($pdf, 417, 233, 517, 233, 'lineDark', .8);
     gshop_document_shrink_text($pdf, 421, 235, gshop_document_date($document['documentAt'] ?? $warranty['date'] ?? ''), 93, 6.3, 5.0, '');
     gshop_pdf_text($pdf, 36, 208, 'SEMNĂTURĂ CLIENT', 5.8, 'B', 150, 'L', gshop_document_color('slate'));
-    gshop_pdf_text($pdf, 310, 208, 'ȘTAMPILĂ', 5.8, 'B', 150, 'L', gshop_document_color('slate'));
+    gshop_pdf_text($pdf, 360, 208, 'ȘTAMPILĂ', 5.8, 'B', 150, 'L', gshop_document_color('slate'));
     gshop_document_source_line($pdf, 36, 172, 138, 172, 'lineDark', .85);
     gshop_document_place_image($pdf, $signature['path'] ?? null, 38, 174, 98, 18, $signature);
-    gshop_document_place_image($pdf, $stampPath, 312, 174, 98, 18);
+    gshop_document_place_image($pdf, $stampPath, 359, 106, 90, 90);
     gshop_document_footer($pdf, 1, 1, 'G-SHOP | CERTIFICAT GARANȚIE');
 }
 
@@ -1118,7 +1118,7 @@ function generate_service_document_pdf(
         'hash' => hash_file('sha256', $template) ?: '',
     ];
     $fingerprint = hash('sha256', serialize([
-        'version' => 28,
+        'version' => 32,
         'type' => $normalizedType,
         'document' => $document,
         'snapshot' => $snapshot,
@@ -1148,7 +1148,7 @@ function generate_service_document_pdf(
             return gshop_document_result($output, $filename, true);
         }
         $signature = gshop_pdf_signature_image($signaturePath);
-        $stamp = gshop_pdf_image_path($stampPath);
+        $stamp = gshop_pdf_stamp_image($stampPath);
         $temporary = tempnam($directoryReal, '.generating-');
         if ($temporary === false) throw new RuntimeException('Fișierul temporar pentru PDF nu poate fi creat.');
         try {

@@ -786,7 +786,7 @@ def draw_final_agreement(pdf: canvas.Canvas, data: dict[str, Any]) -> None:
     pdf.setFillColor(SLATE)
     pdf.setFont("GShop-Bold", 6.2)
     pdf.drawString(MARGIN + 22, y + height - 188, "SEMNĂTURĂ CLIENT")
-    stamp_x = 408
+    stamp_x = 370
     pdf.drawString(stamp_x, y + height - 188, "ȘTAMPILĂ")
     pdf.setStrokeColor(HexColor("#C8D3E3"))
     pdf.setLineWidth(0.85)

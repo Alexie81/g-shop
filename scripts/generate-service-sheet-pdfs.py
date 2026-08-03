@@ -204,8 +204,8 @@ def draw_header(c: canvas.Canvas, data: dict[str, Any], continuation: bool = Fal
     draw_logo(c, MARGIN + 17, y + 8, 46)
 
     c.setFillColor(NAVY)
-    c.setFont("GShop-Bold", 15.6 if continuation else 17.4)
-    title = "FIȘĂ DE SERVICE - CONTINUARE" if continuation else "FIȘĂ DE SERVICE"
+    c.setFont("GShop-Bold", 17.4)
+    title = "FIȘĂ DE SERVICE"
     c.drawString(MARGIN + 76, y + 37, title)
     c.setFillColor(ELECTRIC_DARK)
     c.setFont("GShop-Bold", 7.4)
