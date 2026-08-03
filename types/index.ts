@@ -80,6 +80,7 @@ export interface CompanyDetails {
 export interface AppUpdateInfo {
   platform: 'android';
   latestVersion: string;
+  latestBuildNumber?: number;
   downloadUrl: string;
   releaseNotes: string[];
   publishedAt?: string;

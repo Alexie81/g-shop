@@ -9,6 +9,11 @@ export function nativeVersion() {
   return Constants.nativeAppVersion ?? Constants.expoConfig?.version ?? '1.0.0';
 }
 
+export function nativeBuildNumber() {
+  const value = Number(Constants.nativeBuildVersion ?? 0);
+  return Number.isFinite(value) ? value : 0;
+}
+
 export function compareVersions(a: string, b: string) {
   const left = a.split('.').map((value) => Number(value) || 0);
   const right = b.split('.').map((value) => Number(value) || 0);
