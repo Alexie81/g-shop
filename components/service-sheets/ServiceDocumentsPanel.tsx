@@ -16,7 +16,7 @@ import { ComponentProps, useState } from 'react';
 import { ActivityIndicator, Linking, Modal, Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
-type Props = { sheet: ServiceSheet; style?: StyleProp<ViewStyle> };
+type Props = { sheet: ServiceSheet; initialEditorType?: ServiceDocumentType | null; style?: StyleProp<ViewStyle> };
 
 const DOCUMENTS: { type: ServiceDocumentType; label: string; description: string; icon: IconName; color: string }[] = [
   { type: 'INTAKE', label: 'Fișă de intrare', description: 'Primire, cost estimativ și acord inițial', icon: 'enter-outline', color: palette.electric },
@@ -24,11 +24,11 @@ const DOCUMENTS: { type: ServiceDocumentType; label: string; description: string
   { type: 'EXIT', label: 'Fișă de ieșire', description: 'Starea produsului și confirmarea predării', icon: 'exit-outline', color: palette.success },
 ];
 
-export function ServiceDocumentsPanel({ sheet, style }: Props) {
+export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style }: Props) {
   const { colors, isDark } = useAppTheme();
   const { hasPermission } = useAuth();
   const { showToast } = useToast();
-  const [editorType, setEditorType] = useState<ServiceDocumentType | null>(null);
+  const [editorType, setEditorType] = useState<ServiceDocumentType | null>(initialEditorType);
   const [deleteTarget, setDeleteTarget] = useState<ServiceDocument | null>(null);
   const [deleting, setDeleting] = useState(false);
   const canGenerate = hasPermission('service_sheets.update') || hasPermission('service_sheets.create');

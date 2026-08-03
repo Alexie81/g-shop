@@ -1,4 +1,5 @@
 import { AppHeader } from '@/components/layout/AppHeader';
+import { ScanResultActionsModal } from '@/components/service-sheets/ScanResultActionsModal';
 import { ScanServiceSheetModal } from '@/components/service-sheets/ScanServiceSheetModal';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
@@ -10,7 +11,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { serviceSheetRepository } from '@/repositories/api-repositories';
 import { apiRequest } from '@/services/api';
 import { palette, radius, spacing } from '@/theme/tokens';
-import { ServiceSheet, UUID } from '@/types';
+import { ServiceDocument, ServiceDocumentType, ServiceSheet, UUID } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-camera';
@@ -20,13 +21,14 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Platform, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
-type ScanTarget = { clientId: UUID; clientName: string; existingSheet: ServiceSheet | null };
+type ScanTarget = { clientId: UUID; clientName: string; existingSheet: ServiceSheet | null; documents: ServiceDocument[] };
 
 export default function QRScannerScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [busy, setBusy] = useState(false);
   const [scanTarget, setScanTarget] = useState<ScanTarget | null>(null);
+  const [intakeOpen, setIntakeOpen] = useState(false);
   const { colors, isDark } = useAppTheme();
   const { activeProperty } = useProperty();
   const { showToast } = useToast();
@@ -41,6 +43,7 @@ export default function QRScannerScreen() {
     setScanned(false);
     setBusy(false);
     setScanTarget(null);
+    setIntakeOpen(false);
   }, []));
 
   useEffect(() => {
@@ -68,11 +71,12 @@ export default function QRScannerScreen() {
         body: JSON.stringify({ data, action: 'OPEN_PROFILE', propertyId: activeProperty?.id, device: `${Platform.OS} ${Platform.Version}` }),
       });
       const existingSheet = activeProperty?.id
-        ? await serviceSheetRepository.list(activeProperty.id).then((response) => response.data.find((sheet) => sheet.clientId === result.clientId) ?? null).catch(() => null)
+        ? await serviceSheetRepository.list(activeProperty.id).then((response) => response.data.find((sheet) => sheet.clientId === result.clientId) ?? null)
         : null;
+      const documents = existingSheet ? await serviceSheetRepository.listDocuments(existingSheet.id) : [];
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-      showToast(`${result.clientName}: completează fișa rapidă.`, 'success');
-      setScanTarget({ clientId: result.clientId, clientName: result.clientName, existingSheet });
+      showToast(`${result.clientName}: alege acțiunea dorită.`, 'success');
+      setScanTarget({ clientId: result.clientId, clientName: result.clientName, existingSheet, documents });
     } catch (error) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
       showToast(error instanceof Error ? error.message : 'Codul nu este valid.', 'error');
@@ -80,6 +84,21 @@ export default function QRScannerScreen() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const hasScannedDocument = (type: ServiceDocumentType) => scanTarget?.documents.some((document) => document.type === type && document.available) === true;
+  const closeScanResult = () => { setIntakeOpen(false); setScanTarget(null); setScanned(false); };
+  const openClient = () => {
+    if (!scanTarget) return;
+    const clientId = scanTarget.clientId;
+    setScanTarget(null);
+    router.replace((`/service/clients/${clientId}`) as never);
+  };
+  const openDocument = (type: ServiceDocumentType) => {
+    const sheetId = scanTarget?.existingSheet?.id;
+    if (!sheetId) return;
+    setScanTarget(null);
+    router.replace((`/service/service-sheets/${sheetId}?document=${type}`) as never);
   };
 
   if (!permission) {
@@ -132,13 +151,26 @@ export default function QRScannerScreen() {
           </View>
         </View>
       </ScrollView>
-      {scanTarget && activeProperty?.id ? <ScanServiceSheetModal
+      {scanTarget ? <ScanResultActionsModal
+        visible={!intakeOpen}
+        clientName={scanTarget.clientName}
+        hasSheet={Boolean(scanTarget.existingSheet)}
+        hasIntake={hasScannedDocument('INTAKE')}
+        hasFinalEstimate={hasScannedDocument('FINAL_ESTIMATE')}
+        hasExit={hasScannedDocument('EXIT')}
+        onClient={openClient}
+        onIntake={() => setIntakeOpen(true)}
+        onFinalEstimate={() => openDocument('FINAL_ESTIMATE')}
+        onExit={() => openDocument('EXIT')}
+        onCancel={closeScanResult}
+      /> : null}
+      {scanTarget && intakeOpen && activeProperty?.id ? <ScanServiceSheetModal
         visible
         propertyId={activeProperty.id}
         clientId={scanTarget.clientId}
         clientName={scanTarget.clientName}
         existingSheet={scanTarget.existingSheet}
-        onCancel={() => { setScanTarget(null); setScanned(false); }}
+        onCancel={() => setIntakeOpen(false)}
         onCompleted={(sheet) => { setScanTarget(null); router.replace(`/service/service-sheets/${sheet.id}`); }}
       /> : null}
     </View>

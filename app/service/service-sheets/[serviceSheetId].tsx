@@ -14,7 +14,7 @@ import { useAsyncData } from '@/hooks/useAsyncData';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { clientRepository, serviceSheetRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
-import { ClientFinancialOverview, ServiceSheet, ServiceSheetStatus as Status } from '@/types';
+import { ClientFinancialOverview, ServiceDocumentType, ServiceSheet, ServiceSheetStatus as Status } from '@/types';
 import { formatFinanceMoney } from '@/utils/client-finance';
 import { formatDate, normalizePhoneForWhatsApp } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,7 +27,7 @@ const statusOrder: Status[] = ['NEW', 'WAITING', 'VERIFYING', 'IN_PROGRESS', 'WA
 const selectableStatuses: Status[] = [...statusOrder, 'CANCELLED'];
 
 export default function ServiceSheetDetails() {
-  const { serviceSheetId } = useLocalSearchParams<{ serviceSheetId: string }>();
+  const { serviceSheetId, document } = useLocalSearchParams<{ serviceSheetId: string; document?: string }>();
   const { colors, isDark } = useAppTheme();
   const { width } = useWindowDimensions();
   const { hasPermission } = useAuth();
@@ -37,6 +37,7 @@ export default function ServiceSheetDetails() {
   const [pdfAction, setPdfAction] = useState<'download' | 'whatsapp' | null>(null);
   const mobile = width < 520;
   const veryNarrow = width <= 360;
+  const initialDocumentType = (['INTAKE', 'FINAL_ESTIMATE', 'EXIT'] as ServiceDocumentType[]).includes(document as ServiceDocumentType) ? document as ServiceDocumentType : null;
   const canViewFinancials = hasPermission('financials.view');
   const returnToServiceSheets = () => router.replace('/service/service-sheets');
   const state = useAsyncData(async () => {
@@ -175,7 +176,7 @@ export default function ServiceSheetDetails() {
       })}</View>
     </Card> : null}
 
-    <ServiceDocumentsPanel sheet={sheet} style={mobile && styles.cardMobile} />
+    <ServiceDocumentsPanel sheet={sheet} initialEditorType={initialDocumentType} style={mobile && styles.cardMobile} />
 
     {financials ? <FinanceSummary overview={financials} mobile={mobile} onOpenClient={() => router.push(`/service/clients/${sheet.clientId}`)} /> : null}
 
