@@ -6,7 +6,7 @@ import { useAppTheme } from '@/contexts/ThemeContext';
 import { appUpdateRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { AppUpdateInfo } from '@/types';
-import { nativeBuildNumber, releaseVersion } from '@/utils/app-version';
+import { compareVersions, nativeBuildNumber, releaseVersion } from '@/utils/app-version';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -37,11 +37,13 @@ export function AppUpdateCoordinator() {
           if (Updates.isEnabled) {
             try {
               const result = await Updates.checkForUpdateAsync();
-              available = result.isAvailable;
+              let candidate: string | null = null;
               if (result.isAvailable && 'extra' in result.manifest) {
-                const candidate = result.manifest.extra?.expoClient?.extra?.releaseVersion;
-                if (typeof candidate === 'string' && candidate.trim()) setOtaVersion(candidate.trim());
+                const configured = result.manifest.extra?.expoClient?.extra?.releaseVersion;
+                if (typeof configured === 'string' && configured.trim()) candidate = configured.trim();
               }
+              available = result.isAvailable && (!candidate || compareVersions(candidate, releaseVersion()) > 0);
+              if (available && candidate) setOtaVersion(candidate);
             }
             catch { /* Verificarea versiunii native rămâne disponibilă fără serviciul OTA. */ }
           }

@@ -10,7 +10,7 @@ import { useAsyncData } from '@/hooks/useAsyncData';
 import { useBackToAdministration } from '@/hooks/useBackToAdministration';
 import { appUpdateRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
-import { nativeBuildNumber, releaseVersion } from '@/utils/app-version';
+import { compareVersions, nativeBuildNumber, releaseVersion } from '@/utils/app-version';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -42,7 +42,12 @@ export default function AppUpdateScreen() {
     try {
       if (Platform.OS !== 'web' && Updates.isEnabled) {
         const ota = await Updates.checkForUpdateAsync();
-        if (ota.isAvailable) {
+        let otaVersion: string | null = null;
+        if (ota.isAvailable && 'extra' in ota.manifest) {
+          const configured = ota.manifest.extra?.expoClient?.extra?.releaseVersion;
+          if (typeof configured === 'string' && configured.trim()) otaVersion = configured.trim();
+        }
+        if (ota.isAvailable && (!otaVersion || compareVersions(otaVersion, currentVersion) > 0)) {
           showToast('Descărcăm actualizarea. Aplicația se va redeschide automat.', 'info');
           await Updates.fetchUpdateAsync();
           await Updates.reloadAsync();
