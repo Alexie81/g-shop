@@ -30,7 +30,7 @@ import Svg, { Circle, Line, Polyline } from 'react-native-svg';
 
 type ReportPeriod = 'TODAY' | '7D' | '1M' | '1Y' | 'TOTAL' | 'CUSTOM';
 type ReportSeriesPoint = { label: string; revenue: number; costs: number; net: number; clients: number; isCurrent?: boolean };
-type ReportPeriodMetrics = Pick<DashboardMetrics, 'clientsTotal' | 'clientsWaiting' | 'gshopNet' | 'revenueOnHold' | 'totalRevenue' | 'collaboratorTotal' | 'collaboratorPaid' | 'collaboratorOnHold'>;
+type ReportPeriodMetrics = Pick<DashboardMetrics, 'clientsTotal' | 'clientsWaiting' | 'gshopNet' | 'revenueOnHold' | 'totalRevenue' | 'totalExpenses' | 'collaboratorTotal' | 'collaboratorPaid' | 'collaboratorOnHold'>;
 type Report = {
   metrics: DashboardMetrics;
   periodMetrics?: ReportPeriodMetrics;
@@ -212,6 +212,7 @@ export default function ReportsScreen() {
             <StatCard style={{ flexGrow: 1, flexBasis: cardBasis }} label="G-Shop Net" value={formatCurrency(report.metrics.gshopNet)} icon="wallet-outline" color={palette.purple} />
             <StatCard style={{ flexGrow: 1, flexBasis: cardBasis }} label="Venituri on hold" value={formatCurrency(report.metrics.revenueOnHold)} icon="hourglass-outline" color={palette.warning} />
             <StatCard style={{ flexGrow: 1, flexBasis: cardBasis }} label="Total încasări" value={formatCurrency(report.metrics.totalRevenue)} icon="cash-outline" color={palette.success} />
+            <StatCard style={{ flexGrow: 1, flexBasis: cardBasis }} label="Total cheltuieli" value={formatCurrency(report.metrics.totalExpenses)} icon="receipt-outline" color={palette.warning} />
             <StatCard
               style={{ flexGrow: 1, flexBasis: cardBasis }}
               label="Total colaboratori"

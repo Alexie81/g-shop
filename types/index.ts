@@ -575,6 +575,7 @@ export interface AuditLog extends BaseEntity {
 export interface DashboardMetrics {
   clientsTotal: number;
   totalRevenue: number;
+  totalExpenses: number;
   clientsWaiting: number;
   revenueOnHold: number;
   gshopNet: number;
