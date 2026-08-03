@@ -17,7 +17,7 @@ import { calculateClientFinance, ClientFinanceValue } from '@/utils/client-finan
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Switch, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 type Intake = { equipmentType?: string; brand?: string; model?: string; problem?: string; notes?: string; requestType?: string };
 type Form = {
@@ -35,7 +35,6 @@ type Form = {
   laborCost: string;
   actualPartsCost: string;
   technicianName: string;
-  showCompanyDetails: boolean;
   warranty: string;
   storageAfter: string;
   handoverNotes: string;
@@ -50,7 +49,7 @@ type Form = {
   status: ServiceSheetStatus;
   internalNotes: string;
 };
-type Props = { propertyId: UUID; clientId?: UUID; sheet?: ServiceSheet; initialShowCompanyDetails?: boolean };
+type Props = { propertyId: UUID; clientId?: UUID; sheet?: ServiceSheet };
 
 const emptyFinance: ClientFinanceValue = {
   currencyCode: 'RON', exchangeRateToRon: 1, workPrice: 0, diagnosticFee: 0, advancePaid: 0,
@@ -72,7 +71,6 @@ const blank: Form = {
   laborCost: '0',
   actualPartsCost: '0',
   technicianName: '',
-  showCompanyDetails: true,
   warranty: '',
   storageAfter: '',
   handoverNotes: '',
@@ -104,7 +102,6 @@ function formFromSheet(sheet: ServiceSheet): Form {
     laborCost: String(sheet.laborCost ?? 0),
     actualPartsCost: '0',
     technicianName: sheet.technicianName ?? '',
-    showCompanyDetails: sheet.showCompanyDetails ?? true,
     warranty: sheet.warranty ?? '',
     storageAfter: sheet.storageAfter ?? '',
     handoverNotes: sheet.handoverNotes ?? '',
@@ -121,9 +118,9 @@ function formFromSheet(sheet: ServiceSheet): Form {
   };
 }
 
-export function ServiceSheetForm({ propertyId, clientId, sheet, initialShowCompanyDetails = true }: Props) {
+export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
   const associatedClientId = sheet?.clientId ?? clientId;
-  const [form, setForm] = useState<Form>(() => sheet ? formFromSheet(sheet) : { ...blank, clientId: clientId ?? '', showCompanyDetails: initialShowCompanyDetails, receivedAt: new Date().toISOString() });
+  const [form, setForm] = useState<Form>(() => sheet ? formFromSheet(sheet) : { ...blank, clientId: clientId ?? '', receivedAt: new Date().toISOString() });
   const [client, setClient] = useState<Client | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(false);
@@ -303,7 +300,6 @@ export function ServiceSheetForm({ propertyId, clientId, sheet, initialShowCompa
       netValue: net,
       currencyCode: financeValue.currencyCode,
       technicianName: form.technicianName.trim(),
-      showCompanyDetails: form.showCompanyDetails,
       warranty: form.warranty.trim(),
       storageAfter: form.storageAfter.trim(),
       handoverNotes: form.handoverNotes.trim(),
@@ -358,12 +354,6 @@ export function ServiceSheetForm({ propertyId, clientId, sheet, initialShowCompa
       </View>}
       {prefilling ? null : sheet ? <AppText variant="caption" muted>Clientul asociat și istoricul fișei rămân neschimbate.</AppText> : clientId === form.clientId ? <AppText variant="caption" style={{ color: '#14A83B' }}>Datele disponibile din formularul QR au fost precompletate.</AppText> : null}
       {financePrefilling ? <AppText variant="caption" muted>Se încarcă valorile financiare ale clientului…</AppText> : financeSourceClientId === form.clientId ? <AppText variant="caption" style={styles.financeHint}>Costurile și moneda sunt sincronizate automat cu finanțele clientului.</AppText> : null}
-    </Card>
-
-    <Card style={[styles.documentPreference, { borderColor: form.showCompanyDetails ? colors.primary : colors.border, backgroundColor: form.showCompanyDetails ? colors.primarySoft : colors.surface }]}>
-      <View style={[styles.documentIcon, { backgroundColor: form.showCompanyDetails ? colors.primary : colors.surfaceMuted }]}><Ionicons name="business-outline" size={23} color={form.showCompanyDetails ? '#FFFFFF' : colors.textMuted} /></View>
-      <View style={styles.documentCopy}><AppText variant="label">Afișează datele firmei</AppText><AppText variant="caption" muted>Denumirea, datele juridice și ștampila vor apărea în PDF.</AppText></View>
-      <Switch accessibilityLabel="Afișează datele firmei în fișa de service" value={form.showCompanyDetails} onValueChange={(value) => update('showCompanyDetails', value)} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#FFFFFF" />
     </Card>
 
     {canLoadFinancials && form.clientId ? <ClientFinanceSection
@@ -452,8 +442,6 @@ const styles = StyleSheet.create({
   clientGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   clientSummary: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.md },
   clientCopy: { minWidth: 180, flex: 1, gap: 2 },
-  documentPreference: { borderWidth: 1.5, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  documentIcon: { width: 46, height: 46, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   documentCopy: { minWidth: 0, flex: 1, gap: 3 },
   sectionHeading: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   sectionIcon: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },

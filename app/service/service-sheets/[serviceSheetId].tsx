@@ -20,7 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Image, Linking, Pressable, StyleSheet, Switch, useWindowDimensions, View } from 'react-native';
+import { Image, Linking, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 const statusOrder: Status[] = ['NEW', 'WAITING', 'VERIFYING', 'IN_PROGRESS', 'WAITING_PARTS', 'COMPLETED', 'DELIVERED'];
 const selectableStatuses: Status[] = [...statusOrder, 'CANCELLED'];
@@ -34,7 +34,6 @@ export default function ServiceSheetDetails() {
   const [signing, setSigning] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const [pdfAction, setPdfAction] = useState<'download' | 'whatsapp' | null>(null);
-  const [companyPreferenceSaving, setCompanyPreferenceSaving] = useState(false);
   const mobile = width < 520;
   const veryNarrow = width <= 360;
   const canViewFinancials = hasPermission('financials.view');
@@ -83,20 +82,6 @@ export default function ServiceSheetDetails() {
   };
 
   const replaceSheet = (next: ServiceSheet) => state.setData((current) => current ? { ...current, sheet: next } : current);
-  const changeCompanyPreference = async (value: boolean) => {
-    if (companyPreferenceSaving || value === sheet.showCompanyDetails) return;
-    setCompanyPreferenceSaving(true);
-    void Haptics.selectionAsync().catch(() => undefined);
-    try {
-      const updated = await serviceSheetRepository.update(sheet.id, { showCompanyDetails: value });
-      replaceSheet(updated);
-      showToast(value ? 'Datele firmei vor apărea în PDF.' : 'Datele firmei au fost ascunse din PDF.', 'success');
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Preferința nu a putut fi salvată.', 'error');
-    } finally {
-      setCompanyPreferenceSaving(false);
-    }
-  };
   const changeStatus = async (status: Status) => {
     try {
       const updated = await serviceSheetRepository.update(sheet.id, {
@@ -151,22 +136,15 @@ export default function ServiceSheetDetails() {
       <SheetAction mobile={mobile} icon="logo-whatsapp" label={pdfAction === 'whatsapp' ? 'Se generează…' : 'Trimite pe WhatsApp'} color="#19B85A" loading={pdfAction === 'whatsapp'} onPress={() => void openFreshPdf('whatsapp')} />
     </View>
 
-    <Card style={[styles.companyPreference, mobile && styles.cardMobile, { borderColor: sheet.showCompanyDetails ? `${colors.primary}70` : colors.border }]}>
-      <View style={[styles.companyPreferenceIcon, { backgroundColor: sheet.showCompanyDetails ? colors.primarySoft : colors.surfaceMuted }]}>
-        <Ionicons name="business-outline" size={22} color={sheet.showCompanyDetails ? colors.primary : colors.textMuted} />
+    <Card style={[styles.companyPreference, mobile && styles.cardMobile, { borderColor: `${colors.primary}70` }]}>
+      <View style={[styles.companyPreferenceIcon, { backgroundColor: colors.primarySoft }]}>
+        <Ionicons name="business-outline" size={22} color={colors.primary} />
       </View>
       <View style={styles.companyPreferenceCopy}>
-        <AppText variant="label">Afișează datele firmei</AppText>
-        <AppText variant="caption" muted>{companyPreferenceSaving ? 'Se salvează automat…' : sheet.showCompanyDetails ? 'Datele juridice și ștampila apar în PDF.' : 'PDF-ul este generat fără datele firmei.'}</AppText>
+        <AppText variant="label">{sheet.companyName || 'Firma documentului'}</AppText>
+        <AppText variant="caption" muted>Datele firmei au fost fixate la crearea fișei și apar automat în PDF.</AppText>
       </View>
-      <Switch
-        accessibilityLabel="Afișează datele firmei în PDF"
-        disabled={companyPreferenceSaving}
-        value={sheet.showCompanyDetails}
-        onValueChange={(value) => void changeCompanyPreference(value)}
-        trackColor={{ false: colors.border, true: colors.primary }}
-        thumbColor="#FFFFFF"
-      />
+      <Ionicons name="checkmark-circle" size={24} color={palette.success} />
     </Card>
 
     {statusOpen ? <Card style={[styles.panel, mobile && styles.cardMobile]} elevated>

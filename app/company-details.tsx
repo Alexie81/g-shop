@@ -22,8 +22,13 @@ import { Redirect, router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Image, Pressable, StyleSheet, Switch, useWindowDimensions, View } from 'react-native';
 
-type CompanyForm = Omit<CompanyDetails, 'propertyId' | 'stampUrl' | 'createdAt' | 'updatedAt'>;
+type CompanyForm = Omit<CompanyDetails, 'id' | 'propertyId' | 'isDefault' | 'stampUrl' | 'createdAt' | 'updatedAt'>;
 const emptyForm: CompanyForm = { legalName: '', taxId: '', tradeRegisterNumber: '', vatPayer: false, address: '', city: '', county: '', postalCode: '', country: 'România', phone: '', email: '', website: '', bankName: '', iban: '', representativeName: '', representativeRole: '' };
+
+function formFromCompany(company: CompanyDetails): CompanyForm {
+  const { id: _id, propertyId: _propertyId, isDefault: _isDefault, stampUrl: _stampUrl, createdAt: _createdAt, updatedAt: _updatedAt, ...form } = company;
+  return { ...emptyForm, ...form };
+}
 
 export default function CompanyDetailsScreen() {
   useBackToAdministration();
@@ -34,26 +39,53 @@ export default function CompanyDetailsScreen() {
   const { width } = useWindowDimensions();
   const compact = width < 680;
   const propertyId = activeProperty?.id ?? '';
-  const state = useAsyncData<CompanyDetails>(() => propertyId
-    ? companyDetailsRepository.get(propertyId)
-    : Promise.resolve({ propertyId: '', ...emptyForm, stampUrl: null, createdAt: null, updatedAt: null }), [propertyId]);
+  const state = useAsyncData<CompanyDetails[]>(() => propertyId ? companyDetailsRepository.list(propertyId) : Promise.resolve([]), [propertyId]);
   useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<CompanyForm>(emptyForm);
   const [stampData, setStampData] = useState<string | null>(null);
   const [stampRemoved, setStampRemoved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [activatingId, setActivatingId] = useState<string | null>(null);
+
+  const selectedCompany = state.data?.find((company) => company.id === selectedId) ?? null;
 
   useEffect(() => {
-    if (!state.data) return;
-    const { propertyId: _propertyId, stampUrl: _stampUrl, createdAt: _createdAt, updatedAt: _updatedAt, ...values } = state.data;
-    setForm({ ...emptyForm, ...values });
+    if (!state.data || creating) return;
+    const company = state.data.find((item) => item.id === selectedId)
+      ?? state.data.find((item) => item.isDefault)
+      ?? state.data[0];
+    if (!company) {
+      setCreating(true);
+      setSelectedId(null);
+      setForm({ ...emptyForm });
+      return;
+    }
+    setSelectedId(company.id);
+    setForm(formFromCompany(company));
     setStampData(null);
     setStampRemoved(false);
-  }, [state.data]);
+  }, [creating, selectedId, state.data]);
 
   if (!activeProperty) return <Redirect href="/select-property" />;
   if (user?.role !== 'ADMIN') return <Redirect href="/service/more" />;
+
   const update = (key: keyof CompanyForm, value: string | boolean) => setForm((current) => ({ ...current, [key]: value }));
+  const selectCompany = (company: CompanyDetails) => {
+    setCreating(false);
+    setSelectedId(company.id);
+    setForm(formFromCompany(company));
+    setStampData(null);
+    setStampRemoved(false);
+  };
+  const startCreating = () => {
+    setCreating(true);
+    setSelectedId(null);
+    setForm({ ...emptyForm });
+    setStampData(null);
+    setStampRemoved(false);
+  };
 
   const pickStamp = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -68,30 +100,72 @@ export default function CompanyDetailsScreen() {
 
   const save = async () => {
     if (!propertyId) return showToast('Selectează proprietatea înainte de salvare.', 'error');
+    if (form.legalName.trim().length < 2) return showToast('Completează denumirea juridică a firmei.', 'error');
+    if (!creating && !selectedCompany) return showToast('Selectează firma pe care vrei să o editezi.', 'error');
     setSaving(true);
     try {
-      let result = await companyDetailsRepository.update(propertyId, { ...form, legalName: form.legalName.trim(), iban: form.iban.replace(/\s/g, '').toUpperCase() });
-      if (stampRemoved && result.stampUrl) result = await companyDetailsRepository.removeStamp(propertyId);
-      if (stampData) result = await companyDetailsRepository.saveStamp(propertyId, stampData);
-      await state.reload(true);
-      showToast('Datele firmei au fost salvate.', 'success');
+      const payload = { ...form, legalName: form.legalName.trim(), iban: form.iban.replace(/\s/g, '').toUpperCase() };
+      let result = creating
+        ? await companyDetailsRepository.create(propertyId, payload)
+        : await companyDetailsRepository.update(selectedCompany!.id, payload);
+      if (stampRemoved && result.stampUrl) result = await companyDetailsRepository.removeStamp(result.id);
+      if (stampData) result = await companyDetailsRepository.saveStamp(result.id, stampData);
+      setCreating(false);
+      setSelectedId(result.id);
+      setForm(formFromCompany(result));
+      setStampData(null);
+      setStampRemoved(false);
+      state.setData((current) => {
+        const others = (current ?? []).filter((company) => company.id !== result.id).map((company) => result.isDefault ? { ...company, isDefault: false } : company);
+        return [result, ...others].sort((left, right) => Number(right.isDefault) - Number(left.isDefault) || left.legalName.localeCompare(right.legalName, 'ro'));
+      });
+      showToast(creating ? 'Firma a fost adăugată.' : 'Datele firmei au fost salvate.', 'success');
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Datele firmei nu au putut fi salvate.', 'error');
     } finally { setSaving(false); }
   };
 
-  const stampUri = stampData ?? (!stampRemoved ? state.data?.stampUrl : null);
+  const setDefault = async (company: CompanyDetails) => {
+    if (company.isDefault || activatingId) return;
+    setActivatingId(company.id);
+    try {
+      await companyDetailsRepository.setDefault(company.id);
+      await state.reload(true);
+      showToast(`${company.legalName} este acum firma folosită pentru documentele noi.`, 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Firma activă nu a putut fi schimbată.', 'error');
+    } finally { setActivatingId(null); }
+  };
+
+  const stampUri = stampData ?? (!stampRemoved ? selectedCompany?.stampUrl : null);
 
   return <Screen header={<AppHeader title="Datele firmei" back onBack={() => router.replace('/service/more')} />} refreshing={state.refreshing} onRefresh={() => void state.reload(true)}>
     <View style={styles.stack}>
       <LinearGradient colors={isDark ? ['#102A69', '#075CFF'] : ['#123EA9', '#0878FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
         <View pointerEvents="none" style={styles.heroOrb} />
         <View style={styles.heroIcon}><Ionicons name="business" size={28} color="#FFFFFF" /></View>
-        <View style={styles.heroCopy}><AppText variant="title" style={styles.heroTitle}>Identitatea juridică a firmei</AppText><AppText style={styles.heroSubtitle}>Datele vor fi preluate automat în fișele de service și în documentele PDF.</AppText></View>
+        <View style={styles.heroCopy}><AppText variant="title" style={styles.heroTitle}>Firmele tale</AppText><AppText style={styles.heroSubtitle}>Alege firma activă, iar datele ei vor fi folosite automat în toate fișele și PDF-urile create de acum înainte.</AppText></View>
         <View style={styles.heroBadge}><Ionicons name="shield-checkmark" size={15} color="#FFFFFF" /><AppText variant="caption" style={styles.heroBadgeText}>DOAR ADMIN</AppText></View>
       </LinearGradient>
 
       {state.loading ? <LoadingState rows={5} /> : state.error ? <ErrorState message={state.error.message} onRetry={() => void state.reload()} /> : <>
+        <Card style={styles.companies} elevated>
+          <View style={[styles.companiesHeader, compact && styles.companiesHeaderCompact]}>
+            <View style={styles.sectionCopy}><AppText variant="heading">Firme configurate</AppText><AppText variant="caption" muted>Firma activă este aplicată automat documentelor noi. Fișele existente își păstrează datele inițiale.</AppText></View>
+            <Button compact label="Adaugă firmă" icon="add-circle-outline" onPress={startCreating} />
+          </View>
+          {state.data?.length ? <View style={styles.companyList}>{state.data.map((company) => {
+            const selected = !creating && selectedId === company.id;
+            return <Pressable key={company.id} accessibilityRole="button" accessibilityState={{ selected }} onPress={() => selectCompany(company)} style={({ pressed }) => [styles.companyCard, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.primarySoft : colors.surfaceMuted, opacity: pressed ? 0.76 : 1 }]}>
+              <View style={[styles.companyIcon, { backgroundColor: company.isDefault ? colors.primary : colors.surface }]}><Ionicons name="business-outline" size={21} color={company.isDefault ? '#FFFFFF' : colors.primary} /></View>
+              <View style={styles.companyCopy}><View style={styles.companyNameRow}><AppText variant="label" numberOfLines={1} style={styles.companyName}>{company.legalName}</AppText>{company.isDefault ? <View style={[styles.activeBadge, { backgroundColor: palette.success }]}><AppText variant="caption" style={styles.activeBadgeText}>ACTIVĂ</AppText></View> : null}</View><AppText variant="caption" muted numberOfLines={1}>{company.taxId || 'CUI necompletat'}{company.city ? ` · ${company.city}` : ''}</AppText></View>
+              {company.isDefault ? <Ionicons name="checkmark-circle" size={23} color={palette.success} /> : <Button compact variant="outline" label={activatingId === company.id ? 'Se activează…' : 'Folosește'} disabled={Boolean(activatingId)} onPress={() => void setDefault(company)} />}
+            </Pressable>;
+          })}</View> : <View style={[styles.emptyCompanies, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="business-outline" size={26} color={colors.primary} /><AppText variant="label">Nu ai încă nicio firmă configurată.</AppText></View>}
+        </Card>
+
+        <View style={styles.editorHeading}><View style={[styles.editorIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name={creating ? 'add-outline' : 'create-outline'} size={22} color={colors.primary} /></View><View style={styles.sectionCopy}><AppText variant="heading">{creating ? 'Firmă nouă' : `Editează ${selectedCompany?.legalName ?? 'firma'}`}</AppText><AppText variant="caption" muted>{creating ? 'Completează denumirea, apoi salvează firma.' : selectedCompany?.isDefault ? 'Aceasta este firma folosită în documentele noi.' : 'Poți edita firma sau o poți selecta ca activă din lista de mai sus.'}</AppText></View></View>
+
         <FormSection icon="document-text-outline" color={colors.primary} background={colors.primarySoft} title="Date juridice" subtitle="Informațiile de identificare fiscală." compact={compact}>
           <Field><Input label="Denumire juridică" icon="business-outline" value={form.legalName} onChangeText={(value) => update('legalName', value)} placeholder="Ex: G-Shop Service SRL" maxLength={160} /></Field>
           <Field><Input label="CUI / CIF" icon="barcode-outline" value={form.taxId} onChangeText={(value) => update('taxId', value)} placeholder="Ex: RO12345678" maxLength={24} autoCapitalize="characters" /></Field>
@@ -118,14 +192,14 @@ export default function CompanyDetailsScreen() {
         </FormSection>
 
         <Card style={styles.section} elevated>
-          <SectionHeading icon="finger-print-outline" color={palette.cyan} background={`${palette.cyan}16`} title="Ștampila firmei" subtitle="Se păstrează ca fișier optimizat, fără a încărca baza de date." />
+          <SectionHeading icon="finger-print-outline" color={palette.cyan} background={`${palette.cyan}16`} title="Ștampila firmei" subtitle="Ștampila aparține doar firmei selectate." />
           <Pressable accessibilityRole="button" onPress={() => void pickStamp()} style={({ pressed }) => [styles.stampArea, { backgroundColor: colors.surfaceMuted, borderColor: stampUri ? `${colors.primary}70` : colors.border, opacity: pressed ? 0.78 : 1 }]}>
             {stampUri ? <Image source={{ uri: stampUri }} resizeMode="contain" style={styles.stampImage} /> : <View style={styles.stampEmpty}><View style={[styles.stampEmptyIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="image-outline" size={28} color={colors.primary} /></View><AppText variant="label">Adaugă ștampila</AppText><AppText variant="caption" muted style={styles.stampHint}>PNG, JPG sau WEBP · recomandat cu fundal transparent</AppText></View>}
           </Pressable>
           <View style={[styles.stampActions, compact && styles.stampActionsCompact]}><Button variant="outline" compact label={stampUri ? 'Înlocuiește imaginea' : 'Selectează imaginea'} icon="image-outline" onPress={() => void pickStamp()} style={styles.flexButton} />{stampUri ? <Button variant="danger" compact label="Elimină ștampila" icon="trash-outline" onPress={() => { setStampData(null); setStampRemoved(true); }} style={styles.flexButton} /> : null}</View>
         </Card>
 
-        <View style={[styles.saveBar, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}><View style={styles.saveInfo}><Ionicons name="information-circle-outline" size={20} color={colors.primary} /><AppText variant="caption" muted style={styles.saveCopy}>Câmpurile sunt opționale și pot fi completate treptat. Telefonul introdus aici este folosit pentru apel și WhatsApp în pagina publică de status.</AppText></View><Button label="Salvează datele firmei" icon="checkmark-circle-outline" loading={saving} onPress={() => void save()} style={styles.saveButton} /></View>
+        <View style={[styles.saveBar, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}><View style={styles.saveInfo}><Ionicons name="information-circle-outline" size={20} color={colors.primary} /><AppText variant="caption" muted style={styles.saveCopy}>Firma activă va fi salvată automat în următoarea fișă de service și în documentele generate pentru aceasta.</AppText></View><Button label={creating ? 'Adaugă firma' : 'Salvează firma'} icon="checkmark-circle-outline" loading={saving} onPress={() => void save()} style={styles.saveButton} /></View>
       </>}
     </View>
   </Screen>;
@@ -140,9 +214,10 @@ function FormSection({ children, compact, ...heading }: { children: React.ReactN
 function Field({ children, wide = false }: { children: React.ReactNode; wide?: boolean }) { const { width } = useWindowDimensions(); return <View style={[styles.field, wide && styles.fieldWide, width < 680 && styles.fieldCompact]}>{children}</View>; }
 
 const styles = StyleSheet.create({
-  stack: { width: '100%', maxWidth: 900, alignSelf: 'center', gap: spacing.lg }, hero: { minHeight: 150, borderRadius: radius.xl, padding: spacing.xl, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', gap: spacing.lg }, heroOrb: { position: 'absolute', width: 220, height: 220, borderRadius: 110, right: -70, top: -105, backgroundColor: 'rgba(255,255,255,0.10)' }, heroIcon: { width: 58, height: 58, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.20)' }, heroCopy: { minWidth: 0, flex: 1, gap: spacing.xs }, heroTitle: { color: '#FFFFFF' }, heroSubtitle: { color: '#D7E5FF', maxWidth: 520 }, heroBadge: { position: 'absolute', right: spacing.lg, bottom: spacing.md, minHeight: 28, paddingHorizontal: spacing.sm, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.16)', flexDirection: 'row', alignItems: 'center', gap: 5 }, heroBadgeText: { color: '#FFFFFF', fontWeight: '800' },
+  stack: { width: '100%', maxWidth: 900, alignSelf: 'center', gap: spacing.lg }, hero: { minHeight: 150, borderRadius: radius.xl, padding: spacing.xl, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', gap: spacing.lg }, heroOrb: { position: 'absolute', width: 220, height: 220, borderRadius: 110, right: -70, top: -105, backgroundColor: 'rgba(255,255,255,0.10)' }, heroIcon: { width: 58, height: 58, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.20)' }, heroCopy: { minWidth: 0, flex: 1, gap: spacing.xs }, heroTitle: { color: '#FFFFFF' }, heroSubtitle: { color: '#D7E5FF', maxWidth: 560 }, heroBadge: { position: 'absolute', right: spacing.lg, bottom: spacing.md, minHeight: 28, paddingHorizontal: spacing.sm, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.16)', flexDirection: 'row', alignItems: 'center', gap: 5 }, heroBadgeText: { color: '#FFFFFF', fontWeight: '800' },
+  companies: { gap: spacing.md }, companiesHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md }, companiesHeaderCompact: { alignItems: 'stretch', flexDirection: 'column' }, companyList: { gap: spacing.sm }, companyCard: { minHeight: 72, padding: spacing.sm, borderWidth: 1.5, borderRadius: radius.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, companyIcon: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' }, companyCopy: { minWidth: 0, flex: 1, gap: 3 }, companyNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs }, companyName: { minWidth: 0, flexShrink: 1 }, activeBadge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: radius.pill }, activeBadgeText: { color: '#FFFFFF', fontWeight: '900', fontSize: 9 }, emptyCompanies: { minHeight: 92, padding: spacing.lg, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', gap: spacing.sm }, editorHeading: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.xs }, editorIcon: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   section: { gap: spacing.lg }, sectionHeading: { flexDirection: 'row', alignItems: 'center', gap: spacing.md }, sectionIcon: { width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' }, sectionCopy: { minWidth: 0, flex: 1, gap: 2 }, fields: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }, fieldsCompact: { flexDirection: 'column', flexWrap: 'nowrap' }, field: { minWidth: 220, flexGrow: 1, flexBasis: '31%' }, fieldWide: { flexBasis: '64%' }, fieldCompact: { minWidth: 0, width: '100%', flexBasis: 'auto', flexGrow: 0 },
   switchBox: { minWidth: 220, flexGrow: 1, flexBasis: '31%', minHeight: 58, paddingHorizontal: spacing.sm, borderWidth: 1, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, switchIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }, switchCopy: { minWidth: 0, flex: 1 },
   stampArea: { minHeight: 190, borderRadius: radius.lg, borderWidth: 1.5, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }, stampImage: { width: '88%', height: 170 }, stampEmpty: { alignItems: 'center', gap: spacing.sm, padding: spacing.xl }, stampEmptyIcon: { width: 58, height: 58, borderRadius: 20, alignItems: 'center', justifyContent: 'center' }, stampHint: { textAlign: 'center' }, stampActions: { flexDirection: 'row', gap: spacing.md }, stampActionsCompact: { flexDirection: 'column' }, flexButton: { flex: 1 },
-  saveBar: { padding: spacing.md, borderWidth: 1, borderRadius: radius.lg, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.md }, saveInfo: { minWidth: 220, flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, saveCopy: { minWidth: 0, flex: 1 }, saveButton: { minWidth: 240 },
+  saveBar: { padding: spacing.md, borderWidth: 1, borderRadius: radius.lg, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.md }, saveInfo: { minWidth: 220, flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, saveCopy: { minWidth: 0, flex: 1 }, saveButton: { minWidth: 220 },
 });

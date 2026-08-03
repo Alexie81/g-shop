@@ -20,7 +20,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   View,
 } from 'react-native';
 import SignatureScreen, { SignatureViewRef } from 'react-native-signature-canvas';
@@ -34,7 +33,6 @@ type QuickSheetForm = {
   reportedIssue: string;
   technicalAssessment: string;
   technicianName: string;
-  showCompanyDetails: boolean;
   approveDiagnostics: boolean;
   approveRepair: boolean;
   repairRefused: boolean;
@@ -60,7 +58,6 @@ const emptyForm: QuickSheetForm = {
   reportedIssue: '',
   technicalAssessment: '',
   technicianName: '',
-  showCompanyDetails: true,
   approveDiagnostics: false,
   approveRepair: false,
   repairRefused: false,
@@ -78,7 +75,6 @@ function formFromSheet(sheet?: ServiceSheet | null): QuickSheetForm {
     reportedIssue: sheet.reportedIssue ?? '',
     technicalAssessment: sheet.technicalAssessment ?? '',
     technicianName: sheet.technicianName ?? '',
-    showCompanyDetails: sheet.showCompanyDetails ?? true,
     approveDiagnostics: sheet.approveDiagnostics ?? false,
     approveRepair: sheet.approveRepair ?? false,
     repairRefused: sheet.repairRefused ?? false,
@@ -163,7 +159,6 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
       reportedIssue: form.reportedIssue.trim(),
       technicalAssessment: form.technicalAssessment.trim(),
       technicianName: form.technicianName.trim(),
-      showCompanyDetails: form.showCompanyDetails,
       approveDiagnostics: form.approveDiagnostics,
       approveRepair: form.approveRepair,
       repairRefused: form.repairRefused,
@@ -283,12 +278,6 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
               <ConsentOption label="Aprobă reparația" icon="construct-outline" active={form.approveRepair} onPress={() => update('approveRepair', !form.approveRepair)} />
               <ConsentOption label="Refuză reparația" icon="close-circle-outline" active={form.repairRefused} danger onPress={() => update('repairRefused', !form.repairRefused)} />
               <ConsentOption label="Produs predat" icon="checkmark-done-outline" active={form.productDelivered} onPress={() => update('productDelivered', !form.productDelivered)} />
-            </View>
-
-            <View style={[styles.companyRow, { borderColor: colors.border, backgroundColor: colors.surfaceMuted }]}>
-              <View style={[styles.companyIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="business-outline" size={21} color={colors.primary} /></View>
-              <View style={styles.companyCopy}><AppText variant="label">Datele firmei în document</AppText><AppText variant="caption" muted>Setarea poate fi schimbată ulterior din fișă.</AppText></View>
-              <Switch value={form.showCompanyDetails} onValueChange={(value) => update('showCompanyDetails', value)} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#FFFFFF" />
             </View>
 
             {canSign ? <View style={[styles.signaturePrompt, { borderColor: pendingSignature || signatureSaved ? palette.success : colors.border, backgroundColor: pendingSignature || signatureSaved ? `${palette.success}10` : colors.surfaceMuted }]}>
@@ -420,9 +409,6 @@ const styles = StyleSheet.create({
   consentGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   consentOption: { minHeight: 54, minWidth: 205, flexBasis: '46%', flexGrow: 1, borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   consentIcon: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  companyRow: { minHeight: 76, borderWidth: 1, borderRadius: radius.lg, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  companyIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  companyCopy: { minWidth: 0, flex: 1, gap: 2 },
   signaturePrompt: { minHeight: 82, borderWidth: 1, borderRadius: radius.lg, padding: spacing.md, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.md },
   signaturePromptIcon: { width: 46, height: 46, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   signaturePromptCopy: { minWidth: 170, flex: 1, gap: 2 },
