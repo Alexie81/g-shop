@@ -474,6 +474,33 @@ CREATE TABLE IF NOT EXISTS notifications (
   INDEX idx_notifications_user_read (user_id, read_at, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS push_devices (
+  id BINARY(16) PRIMARY KEY,
+  user_id BINARY(16) NOT NULL,
+  property_id BINARY(16) NOT NULL,
+  expo_push_token VARCHAR(255) NOT NULL,
+  platform ENUM('android','ios') NOT NULL,
+  device_name VARCHAR(120) NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  last_seen_at DATETIME NOT NULL,
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  UNIQUE KEY uq_push_device_token (expo_push_token),
+  INDEX idx_push_devices_property_active (property_id,is_active,updated_at),
+  INDEX idx_push_devices_user_active (user_id,is_active,updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS push_notification_runs (
+  id BINARY(16) PRIMARY KEY,
+  property_id BINARY(16) NOT NULL,
+  fingerprint CHAR(64) NOT NULL,
+  sent_on DATE NOT NULL,
+  recipients_count INT UNSIGNED NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL,
+  UNIQUE KEY uq_push_run_daily (property_id,fingerprint,sent_on),
+  INDEX idx_push_runs_property_date (property_id,sent_on)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS whatsapp_messages (
   id BINARY(16) PRIMARY KEY,
   property_id BINARY(16) NOT NULL,

@@ -1,4 +1,5 @@
 import { AuthProvider } from '@/contexts/AuthContext';
+import { NotificationCoordinator } from '@/components/notifications/NotificationCoordinator';
 import { PropertyProvider } from '@/contexts/PropertyContext';
 import { ThemeProvider, useAppTheme } from '@/contexts/ThemeContext';
 import { ToastProvider } from '@/contexts/ToastContext';
@@ -20,5 +21,5 @@ function Navigation() {
 }
 
 export default function RootLayout() {
-  return <SafeAreaProvider><ThemeProvider><AuthProvider><PropertyProvider><ToastProvider><Navigation /></ToastProvider></PropertyProvider></AuthProvider></ThemeProvider></SafeAreaProvider>;
+  return <SafeAreaProvider><ThemeProvider><AuthProvider><PropertyProvider><ToastProvider><NotificationCoordinator /><Navigation /></ToastProvider></PropertyProvider></AuthProvider></ThemeProvider></SafeAreaProvider>;
 }

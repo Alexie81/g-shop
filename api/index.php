@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require __DIR__ . '/src/bootstrap.php';
+require __DIR__ . '/src/push_notifications.php';
 
 $allowedOrigins = array_map('trim', explode(',', env_value('CORS_ORIGINS', '*')));
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '*';
@@ -1303,6 +1304,16 @@ try {
         respond(['platform'=>'android','latestVersion'=>env_value('APP_ANDROID_VERSION','1.0.0'),'downloadUrl'=>env_value('APP_ANDROID_DOWNLOAD_URL',''),'releaseNotes'=>$notes,'publishedAt'=>env_value('APP_ANDROID_PUBLISHED_AT',''),'mandatory'=>env_value('APP_ANDROID_MANDATORY','0')==='1']);
     }
 
+    if ($method === 'POST' && $path === '/push/devices') {
+        $user=current_user();$body=json_body();$propertyId=validated_uuid((string)($body['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);$device=gshop_register_push_device($user,$propertyId,$body);gshop_notify_missing_documents_safely($propertyId);respond($device,201);
+    }
+    if ($method === 'DELETE' && $path === '/push/devices') {
+        $user=current_user();gshop_unregister_push_device($user,(string)(json_body()['token']??''));respond(['removed'=>true]);
+    }
+    if ($method === 'POST' && $path === '/push/reminders/missing-documents') {
+        $user=require_permission('service_sheets.view');$propertyId=validated_uuid((string)(json_body()['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);respond(gshop_notify_missing_documents($propertyId));
+    }
+
     if ($method === 'POST' && $path === '/auth/login') {
         $body = json_body(); $username = trim((string)($body['username'] ?? '')); $password = (string)($body['password'] ?? '');
         if ($username === '' || $password === '') fail('Completează utilizatorul și parola.', 422);
@@ -1809,8 +1820,8 @@ try {
     if ($method==='GET'&&path_match('/service-sheets/{id}',$path,$params)) { $user=require_permission('service_sheets.view');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);respond($sheet); }
     if ($method==='GET'&&path_match('/service-sheets/{id}/documents',$path,$params)) { $user=require_permission('service_sheets.view');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);respond(service_document_slots($sheet['id'])); }
     if ($method==='GET'&&path_match('/service-sheets/{id}/documents/{type}/pdf',$path,$params)) { $user=require_permission('service_sheets.view');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);$type=validated_service_document_type($params['type']);$row=service_document_existing_row($sheet['id'],$type);if(!$row)fail('Documentul nu a fost încă generat.',404);stream_service_document_row($row); }
-    if ($method==='DELETE'&&path_match('/service-sheets/{id}/documents/{type}',$path,$params)) { $user=require_service_document_write(true);$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);$type=validated_service_document_type($params['type']);$row=service_document_existing_row($sheet['id'],$type);if(!$row)fail('Documentul nu a fost încă generat.',404);$before=map_service_document($row);$now=now_utc();db()->prepare('UPDATE service_documents SET is_active=0,updated_at=?,updated_by=? WHERE id=? AND is_active=1')->execute([$now,uuid_bin($user['id']),uuid_bin((string)$row['id'])]);remove_obsolete_service_document_file($row['file_path']??null);audit_log('SERVICE_DOCUMENT_DELETED','service_documents','Document șters pentru refacere: '.$before['label'],'ServiceDocument',(string)$row['id'],$sheet['propertyId'],$before,['deleted'=>true,'type'=>$type],$user);respond(['deleted'=>true,'type'=>$type]); }
-    if ($method==='POST'&&path_match('/service-sheets/{id}/documents/{type}',$path,$params)) { current_user();$sheet=get_sheet($params['id']);$type=validated_service_document_type($params['type']);$before=service_document_record($sheet['id'],$type,false);$user=require_service_document_write($before!==null);ensure_property($sheet['propertyId'],$user);$document=generate_service_document_record($sheet['id'],$type,json_body(),$user);audit_log($before?'SERVICE_DOCUMENT_REGENERATED':'SERVICE_DOCUMENT_GENERATED','service_documents',($before?'Document actualizat: ':'Document generat: ').$document['label'],'ServiceSheet',$sheet['id'],$sheet['propertyId'],$before,$document,$user);respond($document,$before?200:201); }
+    if ($method==='DELETE'&&path_match('/service-sheets/{id}/documents/{type}',$path,$params)) { $user=require_service_document_write(true);$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);$type=validated_service_document_type($params['type']);$row=service_document_existing_row($sheet['id'],$type);if(!$row)fail('Documentul nu a fost încă generat.',404);$before=map_service_document($row);$now=now_utc();db()->prepare('UPDATE service_documents SET is_active=0,updated_at=?,updated_by=? WHERE id=? AND is_active=1')->execute([$now,uuid_bin($user['id']),uuid_bin((string)$row['id'])]);remove_obsolete_service_document_file($row['file_path']??null);audit_log('SERVICE_DOCUMENT_DELETED','service_documents','Document șters pentru refacere: '.$before['label'],'ServiceDocument',(string)$row['id'],$sheet['propertyId'],$before,['deleted'=>true,'type'=>$type],$user);gshop_notify_missing_documents_safely($sheet['propertyId']);respond(['deleted'=>true,'type'=>$type]); }
+    if ($method==='POST'&&path_match('/service-sheets/{id}/documents/{type}',$path,$params)) { current_user();$sheet=get_sheet($params['id']);$type=validated_service_document_type($params['type']);$before=service_document_record($sheet['id'],$type,false);$user=require_service_document_write($before!==null);ensure_property($sheet['propertyId'],$user);$document=generate_service_document_record($sheet['id'],$type,json_body(),$user);audit_log($before?'SERVICE_DOCUMENT_REGENERATED':'SERVICE_DOCUMENT_GENERATED','service_documents',($before?'Document actualizat: ':'Document generat: ').$document['label'],'ServiceSheet',$sheet['id'],$sheet['propertyId'],$before,$document,$user);gshop_notify_missing_documents_safely($sheet['propertyId']);respond($document,$before?200:201); }
     if ($method==='POST'&&$path==='/service-sheets') {
         $user=require_permission('service_sheets.create');$body=json_body();$propertyId=(string)($body['propertyId']??'');ensure_property($propertyId,$user);
         if(empty($body['clientId'])||empty($body['reportedIssue']))fail('Clientul și problema sunt obligatorii.',422);
@@ -1839,7 +1850,7 @@ try {
         audit_log('SERVICE_SHEET_CREATED','service_sheets','Fișă creată: '.$number,'ServiceSheet',$id,$propertyId,null,$body,$user);
         if(!empty($financeSync['changed']))audit_log('CLIENT_FINANCIALS_SYNCED_FROM_SHEET','financials','Costurile clientului au fost sincronizate din fișa '.$number,'Client',$clientId,$propertyId,financial_mutable_snapshot($financeSync['before']),financial_mutable_snapshot($financeSync['after']),$user);
         if($commissionCreated)audit_log('COMMISSION_CREATED','commissions','Comision aprobat automat pentru fișa '.$number,'Client',$clientId,$propertyId,null,client_financial_bundle($client)['collaborator'],$user);
-        gshop_queue_service_sheet_pdf($id);respond(get_sheet($id),201);
+        gshop_queue_service_sheet_pdf($id);gshop_notify_missing_documents_safely($propertyId);respond(get_sheet($id),201);
     }
     if ($method==='PUT'&&path_match('/service-sheets/{id}',$path,$params)) {
         $user=require_permission('service_sheets.update');$before=get_sheet($params['id']);ensure_property($before['propertyId'],$user);$body=json_body();
@@ -1866,7 +1877,7 @@ try {
         $after=get_sheet($params['id']);audit_log('SERVICE_SHEET_UPDATED','service_sheets','Fișă actualizată: '.$after['number'],'ServiceSheet',$params['id'],$after['propertyId'],$before,$after,$user);
         if($financeChanged&&!empty($financeSync['changed']))audit_log('CLIENT_FINANCIALS_SYNCED_FROM_SHEET','financials','Costurile clientului au fost sincronizate din fișa '.$after['number'],'Client',$after['clientId'],$after['propertyId'],financial_mutable_snapshot($financeSync['before']),financial_mutable_snapshot($financeSync['after']),$user);
         if($financeChanged&&$recalculated>0)audit_log('COMMISSION_RECALCULATED','commissions','Comision recalculat pentru fișa '.$after['number'],'ServiceSheet',$params['id'],$after['propertyId'],['totalCost'=>$before['totalCost'],'directCosts'=>$before['directCosts'],'netValue'=>$before['netValue'],'collaboratorCommission'=>$before['collaboratorCommission']],['totalCost'=>$after['totalCost'],'directCosts'=>$after['directCosts'],'netValue'=>$after['netValue'],'collaboratorCommission'=>$after['collaboratorCommission']],$user);
-        gshop_queue_service_sheet_pdf($after['id']);respond($after);
+        gshop_queue_service_sheet_pdf($after['id']);gshop_notify_missing_documents_safely($after['propertyId']);respond($after);
     }
     if ($method==='DELETE'&&path_match('/service-sheets/{id}',$path,$params)) {
         $user=require_permission('service_sheets.update');$before=get_sheet($params['id']);ensure_property($before['propertyId'],$user);
