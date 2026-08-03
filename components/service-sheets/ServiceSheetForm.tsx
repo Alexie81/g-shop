@@ -93,7 +93,7 @@ const blank: Form = {
   productDelivered: false,
   receivedAt: '',
   intakeAgreementAt: '',
-  estimatedRepairDays: '',
+  estimatedRepairDays: '2',
   estimatedAt: '',
   completedAt: '',
   status: 'NEW',

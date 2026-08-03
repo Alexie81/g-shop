@@ -78,11 +78,11 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
   useEffect(() => {
     if (!visible) return;
     const now = new Date().toISOString();
-    const estimatedDays = document?.estimatedRepairDays ?? sheet.estimatedRepairDays ?? inferEstimatedDays(sheet);
+    const estimatedDays = document?.estimatedRepairDays ?? sheet.estimatedRepairDays ?? inferEstimatedDays(sheet) ?? (type === 'INTAKE' ? 2 : undefined);
     setAgreementAt(document?.agreementAt ?? (type === 'INTAKE' ? sheet.intakeAgreementAt ?? sheet.signedAt : undefined) ?? now);
     setAgreementStatus(document?.agreementStatus ?? 'ACCEPTED');
     setDocumentAt(document?.documentAt ?? sheet.completedAt ?? now);
-    setEstimatedRepairDays(estimatedDays ? String(estimatedDays) : '');
+    setEstimatedRepairDays(estimatedDays === undefined ? '' : String(estimatedDays));
     setProductState(document?.productState ?? (sheet.workPerformed?.trim() ? 'REPAIRED' : 'INITIAL'));
     setTechnicalAssessment(document?.technicalAssessment ?? sheet.technicalAssessment ?? '');
     setDefectCause(document?.defectCause ?? '');
