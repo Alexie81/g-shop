@@ -30,6 +30,7 @@ export default function ServiceLayout() {
     <Tabs.Screen name="collaborators" options={{ href: null }} />
     <Tabs.Screen name="users" options={{ href: null }} />
     <Tabs.Screen name="reports" options={{ href: null }} />
+    <Tabs.Screen name="register" options={{ href: null }} />
     <Tabs.Screen name="audit" options={{ href: null }} />
     <Tabs.Screen name="whatsapp-messages" options={{ href: null }} />
   </Tabs>;

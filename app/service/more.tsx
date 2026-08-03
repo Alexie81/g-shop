@@ -29,6 +29,7 @@ export default function MoreScreen() {
     { label: 'Mesaje WhatsApp', description: 'Mesajele rapide ale contului tău', icon: 'logo-whatsapp', color: '#18B95D', route: '/service/whatsapp-messages', permission: 'clients.view' },
     { label: 'Utilizatori', description: 'Roluri, parole și permisiuni', icon: 'people-outline', color: palette.purple, route: '/service/users', permission: 'users.view' },
     { label: 'Rapoarte', description: 'Venituri, costuri și performanță', icon: 'bar-chart-outline', color: palette.success, route: '/service/reports', permission: 'reports.view' },
+    { label: 'Registru', description: 'Fișe de intrare, devize și ieșiri', icon: 'library-outline', color: palette.electric, route: '/service/register', permission: 'service_sheets.view' },
     { label: 'Istoric modificări', description: 'Audit complet asociat utilizatorilor', icon: 'time-outline', color: palette.electric, route: '/service/audit', permission: 'audit.view' },
     { label: 'Datele firmei', description: 'Date juridice, bancare și ștampilă', icon: 'business-outline', color: palette.warning, route: '/company-details', permission: 'settings.manage', adminOnly: true },
     { label: 'Actualizare aplicație', description: 'Verifică și descarcă ultima versiune', icon: 'cloud-download-outline', color: palette.cyan, route: '/app-update' },
