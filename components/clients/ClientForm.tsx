@@ -84,6 +84,7 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
   const { hasPermission } = useAuth();
   const canViewFinancials = hasPermission('financials.view');
   const canEditFinancials = canViewFinancials && hasPermission('clients.update');
+  const canViewCollaborators = hasPermission('collaborators.view');
   const [form, setForm] = useState<FormState>(() => client ? {
     firstName: client.firstName,
     lastName: client.lastName,
@@ -97,11 +98,12 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
     notes: client.notes ?? '',
   } : { ...emptyForm });
   const [assignments, setAssignments] = useState<AssignmentDraft[]>(() => {
+    if (!canViewCollaborators) return [];
     if (client?.collaborators?.length) return client.collaborators.map((item) => ({ collaboratorId: item.collaboratorId, commissionType: item.commissionType, commissionValue: String(item.commissionValue) }));
     return client?.collaboratorId ? [{ collaboratorId: client.collaboratorId, commissionType: client.commissionType ?? 'PERCENT_NET', commissionValue: String(client.commissionValue ?? 0) }] : [];
   });
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
-  const [collaboratorsLoading, setCollaboratorsLoading] = useState(Boolean(propertyId));
+  const [collaboratorsLoading, setCollaboratorsLoading] = useState(Boolean(propertyId && canViewCollaborators));
   const [collaboratorsError, setCollaboratorsError] = useState<string>();
   const [collaboratorsReloadKey, setCollaboratorsReloadKey] = useState(0);
   const [collaboratorPickerOpen, setCollaboratorPickerOpen] = useState(false);
@@ -146,7 +148,7 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
   }, [canViewFinancials, client, financeReloadKey]);
 
   useEffect(() => {
-    if (!propertyId) {
+    if (!propertyId || !canViewCollaborators) {
       setCollaborators([]);
       setCollaboratorsLoading(false);
       setCollaboratorsError(undefined);
@@ -179,7 +181,7 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
     });
 
     return () => { active = false; };
-  }, [client, collaboratorsReloadKey, propertyId]);
+  }, [canViewCollaborators, client, collaboratorsReloadKey, propertyId]);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -254,7 +256,7 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
   };
 
   const submit = async () => {
-    if (!client && (collaboratorsLoading || collaboratorsError)) {
+    if (canViewCollaborators && !client && (collaboratorsLoading || collaboratorsError)) {
       showToast(collaboratorsLoading ? 'Așteaptă încărcarea colaboratorilor.' : 'Reîncarcă lista colaboratorilor înainte să salvezi.', 'error');
       return;
     }
@@ -266,7 +268,7 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
     if (form.email && !/^\S+@\S+\.\S+$/.test(form.email)) nextErrors.email = 'Adresa de email nu este validă.';
 
     let nextCommissionError: string | undefined;
-    for (const assignment of assignments) {
+    for (const assignment of canViewCollaborators ? assignments : []) {
       const numericCommission = parseCommissionValue(assignment.commissionValue);
       if (!assignment.commissionValue.trim() || !Number.isFinite(numericCommission) || numericCommission < 0) {
         nextCommissionError = 'Toate comisioanele trebuie să aibă o valoare validă, mai mare sau egală cu zero.';
@@ -305,10 +307,7 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
       sortOrder: index + 1,
       commissionValue: parseCommissionValue(item.commissionValue),
     }));
-    const payload = {
-      ...form,
-      collaborators: collaboratorPayload,
-    };
+    const payload = canViewCollaborators ? { ...form, collaborators: collaboratorPayload } : { ...form };
 
     try {
       const saved = client
@@ -381,7 +380,7 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
         <AppText variant="caption" muted>{client ? 'Valorile financiare se salvează împreună cu clientul, iar cheltuielile se actualizează imediat.' : 'Finanțele și cheltuielile pregătite aici vor fi salvate imediat după crearea clientului și a codului QR.'}</AppText>
       </> : null}
 
-      <Card style={styles.section}>
+      {canViewCollaborators ? <Card style={styles.section}>
         <View style={styles.sectionTitleRow}>
           <View style={[styles.sectionIcon, { backgroundColor: colors.primarySoft }]}>
             <Ionicons name="people-outline" size={21} color={colors.primary} />
@@ -491,9 +490,9 @@ export function ClientForm({ propertyId, client }: { propertyId: UUID; client?: 
             </View>
           </View>
         )}
-      </Card>
+      </Card> : null}
 
-      <Modal visible={collaboratorPickerOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setCollaboratorPickerOpen(false)}>
+      <Modal visible={canViewCollaborators && collaboratorPickerOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setCollaboratorPickerOpen(false)}>
         <ModalSafeBottom style={[styles.pickerOverlay, { backgroundColor: colors.overlay }]}>
           <Pressable accessibilityLabel="Închide selectorul" style={StyleSheet.absoluteFill} onPress={() => setCollaboratorPickerOpen(false)} />
           <View style={[styles.pickerModal, { backgroundColor: colors.surface, borderColor: colors.border }]}>

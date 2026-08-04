@@ -35,7 +35,7 @@ type Tab = 'Detalii' | 'Finanțe' | 'Semnătură' | 'QR' | 'Istoric';
 
 export default function ClientDetailsScreen() {
   const { clientId } = useLocalSearchParams<{ clientId: string }>();
-  const { user, hasPermission } = useAuth();
+  const { hasPermission } = useAuth();
   const { activeProperty } = useProperty();
   const { width } = useWindowDimensions();
   const { colors } = useAppTheme(); const { showToast } = useToast(); const [tab, setTab] = useState<Tab>('Detalii');
@@ -44,19 +44,21 @@ export default function ClientDetailsScreen() {
   const [signatureOpen, setSignatureOpen] = useState(false);
   const [signatureSaving, setSignatureSaving] = useState(false);
   const [whatsAppOpen, setWhatsAppOpen] = useState(false);
-  const isAdmin = user?.role === 'ADMIN';
   const compactLayout = width <= 390;
   const canViewFinancials = hasPermission('financials.view');
   const canEditClients = hasPermission('clients.update');
   const canSignClient = hasPermission('service_sheets.sign');
   const canManageCollaborators = hasPermission('collaborators.manage');
   const canEditFinancials = canViewFinancials && hasPermission('clients.update');
+  const canViewSheets = hasPermission('service_sheets.view');
+  const canCreateSheets = hasPermission('service_sheets.create');
+  const canViewAudit = hasPermission('audit.view');
   const tabs: Tab[] = [
     'Detalii',
     ...(canViewFinancials ? ['Finanțe' as const] : []),
     'Semnătură',
     'QR',
-    ...(isAdmin ? ['Istoric' as const] : []),
+    ...(canViewAudit ? ['Istoric' as const] : []),
   ];
   const returnToClients = () => router.replace('/service/clients');
   const state = useAsyncData(async () => {
@@ -65,13 +67,13 @@ export default function ClientDetailsScreen() {
       try { client = await clientRepository.ensureQr(client.id); } catch { /* Keep legacy client profiles accessible if QR provisioning is unavailable. */ }
     }
     const [sheets, financials, history, whatsAppMessages] = await Promise.all([
-      serviceSheetRepository.list(client.propertyId),
+      canViewSheets ? serviceSheetRepository.list(client.propertyId) : Promise.resolve(null),
       canViewFinancials ? clientRepository.getFinancials(client.id) : Promise.resolve(null),
-      isAdmin ? apiRequest<Paginated<AuditLog>>(`/audit-logs?propertyId=${client.propertyId}&entityId=${client.id}`) : Promise.resolve({ data: [], page: 1, pageSize: 0, total: 0, totalPages: 0 }),
+      canViewAudit ? apiRequest<Paginated<AuditLog>>(`/audit-logs?propertyId=${client.propertyId}&entityId=${client.id}`) : Promise.resolve({ data: [], page: 1, pageSize: 0, total: 0, totalPages: 0 }),
       whatsAppMessageRepository.list(client.propertyId).catch(() => []),
     ]);
-    return { client, sheets: sheets.data.filter((item) => item.clientId === client.id), financials, history: history.data, whatsAppMessages };
-  }, [canViewFinancials, clientId, isAdmin]);
+    return { client, sheets: sheets?.data.filter((item) => item.clientId === client.id) ?? [], financials, history: history.data, whatsAppMessages };
+  }, [canViewAudit, canViewFinancials, canViewSheets, clientId]);
   useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);
 
   if (state.loading) return <Screen header={<AppHeader title="Detalii client" back onBack={returnToClients} />}><LoadingState rows={5} /></Screen>;
@@ -79,6 +81,7 @@ export default function ClientDetailsScreen() {
 
   const { client, sheets, financials, history, whatsAppMessages } = state.data;
   const serviceSheet = sheets[0];
+  const canOpenServiceSheet = serviceSheet ? canViewSheets : canCreateSheets;
   const contact = async (url: string) => { if (await Linking.canOpenURL(url)) await Linking.openURL(url); else showToast('Acțiunea nu este disponibilă.', 'error'); };
   const openServiceSheet = () => serviceSheet
     ? router.push(`/service/service-sheets/${serviceSheet.id}`)
@@ -90,7 +93,7 @@ export default function ClientDetailsScreen() {
   };
   const replaceFinancials = (next: ClientFinancialOverview) => state.setData((current) => current ? { ...current, financials: next } : current);
   const reloadFinanceHistory = async () => {
-    if (!isAdmin) return;
+    if (!canViewAudit) return;
     const next = await apiRequest<Paginated<AuditLog>>(`/audit-logs?propertyId=${client.propertyId}&entityId=${client.id}`);
     state.setData((current) => current ? { ...current, history: next.data } : current);
   };
@@ -187,7 +190,7 @@ export default function ClientDetailsScreen() {
         <ClientQuickAction label="Sună" icon="call-outline" onPress={() => void contact(`tel:${client.phone}`)} />
         <ClientQuickAction label="WhatsApp" icon="logo-whatsapp" onPress={() => setWhatsAppOpen(true)} />
         <ClientQuickAction label="Email" icon="mail-outline" disabled={!client.email} onPress={() => void contact(`mailto:${client.email}`)} />
-        <ClientQuickAction label="Dosar" icon="folder-open-outline" primary onPress={openServiceSheet} />
+        {canOpenServiceSheet ? <ClientQuickAction label="Dosar" icon="folder-open-outline" primary onPress={openServiceSheet} /> : null}
       </View>
     </Card>
     <View accessibilityRole="tablist" style={[styles.tabs, { backgroundColor: colors.surface, borderColor: colors.border }]}>{tabs.map((item) => {

@@ -23,7 +23,7 @@ import { useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 export default function DashboardScreen() {
-  const { user } = useAuth(); const { activeProperty } = useProperty(); const propertyId = activeProperty?.id ?? '';
+  const { user, hasPermission } = useAuth(); const { activeProperty } = useProperty(); const propertyId = activeProperty?.id ?? '';
   const { colors } = useAppTheme();
   const [financeOpen, setFinanceOpen] = useState(false);
   const [heroHeight, setHeroHeight] = useState(164);
@@ -33,7 +33,19 @@ export default function DashboardScreen() {
   const actionColumns = width < 750 ? 2 : 4;
   const statCardBasis = statColumns === 3 ? 170 : 150;
   const actionCardBasis = actionColumns === 4 ? 145 : 150;
-  const state = useAsyncData(async () => { const [metrics, sheets] = await Promise.all([dashboardRepository.get(propertyId), serviceSheetRepository.list(propertyId)]); return { metrics, sheets: sheets.data.slice(0, 3) }; }, [propertyId]);
+  const canViewClients = hasPermission('clients.view');
+  const canCreateClients = hasPermission('clients.create');
+  const canViewSheets = hasPermission('service_sheets.view');
+  const canScanQr = hasPermission('qr.scan');
+  const canViewCollaborators = hasPermission('collaborators.view');
+  const canViewFinancials = hasPermission('financials.view');
+  const state = useAsyncData(async () => {
+    const [metrics, sheets] = await Promise.all([
+      dashboardRepository.get(propertyId),
+      canViewSheets ? serviceSheetRepository.list(propertyId) : Promise.resolve(null),
+    ]);
+    return { metrics, sheets: sheets?.data.slice(0, 3) ?? [] };
+  }, [canViewSheets, propertyId]);
   useRefreshOnFocus(() => {
     setLocalHour(new Date().getHours());
     return state.reload(true);
@@ -58,11 +70,11 @@ export default function DashboardScreen() {
       <View style={styles.stats}>
         <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Total clienți" value={metrics.clientsTotal} icon="people-outline" color={palette.electric} helper={`+${metrics.clientsNew} noi`} />
         <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Clienți în așteptare" value={metrics.clientsWaiting} icon="time-outline" color={palette.warning} />
-        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="G-Shop Net" value={formatCurrency(metrics.gshopNet)} icon="wallet-outline" color={palette.purple} />
+        {canViewFinancials ? <><StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="G-Shop Net" value={formatCurrency(metrics.gshopNet)} icon="wallet-outline" color={palette.purple} />
         <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Venituri on hold" value={formatCurrency(metrics.revenueOnHold)} icon="hourglass-outline" color={palette.warning} />
         <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Total încasări" value={formatCurrency(metrics.totalRevenue)} icon="cash-outline" color={palette.success} />
         <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Total cheltuieli" value={formatCurrency(metrics.totalExpenses)} icon="receipt-outline" color={palette.warning} />
-        <StatCard
+        {canViewCollaborators ? <StatCard
           style={{ flexGrow: 1, flexBasis: statCardBasis }}
           label="Total colaboratori"
           value={formatCurrency(metrics.collaboratorTotal)}
@@ -71,25 +83,25 @@ export default function DashboardScreen() {
           helper="Ține apăsat"
           helperIcon="finger-print-outline"
           onLongPress={() => setFinanceOpen(true)}
-        />
+        /> : null}</> : null}
       </View>
     </View>
     <View style={styles.section}>
       <DashboardSectionTitle title="Acțiuni rapide" subtitle="Ajungi imediat la comenzile folosite frecvent" icon="flash-outline" />
       <View style={styles.actions}>
-        <QuickAction style={{ flexGrow: 1, flexBasis: actionCardBasis }} label="Adaugă client" icon="person-add-outline" onPress={() => router.push('/service/clients/create')} />
-        <QuickAction style={{ flexGrow: 1, flexBasis: actionCardBasis }} label="Fișe de service" icon="document-text-outline" accent={palette.purple} onPress={() => router.push('/service/service-sheets')} />
-        <QuickAction style={{ flexGrow: 1, flexBasis: actionCardBasis }} label="Scanează QR" icon="scan-outline" accent={palette.success} onPress={() => router.push('/service/qr-scanner')} />
-        <QuickAction style={{ flexGrow: 1, flexBasis: actionCardBasis }} label="Colaboratori" icon="people-circle-outline" accent={palette.cyan} onPress={() => router.push('/service/collaborators')} />
+        {canCreateClients ? <QuickAction style={{ flexGrow: 1, flexBasis: actionCardBasis }} label="Adaugă client" icon="person-add-outline" onPress={() => router.push('/service/clients/create')} /> : null}
+        {canViewSheets ? <QuickAction style={{ flexGrow: 1, flexBasis: actionCardBasis }} label="Fișe de service" icon="document-text-outline" accent={palette.purple} onPress={() => router.push('/service/service-sheets')} /> : null}
+        {canScanQr ? <QuickAction style={{ flexGrow: 1, flexBasis: actionCardBasis }} label="Scanează QR" icon="scan-outline" accent={palette.success} onPress={() => router.push('/service/qr-scanner')} /> : null}
+        {canViewCollaborators ? <QuickAction style={{ flexGrow: 1, flexBasis: actionCardBasis }} label="Colaboratori" icon="people-circle-outline" accent={palette.cyan} onPress={() => router.push('/service/collaborators')} /> : null}
       </View>
     </View>
     <View style={[styles.columns, styles.lowerSection]}>
-      <Card style={styles.panel}><SectionHeader title="Activitate QR azi" action="Vezi clienții" onAction={() => router.push('/service/clients')} /><QRChart generated={metrics.qrGenerated} used={metrics.qrUsed} /><AppText variant="caption" style={{ color: palette.success, textAlign: 'right' }}>↗ actualizat în timp real</AppText></Card>
-      <Card style={styles.panel}><SectionHeader title="Fișe de service recente" action="Vezi toate" onAction={() => router.push('/service/service-sheets')} />{sheets.length ? sheets.map((sheet) => <View key={sheet.id} style={styles.sheetRow}><View style={{ flex: 1 }}><AppText variant="label">{sheet.number} · {sheet.equipment}</AppText><AppText variant="caption" muted>{sheet.client ? `${sheet.client.firstName} ${sheet.client.lastName}` : 'Client'} · {formatDate(sheet.receivedAt)}</AppText></View><AppText variant="label" style={{ color: palette.electric }}>{formatCurrency(sheet.totalCost)}</AppText></View>) : <AppText muted>Nu există fișe recente.</AppText>}</Card>
+      <Card style={styles.panel}><SectionHeader title="Activitate QR azi" action={canViewClients ? 'Vezi clienții' : undefined} onAction={canViewClients ? () => router.push('/service/clients') : undefined} /><QRChart generated={metrics.qrGenerated} used={metrics.qrUsed} /><AppText variant="caption" style={{ color: palette.success, textAlign: 'right' }}>↗ actualizat în timp real</AppText></Card>
+      {canViewSheets ? <Card style={styles.panel}><SectionHeader title="Fișe de service recente" action="Vezi toate" onAction={() => router.push('/service/service-sheets')} />{sheets.length ? sheets.map((sheet) => <View key={sheet.id} style={styles.sheetRow}><View style={{ flex: 1 }}><AppText variant="label">{sheet.number} · {sheet.equipment}</AppText><AppText variant="caption" muted>{sheet.client ? `${sheet.client.firstName} ${sheet.client.lastName}` : 'Client'} · {formatDate(sheet.receivedAt)}</AppText></View><AppText variant="label" style={{ color: palette.electric }}>{formatCurrency(sheet.totalCost)}</AppText></View>) : <AppText muted>Nu există fișe recente.</AppText>}</Card> : null}
     </View>
         </View>
       </ScrollView>
-    <CollaboratorFinanceSheet visible={financeOpen} propertyId={propertyId} onClose={() => setFinanceOpen(false)} onChanged={() => void state.reload(true)} />
+    {canViewFinancials && canViewCollaborators ? <CollaboratorFinanceSheet visible={financeOpen} propertyId={propertyId} onClose={() => setFinanceOpen(false)} onChanged={() => void state.reload(true)} /> : null}
     </View>
   </Screen>;
 }

@@ -55,11 +55,13 @@ export function ClientCard({ client, index = 0, onWhatsApp, onDeleteRequest }: C
       translateX.stopAnimation();
     },
     onPanResponderMove: (_, gesture) => {
-      translateX.setValue(Math.max(-SWIPE_LIMIT, Math.min(SWIPE_LIMIT, gesture.dx)));
+      const minimum = onDeleteRequest ? -SWIPE_LIMIT : 0;
+      const maximum = onWhatsApp ? SWIPE_LIMIT : 0;
+      translateX.setValue(Math.max(minimum, Math.min(maximum, gesture.dx)));
     },
     onPanResponderRelease: (_, gesture) => {
-      const swipedRight = gesture.dx >= SWIPE_TRIGGER || (gesture.dx >= FLING_TRIGGER && gesture.vx >= 0.45);
-      const swipedLeft = gesture.dx <= -SWIPE_TRIGGER || (gesture.dx <= -FLING_TRIGGER && gesture.vx <= -0.45);
+      const swipedRight = Boolean(onWhatsApp) && (gesture.dx >= SWIPE_TRIGGER || (gesture.dx >= FLING_TRIGGER && gesture.vx >= 0.45));
+      const swipedLeft = Boolean(onDeleteRequest) && (gesture.dx <= -SWIPE_TRIGGER || (gesture.dx <= -FLING_TRIGGER && gesture.vx <= -0.45));
       const action = swipedRight
         ? () => onWhatsApp?.(client)
         : swipedLeft
@@ -78,17 +80,27 @@ export function ClientCard({ client, index = 0, onWhatsApp, onDeleteRequest }: C
   const openDetails = () => {
     if (!swipeStarted.current) router.push(`/service/clients/${client.id}`);
   };
+  const accessibilityActions = [
+    { name: 'activate', label: 'Deschide detaliile clientului' },
+    ...(onWhatsApp ? [{ name: 'whatsapp', label: 'Deschide WhatsApp' }] : []),
+    ...(onDeleteRequest ? [{ name: 'delete', label: 'Solicită ștergerea clientului' }] : []),
+  ];
+  const accessibilityHint = onWhatsApp && onDeleteRequest
+    ? 'Deschide detaliile. Glisează spre dreapta pentru WhatsApp sau spre stânga pentru ștergere.'
+    : onWhatsApp
+      ? 'Deschide detaliile. Glisează spre dreapta pentru WhatsApp.'
+      : 'Deschide detaliile clientului.';
 
   return <View style={[styles.swipeShell, mobile && styles.swipeShellMobile, { backgroundColor: colors.surfaceMuted }]}>
     <View style={styles.swipeActions} pointerEvents="none">
-      <View style={[styles.swipeAction, styles.whatsAppAction]}>
+      {onWhatsApp ? <View style={[styles.swipeAction, styles.whatsAppAction]}>
         <Ionicons name="logo-whatsapp" size={25} color="#fff" />
         <AppText variant="caption" style={styles.actionText}>WhatsApp</AppText>
-      </View>
-      <View style={[styles.swipeAction, styles.deleteAction]}>
+      </View> : <View />}
+      {onDeleteRequest ? <View style={[styles.swipeAction, styles.deleteAction]}>
         <Ionicons name="trash-outline" size={24} color="#fff" />
         <AppText variant="caption" style={styles.actionText}>Șterge</AppText>
-      </View>
+      </View> : <View />}
     </View>
 
     <Animated.View
@@ -103,12 +115,8 @@ export function ClientCard({ client, index = 0, onWhatsApp, onDeleteRequest }: C
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${fullName(client)}, ${client.phone}, ${finalized ? 'finalizat' : 'activ'}`}
-        accessibilityHint="Deschide detaliile. Glisează spre dreapta pentru WhatsApp sau spre stânga pentru ștergere."
-        accessibilityActions={[
-          { name: 'activate', label: 'Deschide detaliile clientului' },
-          { name: 'whatsapp', label: 'Deschide WhatsApp' },
-          { name: 'delete', label: 'Solicită ștergerea clientului' },
-        ]}
+        accessibilityHint={accessibilityHint}
+        accessibilityActions={accessibilityActions}
         onAccessibilityAction={(event) => {
           if (event.nativeEvent.actionName === 'whatsapp') onWhatsApp?.(client);
           else if (event.nativeEvent.actionName === 'delete') onDeleteRequest?.(client);

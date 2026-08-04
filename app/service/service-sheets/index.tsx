@@ -5,6 +5,7 @@ import { AppText } from '@/components/ui/AppText';
 import { Card } from '@/components/ui/Card';
 import { Screen } from '@/components/ui/Screen';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
+import { useAuth } from '@/contexts/AuthContext';
 import { useProperty } from '@/contexts/PropertyContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -21,11 +22,14 @@ import { useRef, useState } from 'react';
 import { Linking, Pressable, StyleSheet, View } from 'react-native';
 
 export default function ServiceSheetsScreen() {
+  const { hasPermission } = useAuth();
   const { activeProperty } = useProperty();
   const { colors } = useAppTheme();
   const { showToast } = useToast();
   const [selectedSheet, setSelectedSheet] = useState<ServiceSheet | null>(null);
   const lastLongPressAt = useRef(0);
+  const canUpdate = hasPermission('service_sheets.update');
+  const canViewFinancials = hasPermission('financials.view');
   const state = useAsyncData(() => serviceSheetRepository.list(activeProperty?.id ?? ''), [activeProperty?.id]);
   useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);
   const sheets = (state.data?.data ?? []).filter((sheet, index, items) => items.findIndex((item) => item.clientId === sheet.clientId) === index);
@@ -125,7 +129,7 @@ export default function ServiceSheetsScreen() {
                 <AppText variant="caption" muted>{formatDate(sheet.receivedAt)}</AppText>
               </View>
               <ServiceSheetStatus status={sheet.status} />
-              <AppText variant="label" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={[styles.value, { color: colors.primary }]}>{formatFinanceMoney(sheet.totalCost, sheet.currencyCode ?? 'RON')}</AppText>
+              {canViewFinancials ? <AppText variant="label" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={[styles.value, { color: colors.primary }]}>{formatFinanceMoney(sheet.totalCost, sheet.currencyCode ?? 'RON')}</AppText> : null}
             </View>
           </Card>
         </Pressable>
@@ -149,9 +153,9 @@ export default function ServiceSheetsScreen() {
       sheet={selectedSheet}
       onClose={() => setSelectedSheet(null)}
       onView={openSheet}
-      onEdit={editSheet}
-      onSend={sendSheet}
-      onDelete={deleteSheet}
+      onEdit={canUpdate ? editSheet : undefined}
+      onSend={canUpdate ? sendSheet : undefined}
+      onDelete={canUpdate ? deleteSheet : undefined}
     />
   </Screen>;
 }

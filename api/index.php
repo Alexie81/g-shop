@@ -702,6 +702,9 @@ function client_for_user(array $client, array $user): array {
     if (!empty($client['qr']) && !user_has_permission($user, 'qr.share')) {
         unset($client['qr']['token'], $client['qr']['publicUrl']);
     }
+    if (!user_has_permission($user, 'collaborators.view') && !user_has_permission($user, 'financials.view')) {
+        unset($client['collaboratorId'], $client['commissionType'], $client['commissionValue'], $client['collaborators']);
+    }
     return $client;
 }
 function sheet_select(): string {
@@ -724,6 +727,14 @@ function map_sheet(array $row): array {
     return $sheet;
 }
 function get_sheet(string $id): array { $stmt = db()->prepare(sheet_select() . ' WHERE s.id=? LIMIT 1'); $stmt->execute([uuid_bin($id)]); $row = $stmt->fetch(); if (!$row) fail('Fișa nu există.', 404); return map_sheet($row); }
+function sheet_for_user(array $sheet, array $user): array {
+    if (!user_has_permission($user, 'financials.view')) {
+        $sheet['directCosts'] = 0.0;
+        $sheet['netValue'] = 0.0;
+        $sheet['collaboratorCommission'] = 0.0;
+    }
+    return $sheet;
+}
 function company_for_service_sheet(array $sheet): array {
     $company=is_array($sheet['companySnapshot']??null)?$sheet['companySnapshot']:null;
     $liveCompany=null;if(!empty($sheet['companyId'])){$stmt=db()->prepare(company_select().' WHERE id=? AND property_id=? AND is_active=1 LIMIT 1');$stmt->execute([uuid_bin((string)$sheet['companyId']),uuid_bin((string)$sheet['propertyId'])]);$row=$stmt->fetch();if($row)$liveCompany=map_company_details($row,true);}
@@ -1150,11 +1161,6 @@ function require_financial_write(): array {
     if (empty($user['isPrimaryAdmin']) && (!in_array('financials.view', $user['permissions'], true) || !in_array('clients.update', $user['permissions'], true))) {
         fail('Nu ai permisiunea necesară pentru modificarea datelor financiare.', 403);
     }
-    return $user;
-}
-function require_admin(): array {
-    $user = current_user();
-    if ($user['role'] !== 'ADMIN') fail('Această acțiune este disponibilă numai administratorilor.', 403);
     return $user;
 }
 function validated_uuid(mixed $value, string $label): string {
@@ -1598,6 +1604,7 @@ try {
         $legacyCommissionStmt=$pdo->prepare("SELECT COALESCE(SUM(CASE WHEN co.status='PAID' AND co.paid_at IS NOT NULL THEN co.commission_value ELSE 0 END),0) paid,COALESCE(SUM(CASE WHEN co.status IN ('ESTIMATED','CALCULATED','APPROVED') OR (co.status='PAID' AND co.paid_at IS NULL) THEN co.commission_value ELSE 0 END),0) on_hold FROM commissions co JOIN clients c ON c.id=co.client_id LEFT JOIN client_financials cf ON cf.client_id=c.id WHERE co.property_id=? AND c.is_active=1 AND cf.client_id IS NULL AND NOT EXISTS(SELECT 1 FROM client_expenses e WHERE e.client_id=c.id) AND co.is_active=1 AND co.status<>'CANCELLED'");$legacyCommissionStmt->execute([$p]);$legacyCommissionSummary=$legacyCommissionStmt->fetch();
         $legacyRevenue=(float)$legacy['total_revenue'];$legacyDirectCosts=(float)$legacy['direct_costs'];$totalRevenue=$financeRevenueRon+$legacyRevenue;$revenueOnHold=$financeHoldRon+(float)$legacy['revenue_on_hold'];$clientsWaiting=$financeWaiting+(int)$legacy['clients_waiting'];
         $collaboratorPaid=$financeCollaboratorPaidRon+(float)$legacyCommissionSummary['paid'];$collaboratorOnHold=$financeCollaboratorOnHoldRon+(float)$legacyCommissionSummary['on_hold'];$collaboratorTotal=$collaboratorPaid+$collaboratorOnHold;$totalExpenses=$financeInternalRon+$legacyDirectCosts+$collaboratorPaid;$gshopNet=$financeNetRon+($legacyRevenue-$legacyDirectCosts-(float)$legacyCommissionSummary['paid']);
+        if(!user_has_permission($user,'financials.view')){$totalRevenue=0.0;$totalExpenses=0.0;$revenueOnHold=0.0;$gshopNet=0.0;$collaboratorTotal=0.0;$collaboratorPaid=0.0;$collaboratorOnHold=0.0;}
         respond(['clientsTotal'=>$clients,'totalRevenue'=>round($totalRevenue,2),'totalExpenses'=>round($totalExpenses,2),'clientsWaiting'=>$clientsWaiting,'revenueOnHold'=>round($revenueOnHold,2),'gshopNet'=>round($gshopNet,2),'collaboratorTotal'=>round($collaboratorTotal,2),'collaboratorPaid'=>round($collaboratorPaid,2),'collaboratorOnHold'=>round($collaboratorOnHold,2),'clientsNew'=>$clientsNew,'serviceSheetsOpen'=>$open,'serviceSheetsInProgress'=>$progress,'serviceSheetsCompleted'=>$completed,'usersActive'=>$users,'collaboratorsActive'=>$collabs,'qrGenerated'=>$qrGenerated,'qrUsed'=>$qrUsed,'estimatedRevenue'=>round($totalRevenue,2),'collaboratorCommissions'=>round($collaboratorTotal,2),'collaboratorPayments'=>round($collaboratorPaid,2)]);
     }
 
@@ -1700,10 +1707,10 @@ try {
         respond(['deleted'=>true,'id'=>$expenseId]);
     }
     if ($method === 'GET' && path_match('/clients/{id}/participants',$path,$params)) {
-        $user=require_admin();$client=get_client(validated_uuid($params['id'],'Clientul'));ensure_property($client['propertyId'],$user);respond(client_participant_users($client));
+        $user=require_permission('clients.view');$client=get_client(validated_uuid($params['id'],'Clientul'));ensure_property($client['propertyId'],$user);respond(client_participant_users($client));
     }
     if ($method === 'PUT' && path_match('/clients/{id}/participants',$path,$params)) {
-        $user=require_admin();$client=get_client(validated_uuid($params['id'],'Clientul'));ensure_property($client['propertyId'],$user);$body=json_body();$rawIds=$body['userIds']??null;if(!is_array($rawIds)||count($rawIds)>100)fail('Lista participanților este invalidă.',422);$userIds=[];foreach($rawIds as$value)$userIds[]=validated_uuid($value,'Participantul');$userIds=array_values(array_unique($userIds));sort($userIds);
+        $user=require_permission('clients.update');$client=get_client(validated_uuid($params['id'],'Clientul'));ensure_property($client['propertyId'],$user);$body=json_body();$rawIds=$body['userIds']??null;if(!is_array($rawIds)||count($rawIds)>100)fail('Lista participanților este invalidă.',422);$userIds=[];foreach($rawIds as$value)$userIds[]=validated_uuid($value,'Participantul');$userIds=array_values(array_unique($userIds));sort($userIds);
         if($userIds){$placeholders=implode(',',array_fill(0,count($userIds),'?'));$args=[uuid_bin($client['propertyId'])];foreach($userIds as$id)$args[]=uuid_bin($id);$check=db()->prepare('SELECT COUNT(DISTINCT u.id) FROM users u JOIN user_properties up ON up.user_id=u.id WHERE up.property_id=? AND u.is_active=1 AND u.id IN ('.$placeholders.')');$check->execute($args);if((int)$check->fetchColumn()!==count($userIds))fail('Unul sau mai mulți participanți nu sunt utilizatori activi ai proprietății.',422);}
         $beforeStmt=db()->prepare('SELECT '.uuid_sql('user_id').' id FROM client_participants WHERE client_id=? ORDER BY user_id');$beforeStmt->execute([uuid_bin($client['id'])]);$beforeIds=array_column($beforeStmt->fetchAll(),'id');sort($beforeIds);if($beforeIds===$userIds)respond(client_participant_users($client));
         $pdo=db();$pdo->beginTransaction();try{$pdo->prepare('DELETE FROM client_participants WHERE client_id=?')->execute([uuid_bin($client['id'])]);if($userIds){$insert=$pdo->prepare('INSERT INTO client_participants (client_id,user_id) VALUES (?,?)');foreach($userIds as$id)$insert->execute([uuid_bin($client['id']),uuid_bin($id)]);}$pdo->commit();}catch(Throwable$e){$pdo->rollBack();throw$e;}
@@ -1788,7 +1795,7 @@ try {
         respond(client_for_user($after,$user));
     }
     if ($method === 'DELETE' && path_match('/clients/{id}', $path, $params)) {
-        $user=require_permission('clients.update');$clientId=validated_uuid($params['id'],'Clientul');$before=get_client($clientId);ensure_property($before['propertyId'],$user);
+        $user=require_permission('clients.delete');$clientId=validated_uuid($params['id'],'Clientul');$before=get_client($clientId);ensure_property($before['propertyId'],$user);
         if(empty($before['isActive']))respond(['deleted'=>true,'id'=>$clientId]);
         $pdo=db();ensure_service_documents_table($pdo);$pdo->beginTransaction();$now=now_utc();
         $clientLock=$pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE');$clientLock->execute([uuid_bin($clientId)]);$locked=get_client($clientId);
@@ -1937,14 +1944,15 @@ try {
         $user=require_permission('service_sheets.view');$propertyId=validated_uuid((string)($_GET['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);ensure_service_documents_table(db());
         $sql='SELECT '.uuid_sql('s.id').' service_sheet_id,s.number service_sheet_number,'.uuid_sql('c.id').' client_id,TRIM(CONCAT(c.first_name,\' \',c.last_name)) client_name,s.equipment,s.brand,s.model,s.status,s.received_at,MAX(CASE WHEN d.type=\'INTAKE\' THEN d.number END) intake_number,MAX(CASE WHEN d.type=\'INTAKE\' THEN d.document_at END) intake_at,MAX(CASE WHEN d.type=\'FINAL_ESTIMATE\' THEN d.number END) final_estimate_number,MAX(CASE WHEN d.type=\'FINAL_ESTIMATE\' THEN d.document_at END) final_estimate_at,MAX(CASE WHEN d.type=\'EXIT\' THEN d.number END) exit_number,MAX(CASE WHEN d.type=\'EXIT\' THEN d.document_at END) exit_at,MAX(CASE WHEN d.type=\'WARRANTY\' THEN d.number END) warranty_number,MAX(CASE WHEN d.type=\'WARRANTY\' THEN d.document_at END) warranty_at FROM service_sheets s JOIN clients c ON c.id=s.client_id AND c.is_active=1 LEFT JOIN service_documents d ON d.service_sheet_id=s.id AND d.is_active=1 AND d.status=\'PUBLISHED\' WHERE s.property_id=? AND s.is_active=1 GROUP BY s.id,s.number,c.id,c.first_name,c.last_name,s.equipment,s.brand,s.model,s.status,s.received_at ORDER BY s.received_at DESC,s.number DESC LIMIT 5000';$stmt=db()->prepare($sql);$stmt->execute([uuid_bin($propertyId)]);$rows=[];foreach($stmt->fetchAll()as$row)$rows[]=camel_row($row);respond($rows);
     }
-    if ($method==='GET'&&$path==='/service-sheets') { $user=require_permission('service_sheets.view');$propertyId=(string)($_GET['propertyId']??'');ensure_property($propertyId,$user);$stmt=db()->prepare(sheet_select().' WHERE s.property_id=? AND s.is_active=1 ORDER BY s.received_at DESC,s.created_at DESC LIMIT 100');$stmt->execute([uuid_bin($propertyId)]);$data=array_map('map_sheet',$stmt->fetchAll());respond(['data'=>$data,'page'=>1,'pageSize'=>100,'total'=>count($data),'totalPages'=>1]); }
-    if ($method==='GET'&&path_match('/service-sheets/{id}',$path,$params)) { $user=require_permission('service_sheets.view');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);respond($sheet); }
+    if ($method==='GET'&&$path==='/service-sheets') { $user=require_permission('service_sheets.view');$propertyId=(string)($_GET['propertyId']??'');ensure_property($propertyId,$user);$stmt=db()->prepare(sheet_select().' WHERE s.property_id=? AND s.is_active=1 ORDER BY s.received_at DESC,s.created_at DESC LIMIT 100');$stmt->execute([uuid_bin($propertyId)]);$data=array_map(fn($row)=>sheet_for_user(map_sheet($row),$user),$stmt->fetchAll());respond(['data'=>$data,'page'=>1,'pageSize'=>100,'total'=>count($data),'totalPages'=>1]); }
+    if ($method==='GET'&&path_match('/service-sheets/{id}',$path,$params)) { $user=require_permission('service_sheets.view');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);respond(sheet_for_user($sheet,$user)); }
     if ($method==='GET'&&path_match('/service-sheets/{id}/documents',$path,$params)) { $user=require_permission('service_sheets.view');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);respond(service_document_slots($sheet['id'])); }
     if ($method==='GET'&&path_match('/service-sheets/{id}/documents/{type}/pdf',$path,$params)) { $user=require_permission('service_sheets.view');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);$type=validated_service_document_type($params['type']);$row=service_document_existing_row($sheet['id'],$type);if(!$row)fail('Documentul nu a fost încă generat.',404);stream_service_document_row($row); }
     if ($method==='DELETE'&&path_match('/service-sheets/{id}/documents/{type}',$path,$params)) { $user=require_service_document_write(true);$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);$type=validated_service_document_type($params['type']);$row=service_document_existing_row($sheet['id'],$type);if(!$row)fail('Documentul nu a fost încă generat.',404);$before=map_service_document($row);$now=now_utc();db()->prepare('UPDATE service_documents SET is_active=0,updated_at=?,updated_by=? WHERE id=? AND is_active=1')->execute([$now,uuid_bin($user['id']),uuid_bin((string)$row['id'])]);remove_obsolete_service_document_file($row['file_path']??null);audit_log('SERVICE_DOCUMENT_DELETED','service_documents','Document șters pentru refacere: '.$before['label'],'ServiceDocument',(string)$row['id'],$sheet['propertyId'],$before,['deleted'=>true,'type'=>$type],$user);respond(['deleted'=>true,'type'=>$type]); }
     if ($method==='POST'&&path_match('/service-sheets/{id}/documents/{type}',$path,$params)) { current_user();$sheet=get_sheet($params['id']);$type=validated_service_document_type($params['type']);$before=service_document_record($sheet['id'],$type,false);$user=require_service_document_write($before!==null);ensure_property($sheet['propertyId'],$user);$document=generate_service_document_record($sheet['id'],$type,json_body(),$user);audit_log($before?'SERVICE_DOCUMENT_REGENERATED':'SERVICE_DOCUMENT_GENERATED','service_documents',($before?'Document actualizat: ':'Document generat: ').$document['label'],'ServiceSheet',$sheet['id'],$sheet['propertyId'],$before,$document,$user);respond($document,$before?200:201); }
     if ($method==='POST'&&$path==='/service-sheets') {
         $user=require_permission('service_sheets.create');$body=json_body();$propertyId=(string)($body['propertyId']??'');ensure_property($propertyId,$user);
+        if(!user_has_permission($user,'financials.view')&&count(array_intersect(array_keys($body),['directCosts','netValue']))>0)fail('Nu ai permisiunea de a modifica valorile financiare interne.',403);
         if(empty($body['clientId'])||empty($body['reportedIssue']))fail('Clientul și problema sunt obligatorii.',422);
         $clientId=(string)$body['clientId'];$client=get_client($clientId);
         if($client['propertyId']!==$propertyId)fail('Clientul nu aparține proprietății selectate.',422);
@@ -1972,10 +1980,11 @@ try {
         audit_log('SERVICE_SHEET_CREATED','service_sheets','Fișă creată: '.$number,'ServiceSheet',$id,$propertyId,null,$body,$user);
         if(!empty($financeSync['changed']))audit_log('CLIENT_FINANCIALS_SYNCED_FROM_SHEET','financials','Costurile clientului au fost sincronizate din fișa '.$number,'Client',$clientId,$propertyId,financial_mutable_snapshot($financeSync['before']),financial_mutable_snapshot($financeSync['after']),$user);
         if($commissionCreated)audit_log('COMMISSION_CREATED','commissions','Comision aprobat automat pentru fișa '.$number,'Client',$clientId,$propertyId,null,client_financial_bundle($client)['collaborator'],$user);
-        gshop_queue_service_sheet_pdf($id);respond(get_sheet($id),201);
+        gshop_queue_service_sheet_pdf($id);respond(sheet_for_user(get_sheet($id),$user),201);
     }
     if ($method==='PUT'&&path_match('/service-sheets/{id}',$path,$params)) {
         $user=require_permission('service_sheets.update');$before=get_sheet($params['id']);ensure_property($before['propertyId'],$user);$body=json_body();
+        if(!user_has_permission($user,'financials.view')&&count(array_intersect(array_keys($body),['directCosts','netValue']))>0)fail('Nu ai permisiunea de a modifica valorile financiare interne.',403);
         if(array_key_exists('technicianId',$body)){$technicianId=trim((string)($body['technicianId']??''));if($technicianId==='')$body['technicianId']=null;else{$technicianId=validated_uuid($technicianId,'Tehnicianul');$selectedTechnician=technician_for_property($technicianId,$before['propertyId']);$body['technicianId']=$technicianId;if(!array_key_exists('technicianName',$body))$body['technicianName']=$selectedTechnician['name'];}}
         if(array_key_exists('technicianName',$body)){$technicianName=trim((string)($body['technicianName']??''));$body['technicianName']=$technicianName===''?null:validated_person_name($technicianName,'Numele tehnicianului');}
         $financeChanged=count(array_intersect(array_keys($body),['partsCost','laborCost','totalCost','directCosts','netValue']))>0;
@@ -2000,7 +2009,7 @@ try {
         $after=get_sheet($params['id']);audit_log('SERVICE_SHEET_UPDATED','service_sheets','Fișă actualizată: '.$after['number'],'ServiceSheet',$params['id'],$after['propertyId'],$before,$after,$user);
         if($financeChanged&&!empty($financeSync['changed']))audit_log('CLIENT_FINANCIALS_SYNCED_FROM_SHEET','financials','Costurile clientului au fost sincronizate din fișa '.$after['number'],'Client',$after['clientId'],$after['propertyId'],financial_mutable_snapshot($financeSync['before']),financial_mutable_snapshot($financeSync['after']),$user);
         if($financeChanged&&$recalculated>0)audit_log('COMMISSION_RECALCULATED','commissions','Comision recalculat pentru fișa '.$after['number'],'ServiceSheet',$params['id'],$after['propertyId'],['totalCost'=>$before['totalCost'],'directCosts'=>$before['directCosts'],'netValue'=>$before['netValue'],'collaboratorCommission'=>$before['collaboratorCommission']],['totalCost'=>$after['totalCost'],'directCosts'=>$after['directCosts'],'netValue'=>$after['netValue'],'collaboratorCommission'=>$after['collaboratorCommission']],$user);
-        gshop_queue_service_sheet_pdf($after['id']);respond($after);
+        gshop_queue_service_sheet_pdf($after['id']);respond(sheet_for_user($after,$user));
     }
     if ($method==='DELETE'&&path_match('/service-sheets/{id}',$path,$params)) {
         $user=require_permission('service_sheets.update');$before=get_sheet($params['id']);ensure_property($before['propertyId'],$user);
@@ -2027,7 +2036,7 @@ try {
     }
     if ($method==='POST'&&path_match('/service-sheets/{id}/signature',$path,$params)) {
         $user=require_permission('service_sheets.sign');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);$client=get_client((string)$sheet['clientId']);$result=save_client_signature_data($client,(string)(json_body()['signature']??''),$user);
-        audit_log('SERVICE_SHEET_SIGNED','service_sheets','Semnătură client salvată și reutilizată în documentele reparației '.$sheet['number'],'ServiceSheet',$sheet['id'],$sheet['propertyId'],null,['signedAt'=>$result['signedAt'],'documentsRegenerated'=>true,'savedAtClient'=>true],$user);respond(get_sheet($sheet['id']));
+        audit_log('SERVICE_SHEET_SIGNED','service_sheets','Semnătură client salvată și reutilizată în documentele reparației '.$sheet['number'],'ServiceSheet',$sheet['id'],$sheet['propertyId'],null,['signedAt'=>$result['signedAt'],'documentsRegenerated'=>true,'savedAtClient'=>true],$user);respond(sheet_for_user(get_sheet($sheet['id']),$user));
     }
     if ($method==='POST'&&path_match('/service-sheets/{id}/pdf',$path,$params)) {
         current_user();$sheet=get_sheet($params['id']);$existingDocument=service_document_record($sheet['id'],'INTAKE',false);$user=require_service_document_write($existingDocument!==null);ensure_property($sheet['propertyId'],$user);
@@ -2144,7 +2153,7 @@ try {
     }
 
     if ($method==='GET'&&$path==='/users') { $user=require_permission('users.view');ensure_user_deletion_field();ensure_user_permission_catalog();$propertyId=(string)($_GET['propertyId']??'');ensure_property($propertyId,$user);$select='SELECT '.uuid_sql('u.id').' id,u.username,u.first_name,u.last_name,u.email,u.phone,u.role,u.permissions,u.is_active,u.last_login_at,u.created_at,u.updated_at,'.uuid_sql('u.created_by').' created_by,'.uuid_sql('u.updated_by').' updated_by FROM users u';$args=[];if(empty($user['isPrimaryAdmin'])){$select.=' JOIN user_properties up ON up.user_id=u.id WHERE u.deleted_at IS NULL AND up.property_id=?';$args[] = uuid_bin($propertyId);}else{$select.=' WHERE u.deleted_at IS NULL';}$select.=' ORDER BY (u.id=?) DESC,u.is_active DESC,u.first_name,u.last_name';$args[]=uuid_bin(primary_admin_id());$stmt=db()->prepare($select);$stmt->execute($args);$data=[];foreach($stmt->fetchAll()as$row){$item=entity_base($row);$item['isPrimaryAdmin']=is_primary_admin_id($item['id']);$item['permissions']=normalize_user_permissions($row['permissions']);$item['propertyIds']=[];$pstmt=db()->prepare('SELECT '.uuid_sql('property_id').' id FROM user_properties WHERE user_id=?');$pstmt->execute([uuid_bin($item['id'])]);$item['propertyIds']=array_column($pstmt->fetchAll(),'id');$data[]=$item;}respond($data); }
-    if ($method==='POST'&&$path==='/users') { $admin=require_permission('users.manage');ensure_user_deletion_field();$body=json_body();if(strlen(trim((string)($body['username']??'')))<3||strlen((string)($body['password']??''))<8)fail('Utilizator invalid sau parolă prea scurtă.',422);$propertyIds=$body['propertyIds']??[];foreach($propertyIds as$propertyId)ensure_property($propertyId,$admin);$id=uuid_v4();$now=now_utc();$pdo=db();$pdo->beginTransaction();try{$pdo->prepare('INSERT INTO users (id,username,password_hash,first_name,last_name,email,phone,role,permissions,is_active,deleted_at,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,1,NULL,?,?,?,?)')->execute([uuid_bin($id),trim($body['username']),password_hash($body['password'],PASSWORD_DEFAULT),trim((string)$body['firstName']),trim((string)$body['lastName']),$body['email']??null,$body['phone']??null,$body['role']??'OPERATOR',json_encode(normalize_user_permissions($body['permissions']??[])),$now,$now,uuid_bin($admin['id']),uuid_bin($admin['id'])]);$link=$pdo->prepare('INSERT INTO user_properties (user_id,property_id) VALUES (?,?)');foreach($propertyIds as$propertyId)$link->execute([uuid_bin($id),uuid_bin($propertyId)]);$pdo->commit();audit_log('USER_CREATED','users','Utilizator creat: '.$body['username'],'User',$id,$propertyIds[0]??null,null,array_diff_key($body,['password'=>true]),$admin);respond(user_record($id),201);}catch(PDOException$e){$pdo->rollBack();if((int)$e->errorInfo[1]===1062)fail('Numele de utilizator există deja.',409);throw$e;} }
+    if ($method==='POST'&&$path==='/users') { $admin=require_permission('users.manage');ensure_user_deletion_field();$body=json_body();if(strlen(trim((string)($body['username']??'')))<3||strlen((string)($body['password']??''))<8)fail('Utilizator invalid sau parolă prea scurtă.',422);$canManageRoles=user_has_permission($admin,'roles.manage');$requestedRole=strtoupper(trim((string)($body['role']??'OPERATOR')));$requestedPermissions=normalize_user_permissions($body['permissions']??[]);if(!$canManageRoles&&($requestedRole!=='OPERATOR'||$requestedPermissions))fail('Nu ai permisiunea de a configura rolul sau permisiunile utilizatorului.',403);$roles=['ADMIN','MANAGER','OPERATOR','TECHNICIAN','COLLABORATOR'];if(!in_array($requestedRole,$roles,true))fail('Rolul selectat nu este valid.',422);$role=$canManageRoles?$requestedRole:'OPERATOR';$permissions=$canManageRoles?$requestedPermissions:[];$propertyIds=$body['propertyIds']??[];foreach($propertyIds as$propertyId)ensure_property($propertyId,$admin);$id=uuid_v4();$now=now_utc();$pdo=db();$pdo->beginTransaction();try{$pdo->prepare('INSERT INTO users (id,username,password_hash,first_name,last_name,email,phone,role,permissions,is_active,deleted_at,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,1,NULL,?,?,?,?)')->execute([uuid_bin($id),trim($body['username']),password_hash($body['password'],PASSWORD_DEFAULT),trim((string)$body['firstName']),trim((string)$body['lastName']),$body['email']??null,$body['phone']??null,$role,json_encode($permissions),$now,$now,uuid_bin($admin['id']),uuid_bin($admin['id'])]);$link=$pdo->prepare('INSERT INTO user_properties (user_id,property_id) VALUES (?,?)');foreach($propertyIds as$propertyId)$link->execute([uuid_bin($id),uuid_bin($propertyId)]);$pdo->commit();$auditBody=$body;unset($auditBody['password']);$auditBody['role']=$role;$auditBody['permissions']=$permissions;audit_log('USER_CREATED','users','Utilizator creat: '.$body['username'],'User',$id,$propertyIds[0]??null,null,$auditBody,$admin);respond(user_record($id),201);}catch(PDOException$e){$pdo->rollBack();if((int)$e->errorInfo[1]===1062)fail('Numele de utilizator există deja.',409);throw$e;} }
     if ($method==='PUT'&&path_match('/users/{id}',$path,$params)) {
         $admin=require_permission('roles.manage');$body=json_body();$role=strtoupper(trim((string)($body['role']??'')));$roles=['ADMIN','MANAGER','OPERATOR','TECHNICIAN','COLLABORATOR'];
         if(!in_array($role,$roles,true))fail('Rolul selectat nu este valid.',422);

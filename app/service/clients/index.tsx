@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card';
 import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { Screen } from '@/components/ui/Screen';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
+import { useAuth } from '@/contexts/AuthContext';
 import { useProperty } from '@/contexts/PropertyContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -39,11 +40,14 @@ const sortOptions: { value: Exclude<ClientSort, ''>; label: string; icon: keyof 
 ];
 
 export default function ClientsScreen() {
+  const { hasPermission } = useAuth();
   const { activeProperty } = useProperty();
   const { colors } = useAppTheme();
   const { showToast } = useToast();
   const { width } = useWindowDimensions();
   const mobile = width < 640;
+  const canCreate = hasPermission('clients.create');
+  const canDelete = hasPermission('clients.delete');
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
   const [filter, setFilter] = useState<ClientStateFilter>('');
@@ -84,6 +88,7 @@ export default function ClientsScreen() {
   const activeSort = sortOptions.find((item) => item.value === sort);
 
   const requestDelete = (client: Client) => {
+    if (!canDelete) return;
     setDeleteError('');
     setDeleteTarget(client);
   };
@@ -95,7 +100,7 @@ export default function ClientsScreen() {
   };
 
   const confirmDelete = async () => {
-    if (!deleteTarget || deleteLoading) return;
+    if (!deleteTarget || deleteLoading || !canDelete) return;
     setDeleteLoading(true);
     setDeleteError('');
     try {
@@ -158,7 +163,7 @@ export default function ClientsScreen() {
       </View>
 
       <View style={styles.filterWorkspace}>
-        <Pressable
+        {canCreate ? <Pressable
           accessibilityRole="button"
           accessibilityLabel="Reîmprospătează lista clienților"
           accessibilityState={{ busy: state.refreshing }}
@@ -172,7 +177,7 @@ export default function ClientsScreen() {
           ]}
         >
           <AnimatedRefreshIcon refreshing={state.refreshing} color={colors.primary} />
-        </Pressable>
+        </Pressable> : null}
 
         <ScrollView
           horizontal
@@ -265,8 +270,8 @@ export default function ClientsScreen() {
               icon="people-outline"
               title="Niciun client găsit"
               message={query || filter ? 'Încearcă alte criterii de căutare sau elimină filtrele.' : 'Adaugă primul client în această proprietate.'}
-              action={query || filter || sort ? 'Resetează afișarea' : 'Adaugă client'}
-              onAction={() => query || filter || sort ? clearViewControls() : router.push('/service/clients/create')}
+              action={query || filter || sort ? 'Resetează afișarea' : canCreate ? 'Adaugă client' : undefined}
+              onAction={() => query || filter || sort ? clearViewControls() : canCreate ? router.push('/service/clients/create') : undefined}
             />
           : <View style={styles.list}>
               {visibleClients.map((client, index) => <ClientCard
@@ -274,7 +279,7 @@ export default function ClientsScreen() {
                 client={client}
                 index={index}
                 onWhatsApp={setWhatsAppTarget}
-                onDeleteRequest={requestDelete}
+                onDeleteRequest={canDelete ? requestDelete : undefined}
               />)}
             </View>}
 

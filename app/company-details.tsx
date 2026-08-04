@@ -32,7 +32,7 @@ function formFromCompany(company: CompanyDetails): CompanyForm {
 
 export default function CompanyDetailsScreen() {
   useBackToAdministration();
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const { activeProperty } = useProperty();
   const { colors, isDark } = useAppTheme();
   const { showToast } = useToast();
@@ -69,7 +69,7 @@ export default function CompanyDetailsScreen() {
   }, [creating, selectedId, state.data]);
 
   if (!activeProperty) return <Redirect href="/select-property" />;
-  if (user?.role !== 'ADMIN') return <Redirect href="/service/more" />;
+  if (user?.role !== 'ADMIN' || !hasPermission('settings.manage')) return <Redirect href="/service/more" />;
 
   const update = (key: keyof CompanyForm, value: string | boolean) => setForm((current) => ({ ...current, [key]: value }));
   const selectCompany = (company: CompanyDetails) => {

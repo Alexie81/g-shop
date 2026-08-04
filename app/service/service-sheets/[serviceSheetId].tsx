@@ -39,6 +39,8 @@ export default function ServiceSheetDetails() {
   const veryNarrow = width <= 360;
   const initialDocumentType = (['INTAKE', 'FINAL_ESTIMATE', 'EXIT', 'WARRANTY'] as ServiceDocumentType[]).includes(document as ServiceDocumentType) ? document as ServiceDocumentType : null;
   const canViewFinancials = hasPermission('financials.view');
+  const canUpdate = hasPermission('service_sheets.update');
+  const canSign = hasPermission('service_sheets.sign');
   const returnToServiceSheets = () => router.replace('/service/service-sheets');
   const state = useAsyncData(async () => {
     const sheet = await serviceSheetRepository.get(serviceSheetId);
@@ -123,19 +125,19 @@ export default function ServiceSheetDetails() {
       </View>
       <View style={[styles.heroSummary, { backgroundColor: colors.surfaceMuted }]}>
         <ServiceSheetStatus status={sheet.status} />
-        <View style={styles.total}>
+        {canViewFinancials ? <View style={styles.total}>
           <AppText variant="caption" muted>Total fișă</AppText>
           <AppText variant="heading" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={{ color: colors.primary }}>{formatCurrency(sheet.totalCost)}</AppText>
-        </View>
+        </View> : null}
       </View>
     </Card>
 
     <View style={styles.actions}>
-      <SheetAction mobile={mobile} icon="create-outline" label="Editează" color={colors.primary} onPress={() => router.push(('/service/service-sheets/' + sheet.id + '/edit') as never)} />
-      <SheetAction mobile={mobile} icon="swap-horizontal-outline" label="Schimbă status" color={palette.warning} selected={statusOpen} onPress={() => setStatusOpen((value) => !value)} />
-      <SheetAction mobile={mobile} icon="pencil-outline" label={sheet.signatureUrl ? 'Resemnează' : 'Semnează'} color={palette.purple} onPress={() => setSigning(true)} />
-      <SheetAction mobile={mobile} icon="download-outline" label={pdfAction === 'download' ? 'Se generează…' : 'Descarcă PDF'} color={palette.cyan} loading={pdfAction === 'download'} onPress={() => void openFreshPdf('download')} />
-      <SheetAction mobile={mobile} icon="logo-whatsapp" label={pdfAction === 'whatsapp' ? 'Se generează…' : 'Trimite pe WhatsApp'} color="#19B85A" loading={pdfAction === 'whatsapp'} onPress={() => void openFreshPdf('whatsapp')} />
+      {canUpdate ? <SheetAction mobile={mobile} icon="create-outline" label="Editează" color={colors.primary} onPress={() => router.push(('/service/service-sheets/' + sheet.id + '/edit') as never)} /> : null}
+      {canUpdate ? <SheetAction mobile={mobile} icon="swap-horizontal-outline" label="Schimbă status" color={palette.warning} selected={statusOpen} onPress={() => setStatusOpen((value) => !value)} /> : null}
+      {canSign ? <SheetAction mobile={mobile} icon="pencil-outline" label={sheet.signatureUrl ? 'Resemnează' : 'Semnează'} color={palette.purple} onPress={() => setSigning(true)} /> : null}
+      {canUpdate ? <SheetAction mobile={mobile} icon="download-outline" label={pdfAction === 'download' ? 'Se generează…' : 'Descarcă PDF'} color={palette.cyan} loading={pdfAction === 'download'} onPress={() => void openFreshPdf('download')} /> : null}
+      {canUpdate ? <SheetAction mobile={mobile} icon="logo-whatsapp" label={pdfAction === 'whatsapp' ? 'Se generează…' : 'Trimite pe WhatsApp'} color="#19B85A" loading={pdfAction === 'whatsapp'} onPress={() => void openFreshPdf('whatsapp')} /> : null}
     </View>
 
     <Card style={[styles.companyPreference, mobile && styles.cardMobile, { borderColor: `${colors.primary}70` }]}>
@@ -149,7 +151,7 @@ export default function ServiceSheetDetails() {
       <Ionicons name="checkmark-circle" size={24} color={palette.success} />
     </Card>
 
-    {statusOpen ? <Card style={[styles.panel, mobile && styles.cardMobile]} elevated>
+    {statusOpen && canUpdate ? <Card style={[styles.panel, mobile && styles.cardMobile]} elevated>
       <SectionTitle icon="git-branch-outline" title="Schimbă statusul" />
       <View style={styles.statusGrid}>{selectableStatuses.map((status) => {
         const selected = status === sheet.status;
@@ -195,16 +197,14 @@ export default function ServiceSheetDetails() {
 
       <Card style={[styles.panel, mobile && styles.cardMobile]}>
         <SectionTitle icon="cash-outline" title="Valori și termene" />
-        <View style={styles.moneyGrid}>
+        {canViewFinancials ? <View style={styles.moneyGrid}>
           <MoneyMetric label="Piese" value={formatCurrency(sheet.partsCost)} color={palette.cyan} />
           <MoneyMetric label="Manoperă" value={formatCurrency(sheet.laborCost)} color={palette.purple} />
           <MoneyMetric label="Total fișă" value={formatCurrency(sheet.totalCost)} color={colors.primary} />
-          {canViewFinancials ? <>
-            <MoneyMetric label="Cost intern" value={formatCurrency(sheet.directCosts)} color={palette.warning} />
-            <MoneyMetric label="Net intern" value={formatCurrency(sheet.netValue)} color={sheet.netValue >= 0 ? palette.success : palette.danger} />
-            <MoneyMetric label="Comision" value={formatCurrency(sheet.collaboratorCommission ?? 0)} color={palette.cyan} />
-          </> : null}
-        </View>
+          <MoneyMetric label="Cost intern" value={formatCurrency(sheet.directCosts)} color={palette.warning} />
+          <MoneyMetric label="Net intern" value={formatCurrency(sheet.netValue)} color={sheet.netValue >= 0 ? palette.success : palette.danger} />
+          <MoneyMetric label="Comision" value={formatCurrency(sheet.collaboratorCommission ?? 0)} color={palette.cyan} />
+        </View> : null}
         <View style={styles.compactDetails}>
           <DataRow label="Data primirii" value={formatDate(sheet.receivedAt, true)} />
           <DataRow label="Termen estimat" value={sheet.estimatedAt ? formatDate(sheet.estimatedAt) : undefined} />
@@ -239,7 +239,7 @@ export default function ServiceSheetDetails() {
             <Ionicons name="checkmark-circle" size={18} color={palette.success} />
             <AppText variant="caption" muted style={styles.clientText}>Semnat la {formatDate(sheet.signedAt, true)}</AppText>
           </View>
-          <Button compact variant="outline" label="Resemnează" icon="pencil-outline" onPress={() => setSigning(true)} style={styles.touchButton} />
+          {canSign ? <Button compact variant="outline" label="Resemnează" icon="pencil-outline" onPress={() => setSigning(true)} style={styles.touchButton} /> : null}
         </View>
       </> : <View style={[styles.noSignature, mobile && styles.noSignatureMobile, { backgroundColor: colors.surfaceMuted }]}>
         <View style={[styles.noSignatureIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="pencil-outline" size={23} color={colors.primary} /></View>
@@ -247,11 +247,11 @@ export default function ServiceSheetDetails() {
           <AppText variant="label">Nesemnată</AppText>
           <AppText variant="caption" muted>Clientul poate semna direct pe telefon.</AppText>
         </View>
-        <Button compact label="Semnează" icon="pencil" onPress={() => setSigning(true)} style={[styles.touchButton, mobile && styles.signatureButtonMobile]} />
+        {canSign ? <Button compact label="Semnează" icon="pencil" onPress={() => setSigning(true)} style={[styles.touchButton, mobile && styles.signatureButtonMobile]} /> : null}
       </View>}
     </Card>
 
-    <SignatureModal sheet={sheet} visible={signing} onClose={() => setSigning(false)} onSaved={replaceSheet} />
+    {canSign ? <SignatureModal sheet={sheet} visible={signing} onClose={() => setSigning(false)} onSaved={replaceSheet} /> : null}
   </Screen>;
 }
 

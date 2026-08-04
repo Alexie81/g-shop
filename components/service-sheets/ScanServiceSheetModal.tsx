@@ -131,6 +131,8 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
   const translateY = useRef(new Animated.Value(640)).current;
   const canSign = hasPermission('service_sheets.sign');
   const canSave = existingSheet ? hasPermission('service_sheets.update') : hasPermission('service_sheets.create');
+  const canViewFinancials = hasPermission('financials.view');
+  const canEditFinancials = canViewFinancials && hasPermission('clients.update');
   const estimate = useMemo(() => calculateClientFinance({
     currencyCode: form.currencyCode || 'RON',
     exchangeRateToRon: 1,
@@ -159,7 +161,10 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
   }, [clientId, existingSheet, translateY, visible]);
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || !canViewFinancials) {
+      setFinanceLoading(false);
+      return;
+    }
     let cancelled = false;
     setFinanceLoading(true);
     clientRepository.getFinancials(clientId).then((overview) => {
@@ -180,7 +185,7 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
       if (!cancelled) setFinanceLoading(false);
     });
     return () => { cancelled = true; };
-  }, [clientId, showToast, visible]);
+  }, [canViewFinancials, clientId, showToast, visible]);
 
   const dismiss = useCallback(() => {
     if (savingRef.current) return;
@@ -256,15 +261,17 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
     };
 
     try {
-      await clientRepository.updateFinancials(clientId, {
-        currencyCode: form.currencyCode.trim().toUpperCase(),
-        workPrice: form.partsCost + form.laborCost,
-        diagnosticFee: form.diagnosticFee,
-        advancePaid: form.advancePaid,
-        discountPercent: form.discountPercent,
-        displayedPartsCost: form.partsCost,
-        displayedLaborCost: form.laborCost,
-      });
+      if (canEditFinancials) {
+        await clientRepository.updateFinancials(clientId, {
+          currencyCode: form.currencyCode.trim().toUpperCase(),
+          workPrice: form.partsCost + form.laborCost,
+          diagnosticFee: form.diagnosticFee,
+          advancePaid: form.advancePaid,
+          discountPercent: form.discountPercent,
+          displayedPartsCost: form.partsCost,
+          displayedLaborCost: form.laborCost,
+        });
+      }
 
       let saved: ServiceSheet;
       let updatedExisting = Boolean(existingSheet);
@@ -315,7 +322,7 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
       setSaving(false);
       showToast(error instanceof Error ? error.message : 'Fișa de intrare nu a putut fi salvată.', 'error');
     }
-  }, [canSave, canSign, clientId, estimate.discountAmount, estimate.receivedAmount, estimate.remainingDue, estimate.subtotal, estimate.totalDue, existingSheet, form, hasPermission, onCompleted, propertyId, showToast]);
+  }, [canEditFinancials, canSave, canSign, clientId, estimate.discountAmount, estimate.receivedAmount, estimate.remainingDue, estimate.subtotal, estimate.totalDue, existingSheet, form, hasPermission, onCompleted, propertyId, showToast]);
 
   const submit = () => {
     if (savingRef.current) return;
@@ -389,26 +396,28 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
             <Input label="Constatare inițială" value={form.technicalAssessment} onChangeText={(value) => update('technicalAssessment', value)} multiline numberOfLines={3} style={styles.multiline} />
             <TechnicianField propertyId={propertyId} technicianId={form.technicianId || undefined} technicianName={form.technicianName} onChange={({ id, name }) => setForm((current) => ({ ...current, technicianId: id, technicianName: name }))} />
 
-            <View style={styles.sectionTitle}><Ionicons name="calculator-outline" size={20} color={palette.cyan} /><AppText variant="heading">Cost estimativ</AppText></View>
-            <AppText variant="caption" muted>Valorile sunt salvate în finanțele clientului și apar în fișa de intrare.</AppText>
-            {financeLoading ? <View style={[styles.financeNotice, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="sync-outline" size={18} color={colors.primary} /><AppText variant="caption" muted>Se încarcă valorile financiare existente…</AppText></View> : null}
-            <View style={styles.estimateGrid}>
+            <View style={styles.sectionTitle}><Ionicons name={canViewFinancials ? 'calculator-outline' : 'calendar-outline'} size={20} color={palette.cyan} /><AppText variant="heading">{canViewFinancials ? 'Cost estimativ' : 'Termen și acord'}</AppText></View>
+            {canViewFinancials ? <>
+              <AppText variant="caption" muted>Valorile sunt salvate în finanțele clientului și apar în fișa de intrare.</AppText>
+              {financeLoading ? <View style={[styles.financeNotice, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="sync-outline" size={18} color={colors.primary} /><AppText variant="caption" muted>Se încarcă valorile financiare existente…</AppText></View> : null}
+              <View style={styles.estimateGrid}>
               <FinanceNumberField label="Diagnostic" value={form.diagnosticFee} onChange={(value) => update('diagnosticFee', value)} disabled={financeLoading} style={styles.estimateField} />
               <FinanceNumberField label="Piese estimate" value={form.partsCost} onChange={(value) => update('partsCost', value)} disabled={financeLoading} style={styles.estimateField} />
               <FinanceNumberField label="Manoperă estimată" value={form.laborCost} onChange={(value) => update('laborCost', value)} disabled={financeLoading} style={styles.estimateField} />
               <FinanceNumberField label="Avans încasat" value={form.advancePaid} onChange={(value) => update('advancePaid', value)} disabled={financeLoading} style={styles.estimateField} />
               <FinanceNumberField label="Reducere" value={form.discountPercent} onChange={(value) => update('discountPercent', value)} disabled={financeLoading} percentage style={styles.estimateField} />
-            </View>
+              </View>
+              <View style={styles.row}><View style={styles.field}><Input label="Monedă" value={form.currencyCode} editable={!financeLoading} autoCapitalize="characters" maxLength={3} onChangeText={(value) => update('currencyCode', value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3))} placeholder="RON" /></View></View>
+              <View style={[styles.estimateSummary, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
+                <EstimateMetric label="TOTAL ESTIMAT" value={formatFinanceMoney(estimate.totalDue, form.currencyCode || 'RON')} color={colors.primary} />
+                <EstimateMetric label="AVANS" value={formatFinanceMoney(Math.min(form.advancePaid, estimate.totalDue), form.currencyCode || 'RON')} color={palette.purple} />
+                <EstimateMetric label="REST ESTIMAT" value={formatFinanceMoney(estimate.remainingDue, form.currencyCode || 'RON')} color={estimate.remainingDue > 0 ? palette.warning : palette.success} />
+              </View>
+            </> : null}
             <View style={styles.row}>
-              <View style={styles.field}><Input label="Monedă" value={form.currencyCode} editable={!financeLoading} autoCapitalize="characters" maxLength={3} onChangeText={(value) => update('currencyCode', value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3))} placeholder="RON" /></View>
               <View style={styles.field}><Input label="Termen estimat (zile lucrătoare)" value={form.estimatedRepairDays} keyboardType="number-pad" inputMode="numeric" onChangeText={(value) => update('estimatedRepairDays', value.replace(/\D/g, '').slice(0, 3))} placeholder="ex. 3" /></View>
             </View>
             <DateTimeField label="Data acordului pentru costul estimativ" value={form.intakeAgreementAt} onChange={(value) => update('intakeAgreementAt', value)} allowClear showNow />
-            <View style={[styles.estimateSummary, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
-              <EstimateMetric label="TOTAL ESTIMAT" value={formatFinanceMoney(estimate.totalDue, form.currencyCode || 'RON')} color={colors.primary} />
-              <EstimateMetric label="AVANS" value={formatFinanceMoney(Math.min(form.advancePaid, estimate.totalDue), form.currencyCode || 'RON')} color={palette.purple} />
-              <EstimateMetric label="REST ESTIMAT" value={formatFinanceMoney(estimate.remainingDue, form.currencyCode || 'RON')} color={estimate.remainingDue > 0 ? palette.warning : palette.success} />
-            </View>
 
             <View style={styles.sectionTitle}><Ionicons name="shield-checkmark-outline" size={20} color={palette.purple} /><AppText variant="heading">Acordul clientului</AppText></View>
             <AppText variant="caption" muted>Bifele sunt salvate în fișă împreună cu semnătura clientului.</AppText>

@@ -16,9 +16,9 @@ type Props = {
   sheet: ServiceSheet | null;
   onClose: () => void;
   onView: (sheet: ServiceSheet) => void;
-  onEdit: (sheet: ServiceSheet) => void;
-  onSend: (sheet: ServiceSheet) => Promise<void> | void;
-  onDelete: (sheet: ServiceSheet) => Promise<void> | void;
+  onEdit?: (sheet: ServiceSheet) => void;
+  onSend?: (sheet: ServiceSheet) => Promise<void> | void;
+  onDelete?: (sheet: ServiceSheet) => Promise<void> | void;
 };
 
 export function ServiceSheetActionsModal({ visible, sheet, onClose, onView, onEdit, onSend, onDelete }: Props) {
@@ -72,6 +72,7 @@ export function ServiceSheetActionsModal({ visible, sheet, onClose, onView, onEd
   };
 
   const confirmDelete = async () => {
+    if (!onDelete) return;
     setDeleting(true);
     try {
       await onDelete(sheet);
@@ -116,9 +117,9 @@ export function ServiceSheetActionsModal({ visible, sheet, onClose, onView, onEd
           </View>
           <View style={styles.actions}>
             <Action icon="eye-outline" color={colors.primary} label="Vizualizare fișă de service" description="Deschide toate detaliile fișei" onPress={() => closeThen(onView)} />
-            <Action icon="create-outline" color={palette.purple} label="Editare fișă de service" description="Modifică echipamentul, valorile și statusul" onPress={() => closeThen(onEdit)} />
-            <Action icon="logo-whatsapp" color={palette.success} label="Trimitere fișă de service" description="Generează PDF-ul actual și deschide conversația clientului" onPress={() => void onSend(sheet)} />
-            <Action icon="trash-outline" color={palette.danger} label="Ștergere fișă de service" description="Eliminare sigură, cu audit păstrat" onPress={() => setConfirmingDelete(true)} />
+            {onEdit ? <Action icon="create-outline" color={palette.purple} label="Editare fișă de service" description="Modifică echipamentul, valorile și statusul" onPress={() => closeThen(onEdit)} /> : null}
+            {onSend ? <Action icon="logo-whatsapp" color={palette.success} label="Trimitere fișă de service" description="Generează PDF-ul actual și deschide conversația clientului" onPress={() => void onSend(sheet)} /> : null}
+            {onDelete ? <Action icon="trash-outline" color={palette.danger} label="Ștergere fișă de service" description="Eliminare sigură, cu audit păstrat" onPress={() => setConfirmingDelete(true)} /> : null}
           </View>
           <View style={[styles.future, { backgroundColor: colors.surfaceMuted }]}>
             <Ionicons name="document-attach-outline" size={20} color={colors.primary} />

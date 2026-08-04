@@ -33,10 +33,11 @@ export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style }
   const [editorType, setEditorType] = useState<ServiceDocumentType | null>(initialEditorType);
   const [deleteTarget, setDeleteTarget] = useState<ServiceDocument | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const canGenerate = hasPermission('service_sheets.update') || hasPermission('service_sheets.create');
+  const canViewFinancials = hasPermission('financials.view');
+  const canGenerate = canViewFinancials && (hasPermission('service_sheets.update') || hasPermission('service_sheets.create'));
   const canDelete = hasPermission('service_sheets.update');
   const state = useAsyncData(() => serviceSheetRepository.listDocuments(sheet.id), [sheet.id, sheet.signedAt]);
-  const financialState = useAsyncData(() => clientRepository.getFinancials(sheet.clientId), [sheet.clientId]);
+  const financialState = useAsyncData(() => canViewFinancials ? clientRepository.getFinancials(sheet.clientId) : Promise.resolve(null), [canViewFinancials, sheet.clientId]);
   useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);
 
   const slots = DOCUMENTS.map((definition) => ({ definition, document: state.data?.find((item) => item.type === definition.type) }));
@@ -60,7 +61,7 @@ export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style }
       showToast('Creează mai întâi fișa de ieșire.', 'info');
       return;
     }
-    if (type === 'FINAL_ESTIMATE' && !document?.available && !financialState.data) {
+    if (type === 'FINAL_ESTIMATE' && !document?.available && canViewFinancials && !financialState.data) {
       showToast(financialState.loading ? 'Se încarcă costurile interne ale pieselor. Încearcă din nou imediat.' : 'Costurile interne nu au putut fi încărcate. Reîncarcă dosarul înainte de deviz.', 'error');
       return;
     }
