@@ -220,10 +220,13 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
             <DocumentItemsEditor title="Piese" description="Costul intern este vizibil doar personalului și nu apare clientului." items={parts} onChange={(items) => { setParts(items); setFinalItemsDirty(true); }} currencyCode={currencyCode} showDirectCost />
             <DocumentItemsEditor title="Manoperă" description="Adaugă doar operațiunile care trebuie să apară în deviz." items={labor} onChange={(items) => { setLabor(items); setFinalItemsDirty(true); }} currencyCode={currencyCode} />
             <View style={[styles.summary, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
-              <SummaryValue label="Piese afișate" value={formatFinanceMoney(totals.parts, currencyCode)} />
-              <SummaryValue label="Manoperă" value={formatFinanceMoney(totals.labor, currencyCode)} />
-              <SummaryValue label="Cost intern piese" value={formatFinanceMoney(totals.internal, currencyCode)} internal />
-              <SummaryValue label="Total deviz" value={formatFinanceMoney(totals.parts + totals.labor, currencyCode)} accent />
+              <View style={styles.summaryTitle}><View style={[styles.summaryTitleIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="wallet-outline" size={18} color={colors.primary} /></View><View><AppText variant="heading">Rezumat financiar</AppText><AppText variant="caption" muted>Valorile calculate din pozițiile devizului</AppText></View></View>
+              <View style={styles.summaryGrid}>
+                <SummaryValue label="Piese afișate" value={formatFinanceMoney(totals.parts, currencyCode)} icon="cube-outline" color={colors.primary} />
+                <SummaryValue label="Manoperă" value={formatFinanceMoney(totals.labor, currencyCode)} icon="construct-outline" color={palette.purple} />
+                <SummaryValue label="Cost intern piese" value={formatFinanceMoney(totals.internal, currencyCode)} icon="shield-checkmark-outline" color={palette.warning} internal />
+                <SummaryValue label="Total deviz" value={formatFinanceMoney(totals.parts + totals.labor, currencyCode)} icon="cash-outline" color={colors.primary} accent />
+              </View>
             </View>
           </View> : null}
 
@@ -293,9 +296,16 @@ function Segment({ label, icon, selected, onPress }: { label: string; icon: keyo
   return <Pressable accessibilityRole="radio" accessibilityState={{ checked: selected }} onPress={onPress} style={({ pressed }) => [styles.segment, { backgroundColor: selected ? colors.primary : colors.surfaceMuted, borderColor: selected ? colors.primary : colors.border, opacity: pressed ? 0.76 : 1 }]}><Ionicons name={icon} size={19} color={selected ? '#fff' : colors.primary} /><AppText variant="label" style={{ color: selected ? '#fff' : colors.text }}>{label}</AppText></Pressable>;
 }
 
-function SummaryValue({ label, value, accent = false, internal = false }: { label: string; value: string; accent?: boolean; internal?: boolean }) {
+function SummaryValue({ label, value, icon, color, accent = false, internal = false }: { label: string; value: string; icon: keyof typeof Ionicons.glyphMap; color: string; accent?: boolean; internal?: boolean }) {
   const { colors } = useAppTheme();
-  return <View style={styles.summaryValue}><AppText variant="caption" muted>{label}{internal ? ' · staff' : ''}</AppText><AppText variant="label" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={{ color: accent ? colors.primary : undefined }}>{value}</AppText></View>;
+  return <View style={[styles.summaryValue, { backgroundColor: accent ? colors.primarySoft : colors.surface, borderColor: accent ? color : `${color}38` }]}>
+    <View style={styles.summaryValueHeader}>
+      <View style={[styles.summaryValueIcon, { backgroundColor: `${color}18` }]}><Ionicons name={icon} size={16} color={color} /></View>
+      <AppText variant="caption" muted numberOfLines={2} style={styles.summaryValueLabel}>{label}</AppText>
+    </View>
+    <AppText variant="heading" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.76} style={[styles.summaryAmount, { color: accent ? color : colors.text }]}>{value}</AppText>
+    {internal ? <View style={[styles.staffBadge, { backgroundColor: `${palette.warning}18` }]}><AppText variant="caption" style={{ color: palette.warning, fontWeight: '800' }}>PIESE · STAFF</AppText></View> : null}
+  </View>;
 }
 
 function EstimateMetric({ label, value, color, icon }: { label: string; value: string; color: string; icon: keyof typeof Ionicons.glyphMap }) {
@@ -434,8 +444,16 @@ const styles = StyleSheet.create({
   itemFieldWide: { minWidth: 190, flex: 1 },
   itemTotal: { textAlign: 'right', fontWeight: '800' },
   emptyItems: { minHeight: 64, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  summary: { borderWidth: 1, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  summaryValue: { minWidth: 130, flex: 1, gap: 3 },
+  summary: { borderWidth: 1, borderRadius: radius.lg, padding: spacing.md, gap: spacing.md },
+  summaryTitle: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  summaryTitleIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  summaryValue: { minWidth: 135, flexGrow: 1, flexBasis: 145, borderWidth: 1, borderRadius: radius.md, padding: spacing.md, gap: spacing.sm },
+  summaryValueHeader: { minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  summaryValueIcon: { width: 30, height: 30, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  summaryValueLabel: { minWidth: 0, flex: 1 },
+  summaryAmount: { fontSize: 18, lineHeight: 23, fontWeight: '800' },
+  staffBadge: { minHeight: 22, alignSelf: 'flex-start', borderRadius: radius.pill, paddingHorizontal: 7, alignItems: 'center', justifyContent: 'center' },
   error: { borderWidth: 1, borderRadius: radius.md, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   action: { minWidth: 210, flex: 1 },

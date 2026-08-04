@@ -85,7 +85,7 @@
       "typedRoutes": true
     },
     "extra": {
-      "releaseVersion": "1.1.22",
+      "releaseVersion": "1.1.23",
       "router": {},
       "eas": {
         "projectId": "2fe0de49-704b-49f7-a4ef-0f78c8195e08"
