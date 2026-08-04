@@ -67,15 +67,31 @@ function is_primary_admin_id(string $userId): bool { return strtolower($userId) 
 function ensure_primary_admin_editable(array $actor, array $target, bool $allowSelf = false): void {
     if (!empty($target['isPrimaryAdmin']) && (!$allowSelf || $actor['id'] !== $target['id'])) fail('Administratorul principal este protejat și nu poate fi modificat.', 403);
 }
+function supported_user_permissions(): array {
+    return ['dashboard.view','clients.view','clients.create','clients.update','clients.delete','qr.generate','qr.scan','qr.share','service_sheets.view','service_sheets.create','service_sheets.update','service_sheets.sign','collaborators.view','collaborators.manage','users.view','users.manage','roles.manage','reports.view','financials.view','audit.view','settings.manage'];
+}
+function normalize_user_permissions(mixed $value): array {
+    $decoded = is_array($value) ? $value : json_decode((string)$value, true);
+    if (!is_array($decoded)) return [];
+    $requested = array_values(array_unique(array_map(fn($permission)=>trim((string)$permission),$decoded)));
+    return array_values(array_filter(supported_user_permissions(),fn($permission)=>in_array($permission,$requested,true)));
+}
+function ensure_user_permission_catalog(): void {
+    static $ready = false;
+    if ($ready) return;
+    $ready = true;$pdo=db();$rows=$pdo->query('SELECT id,permissions FROM users')->fetchAll();$update=$pdo->prepare('UPDATE users SET permissions=? WHERE id=?');
+    foreach($rows as$row){$normalized=normalize_user_permissions($row['permissions']);$current=json_decode((string)$row['permissions'],true);if(!is_array($current)||array_values($current)!==$normalized)$update->execute([json_encode($normalized),$row['id']]);}
+}
 function user_record(string $userId, bool $requireActive = true): array {
     ensure_user_deletion_field();
+    ensure_user_permission_catalog();
     $sql = 'SELECT ' . uuid_sql('u.id') . ' id,u.username,u.first_name,u.last_name,u.email,u.phone,u.role,u.permissions,u.is_active,u.last_login_at,u.created_at,u.updated_at,' . uuid_sql('u.created_by') . ' created_by,' . uuid_sql('u.updated_by') . ' updated_by FROM users u WHERE u.id=? AND u.deleted_at IS NULL LIMIT 1';
     $stmt = db()->prepare($sql); $stmt->execute([uuid_bin($userId)]); $row = $stmt->fetch();
     if (!$row) fail($requireActive ? 'Cont inactiv sau inexistent.' : 'Utilizatorul nu există.', $requireActive ? 401 : 404);
     if ($requireActive && !(bool)$row['is_active']) fail('Cont inactiv sau inexistent.', 401);
     $user = camel_row($row);
     $user['isPrimaryAdmin'] = is_primary_admin_id($user['id']);
-    $user['permissions'] = json_decode((string)$row['permissions'], true) ?: [];
+    $user['permissions'] = normalize_user_permissions($row['permissions']);
     $props = db()->prepare('SELECT ' . uuid_sql('property_id') . ' id FROM user_properties WHERE user_id=?');
     $props->execute([uuid_bin($userId)]); $user['propertyIds'] = array_column($props->fetchAll(), 'id');
     return $user;
@@ -2103,8 +2119,8 @@ try {
         $paidAt=$paid&&$after?iso_date($after[0]['paid_at']):null;gshop_queue_client_service_sheet_pdf($clientId);respond(['updated'=>$update->rowCount(),'status'=>$status,'paid'=>$paid,'paidAt'=>$paidAt,'amount'=>$afterAmount]);
     }
 
-    if ($method==='GET'&&$path==='/users') { $user=require_permission('users.view');ensure_user_deletion_field();$propertyId=(string)($_GET['propertyId']??'');ensure_property($propertyId,$user);$select='SELECT '.uuid_sql('u.id').' id,u.username,u.first_name,u.last_name,u.email,u.phone,u.role,u.permissions,u.is_active,u.last_login_at,u.created_at,u.updated_at,'.uuid_sql('u.created_by').' created_by,'.uuid_sql('u.updated_by').' updated_by FROM users u';$args=[];if($user['role']!=='ADMIN'){$select.=' JOIN user_properties up ON up.user_id=u.id WHERE u.deleted_at IS NULL AND up.property_id=?';$args[] = uuid_bin($propertyId);}else{$select.=' WHERE u.deleted_at IS NULL';}$select.=' ORDER BY (u.id=?) DESC,u.is_active DESC,u.first_name,u.last_name';$args[]=uuid_bin(primary_admin_id());$stmt=db()->prepare($select);$stmt->execute($args);$data=[];foreach($stmt->fetchAll()as$row){$item=entity_base($row);$item['isPrimaryAdmin']=is_primary_admin_id($item['id']);$item['permissions']=json_decode((string)$row['permissions'],true)?:[];$item['propertyIds']=[];$pstmt=db()->prepare('SELECT '.uuid_sql('property_id').' id FROM user_properties WHERE user_id=?');$pstmt->execute([uuid_bin($item['id'])]);$item['propertyIds']=array_column($pstmt->fetchAll(),'id');$data[]=$item;}respond($data); }
-    if ($method==='POST'&&$path==='/users') { $admin=require_permission('users.manage');ensure_user_deletion_field();$body=json_body();if(strlen(trim((string)($body['username']??'')))<3||strlen((string)($body['password']??''))<8)fail('Utilizator invalid sau parolă prea scurtă.',422);$propertyIds=$body['propertyIds']??[];foreach($propertyIds as$propertyId)ensure_property($propertyId,$admin);$id=uuid_v4();$now=now_utc();$pdo=db();$pdo->beginTransaction();try{$pdo->prepare('INSERT INTO users (id,username,password_hash,first_name,last_name,email,phone,role,permissions,is_active,deleted_at,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,1,NULL,?,?,?,?)')->execute([uuid_bin($id),trim($body['username']),password_hash($body['password'],PASSWORD_DEFAULT),trim((string)$body['firstName']),trim((string)$body['lastName']),$body['email']??null,$body['phone']??null,$body['role']??'OPERATOR',json_encode($body['permissions']??[]),$now,$now,uuid_bin($admin['id']),uuid_bin($admin['id'])]);$link=$pdo->prepare('INSERT INTO user_properties (user_id,property_id) VALUES (?,?)');foreach($propertyIds as$propertyId)$link->execute([uuid_bin($id),uuid_bin($propertyId)]);$pdo->commit();audit_log('USER_CREATED','users','Utilizator creat: '.$body['username'],'User',$id,$propertyIds[0]??null,null,array_diff_key($body,['password'=>true]),$admin);respond(user_record($id),201);}catch(PDOException$e){$pdo->rollBack();if((int)$e->errorInfo[1]===1062)fail('Numele de utilizator există deja.',409);throw$e;} }
+    if ($method==='GET'&&$path==='/users') { $user=require_permission('users.view');ensure_user_deletion_field();ensure_user_permission_catalog();$propertyId=(string)($_GET['propertyId']??'');ensure_property($propertyId,$user);$select='SELECT '.uuid_sql('u.id').' id,u.username,u.first_name,u.last_name,u.email,u.phone,u.role,u.permissions,u.is_active,u.last_login_at,u.created_at,u.updated_at,'.uuid_sql('u.created_by').' created_by,'.uuid_sql('u.updated_by').' updated_by FROM users u';$args=[];if($user['role']!=='ADMIN'){$select.=' JOIN user_properties up ON up.user_id=u.id WHERE u.deleted_at IS NULL AND up.property_id=?';$args[] = uuid_bin($propertyId);}else{$select.=' WHERE u.deleted_at IS NULL';}$select.=' ORDER BY (u.id=?) DESC,u.is_active DESC,u.first_name,u.last_name';$args[]=uuid_bin(primary_admin_id());$stmt=db()->prepare($select);$stmt->execute($args);$data=[];foreach($stmt->fetchAll()as$row){$item=entity_base($row);$item['isPrimaryAdmin']=is_primary_admin_id($item['id']);$item['permissions']=normalize_user_permissions($row['permissions']);$item['propertyIds']=[];$pstmt=db()->prepare('SELECT '.uuid_sql('property_id').' id FROM user_properties WHERE user_id=?');$pstmt->execute([uuid_bin($item['id'])]);$item['propertyIds']=array_column($pstmt->fetchAll(),'id');$data[]=$item;}respond($data); }
+    if ($method==='POST'&&$path==='/users') { $admin=require_permission('users.manage');ensure_user_deletion_field();$body=json_body();if(strlen(trim((string)($body['username']??'')))<3||strlen((string)($body['password']??''))<8)fail('Utilizator invalid sau parolă prea scurtă.',422);$propertyIds=$body['propertyIds']??[];foreach($propertyIds as$propertyId)ensure_property($propertyId,$admin);$id=uuid_v4();$now=now_utc();$pdo=db();$pdo->beginTransaction();try{$pdo->prepare('INSERT INTO users (id,username,password_hash,first_name,last_name,email,phone,role,permissions,is_active,deleted_at,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,1,NULL,?,?,?,?)')->execute([uuid_bin($id),trim($body['username']),password_hash($body['password'],PASSWORD_DEFAULT),trim((string)$body['firstName']),trim((string)$body['lastName']),$body['email']??null,$body['phone']??null,$body['role']??'OPERATOR',json_encode(normalize_user_permissions($body['permissions']??[])),$now,$now,uuid_bin($admin['id']),uuid_bin($admin['id'])]);$link=$pdo->prepare('INSERT INTO user_properties (user_id,property_id) VALUES (?,?)');foreach($propertyIds as$propertyId)$link->execute([uuid_bin($id),uuid_bin($propertyId)]);$pdo->commit();audit_log('USER_CREATED','users','Utilizator creat: '.$body['username'],'User',$id,$propertyIds[0]??null,null,array_diff_key($body,['password'=>true]),$admin);respond(user_record($id),201);}catch(PDOException$e){$pdo->rollBack();if((int)$e->errorInfo[1]===1062)fail('Numele de utilizator există deja.',409);throw$e;} }
     if ($method==='PUT'&&path_match('/users/{id}',$path,$params)) {
         $admin=require_permission('users.manage');$body=json_body();$role=strtoupper(trim((string)($body['role']??'')));$roles=['ADMIN','MANAGER','OPERATOR','TECHNICIAN','COLLABORATOR'];
         if(!in_array($role,$roles,true))fail('Rolul selectat nu este valid.',422);
@@ -2119,7 +2135,7 @@ try {
         if(!is_array($propertyIds))fail('Lista proprietăților este invalidă.',422);
         $propertyIds=array_values(array_unique(array_map(fn($value)=>trim((string)$value),$propertyIds)));
         foreach($propertyIds as$propertyId){if($propertyId==='')fail('Lista proprietăților este invalidă.',422);ensure_property($propertyId,$admin);ensure_existing_property($propertyId);}
-        $permissions=array_values(array_unique(array_map(fn($value)=>trim((string)$value),$permissions)));$now=now_utc();$pdo=db();$pdo->beginTransaction();
+        $permissions=normalize_user_permissions($permissions);$now=now_utc();$pdo=db();$pdo->beginTransaction();
         try{
             $pdo->prepare('UPDATE users SET permissions=?,updated_at=?,updated_by=? WHERE id=?')->execute([json_encode($permissions),$now,uuid_bin($admin['id']),uuid_bin($params['id'])]);
             $pdo->prepare('DELETE FROM user_properties WHERE user_id=?')->execute([uuid_bin($params['id'])]);

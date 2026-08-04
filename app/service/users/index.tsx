@@ -3,7 +3,7 @@ import { AppText } from '@/components/ui/AppText';
 import { Card } from '@/components/ui/Card';
 import { Screen } from '@/components/ui/Screen';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
-import { ROLE_LABELS } from '@/constants/permissions';
+import { ALL_PERMISSIONS, ROLE_LABELS } from '@/constants/permissions';
 import { useProperty } from '@/contexts/PropertyContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
@@ -139,6 +139,7 @@ function UserCard({ user, colorsIndex, locked, onPress }: { user: User; colorsIn
   const { colors, isDark } = useAppTheme();
   const roleColor = user.role === 'ADMIN' ? palette.purple : user.role === 'COLLABORATOR' ? palette.cyan : palette.electric;
   const accessLabel = user.role === 'ADMIN' ? 'Acces global' : `${user.propertyIds.length} ${user.propertyIds.length === 1 ? 'proprietate' : 'proprietăți'}`;
+  const permissionCount = user.role === 'ADMIN' ? ALL_PERMISSIONS.length : user.permissions.filter((permission) => ALL_PERMISSIONS.includes(permission)).length;
   return <Pressable accessibilityRole="button" accessibilityLabel={locked ? `${user.firstName} ${user.lastName}, Administrator principal protejat` : `Deschide utilizatorul ${user.firstName} ${user.lastName}`} accessibilityState={{ disabled: locked }} disabled={locked} onPress={onPress} style={({ pressed }) => ({ opacity: pressed ? 0.82 : 1, transform: [{ scale: pressed ? 0.992 : 1 }] })}>
     <Card style={[styles.userCard, { borderColor: locked ? `${palette.purple}70` : user.isActive ? colors.border : `${palette.danger}45` }]}>
       <View style={[styles.accent, { backgroundColor: user.isActive ? palette.electric : palette.danger }]} />
@@ -150,7 +151,7 @@ function UserCard({ user, colorsIndex, locked, onPress }: { user: User; colorsIn
         </View>
         <View style={styles.identityRow}><Ionicons name={user.role === 'ADMIN' ? 'shield-checkmark-outline' : 'person-outline'} size={15} color={roleColor} /><AppText variant="caption" numberOfLines={1} style={{ color: roleColor, fontWeight: '800' }}>@{user.username} · {ROLE_LABELS[user.role]}</AppText></View>
         <View style={styles.metaRow}>
-          <View style={styles.metaItem}><Ionicons name="key-outline" size={14} color={colors.textMuted} /><AppText variant="caption" muted>{user.permissions.length} permisiuni</AppText></View>
+          <View style={styles.metaItem}><Ionicons name="key-outline" size={14} color={colors.textMuted} /><AppText variant="caption" muted>{permissionCount} permisiuni</AppText></View>
           <View style={styles.metaItem}><Ionicons name="business-outline" size={14} color={colors.textMuted} /><AppText variant="caption" muted>{accessLabel}</AppText></View>
         </View>
         <View style={styles.lastLogin}><Ionicons name={locked ? 'lock-closed-outline' : 'time-outline'} size={14} color={locked ? palette.purple : colors.textMuted} /><AppText variant="caption" muted numberOfLines={1}>{locked ? 'Cont protejat · se modifică numai din Profil' : user.lastLoginAt ? `Ultima autentificare ${formatDate(user.lastLoginAt, true)}` : 'Nu s-a autentificat încă'}</AppText></View>

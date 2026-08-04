@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { Screen } from '@/components/ui/Screen';
-import { ROLE_LABELS } from '@/constants/permissions';
+import { ALL_PERMISSIONS, ROLE_LABELS } from '@/constants/permissions';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProperty } from '@/contexts/PropertyContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
@@ -50,6 +50,7 @@ export default function ProfileScreen() {
   );
 
   if (!user) return null;
+  const permissionCount = user.role === 'ADMIN' ? ALL_PERMISSIONS.length : user.permissions.filter((permission) => ALL_PERMISSIONS.includes(permission)).length;
 
   const saveName = async () => {
     const nextErrors = {
@@ -109,7 +110,7 @@ export default function ProfileScreen() {
           <View style={styles.heroStats}>
             <View style={styles.heroStat}><Ionicons name="business-outline" size={18} color="#FFFFFF" /><View><AppText variant="label" style={styles.heroStatValue}>{properties.length}</AppText><AppText variant="caption" style={styles.heroStatLabel}>proprietăți</AppText></View></View>
             <View style={styles.heroDivider} />
-            <View style={styles.heroStat}><Ionicons name="key-outline" size={18} color="#FFFFFF" /><View><AppText variant="label" style={styles.heroStatValue}>{user.permissions.length}</AppText><AppText variant="caption" style={styles.heroStatLabel}>permisiuni</AppText></View></View>
+            <View style={styles.heroStat}><Ionicons name="key-outline" size={18} color="#FFFFFF" /><View><AppText variant="label" style={styles.heroStatValue}>{permissionCount}</AppText><AppText variant="caption" style={styles.heroStatLabel}>permisiuni</AppText></View></View>
           </View>
         </LinearGradient>
 
@@ -142,7 +143,7 @@ export default function ProfileScreen() {
           <SectionHeader icon="shield-checkmark-outline" color={palette.success} background={`${palette.success}16`} title="Acces și securitate" subtitle="Rezumatul drepturilor active pentru acest cont." />
           <View style={[styles.accessBox, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
             <View style={[styles.accessIcon, { backgroundColor: `${palette.success}16` }]}><Ionicons name="checkmark-done-outline" size={21} color={palette.success} /></View>
-            <View style={styles.accessCopy}><AppText variant="label">{user.permissions.length} permisiuni active</AppText><AppText variant="caption" muted>Administratorul gestionează accesul din modulul Utilizatori.</AppText></View>
+            <View style={styles.accessCopy}><AppText variant="label">{permissionCount} permisiuni active</AppText><AppText variant="caption" muted>{user.isPrimaryAdmin ? 'Permisiunile Administratorului principal sunt protejate permanent.' : 'Administratorul gestionează accesul din modulul Utilizatori.'}</AppText></View>
             <Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} />
           </View>
           <Button variant="outline" label="Setări și securitate" icon="settings-outline" onPress={() => router.push('/settings')} />
