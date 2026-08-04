@@ -71,6 +71,7 @@ export const userRepository: UserRepository = {
   list: (propertyId) => apiRequest(`/users?propertyId=${propertyId}`),
   create: (input) => apiRequest('/users', { method: 'POST', body: JSON.stringify(input) }),
   update: (id, input) => apiRequest(`/users/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
+  setActive: (id, isActive) => apiRequest(`/users/${id}/status`, { method: 'PUT', body: JSON.stringify({ isActive }) }),
   remove: (id) => apiRequest(`/users/${id}`, { method: 'DELETE' }),
   resetPassword: (id, password) => apiRequest(`/users/${id}/password`, { method: 'PUT', body: JSON.stringify({ password }) }),
   updatePermissions: (id, permissions, propertyIds) => apiRequest(`/users/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ permissions, ...(propertyIds ? { propertyIds } : {}) }) }),

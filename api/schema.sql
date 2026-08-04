@@ -26,12 +26,14 @@ CREATE TABLE IF NOT EXISTS users (
   role ENUM('ADMIN','MANAGER','OPERATOR','TECHNICIAN','COLLABORATOR') NOT NULL DEFAULT 'OPERATOR',
   permissions JSON NOT NULL,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
+  deleted_at DATETIME NULL,
   last_login_at DATETIME NULL,
   created_at DATETIME NOT NULL,
   updated_at DATETIME NOT NULL,
   created_by BINARY(16) NULL,
   updated_by BINARY(16) NULL,
   INDEX idx_users_active_role (is_active, role),
+  INDEX idx_users_deleted (deleted_at),
   INDEX idx_users_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

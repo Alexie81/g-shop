@@ -70,6 +70,7 @@ export interface UserRepository {
   list(propertyId: UUID): Promise<User[]>;
   create(input: Partial<User> & { password: string }): Promise<User>;
   update(id: UUID, input: Partial<User>): Promise<User>;
+  setActive(id: UUID, isActive: boolean): Promise<User>;
   remove(id: UUID): Promise<void>;
   resetPassword(id: UUID, password: string): Promise<void>;
   updatePermissions(id: UUID, permissions: Permission[], propertyIds?: UUID[]): Promise<User>;
