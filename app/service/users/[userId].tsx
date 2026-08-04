@@ -222,7 +222,12 @@ export default function UserDetails() {
             >
               <View style={[styles.propertyIcon, { backgroundColor: enabled ? colors.primary : colors.surfaceMuted }]}><Ionicons name={property.type === 'SERVICE' ? 'construct-outline' : 'storefront-outline'} size={21} color={enabled ? '#fff' : colors.textMuted} /></View>
               <View style={styles.propertyCopy}><AppText variant="label" numberOfLines={2}>{property.name}</AppText><AppText variant="caption" muted>{property.type === 'SERVICE' ? 'Service' : 'Magazin'} · {enabled ? 'Acces permis' : 'Fără acces'}</AppText></View>
-              <Switch pointerEvents="none" value={enabled} disabled={globalAccess} trackColor={{ false: colors.border, true: colors.primary }} />
+              <Switch
+                value={enabled}
+                disabled={globalAccess}
+                onValueChange={() => toggleProperty(property.id)}
+                trackColor={{ false: colors.border, true: colors.primary }}
+              />
             </Pressable>;
           })}
         </View>
@@ -238,7 +243,12 @@ export default function UserDetails() {
           return <Pressable key={permission} disabled={globalAccess} onPress={() => togglePermission(permission)} style={({ pressed }) => [styles.permission, { borderColor: enabled ? `${palette.purple}70` : colors.border, backgroundColor: enabled ? (isDark ? '#251A48' : '#F4EFFF') : colors.surface, opacity: pressed ? 0.78 : 1 }]}>
             <View style={[styles.permissionCheck, { backgroundColor: enabled ? palette.purple : colors.surfaceMuted }]}><Ionicons name={enabled ? 'checkmark' : 'remove'} size={16} color={enabled ? '#fff' : colors.textMuted} /></View>
             <View style={styles.permissionCopy}><AppText variant="label">{permissionLabels[permission]}</AppText><AppText variant="caption" muted>{permission}</AppText></View>
-            <Switch pointerEvents="none" value={enabled} disabled={globalAccess} trackColor={{ false: colors.border, true: palette.purple }} />
+            <Switch
+              value={enabled}
+              disabled={globalAccess}
+              onValueChange={() => togglePermission(permission)}
+              trackColor={{ false: colors.border, true: palette.purple }}
+            />
           </Pressable>;
         })}</View>
         {primaryAdmin ? <View style={[styles.notice, { backgroundColor: colors.primarySoft, borderColor: `${colors.primary}30` }]}><Ionicons name="lock-closed-outline" size={20} color={colors.primary} /><AppText variant="caption" style={styles.noticeCopy}>Administratorul principal are permanent toate cele 21 de permisiuni. Acestea nu pot fi retrase nici din propriul cont.</AppText></View> : null}

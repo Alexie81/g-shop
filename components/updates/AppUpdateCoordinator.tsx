@@ -1,7 +1,6 @@
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
-import { useAuth } from '@/contexts/AuthContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { appUpdateRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
@@ -15,18 +14,14 @@ import { useEffect, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 export function AppUpdateCoordinator() {
-  const { ready, session } = useAuth();
   const { colors, isDark } = useAppTheme();
   const updates = Updates.useUpdates();
   const checked = useRef(false);
   const [visible, setVisible] = useState(false);
-  const [installing, setInstalling] = useState(false);
-  const [otaAvailable, setOtaAvailable] = useState(false);
-  const [otaVersion, setOtaVersion] = useState<string | null>(null);
   const [published, setPublished] = useState<AppUpdateInfo | null>(null);
 
   useEffect(() => {
-    if (!ready || !session || checked.current || Platform.OS === 'web') return;
+    if (checked.current || Platform.OS === 'web') return;
     checked.current = true;
 
     const timer = setTimeout(() => {
@@ -34,23 +29,18 @@ export function AppUpdateCoordinator() {
         try {
           const info = await appUpdateRepository.get();
           const nativeUpdateAvailable = isNativeUpdateAvailable(info.latestBuildNumber, info.latestVersion);
-          const publishedOtaAvailable = compareVersions(info.latestVersion, releaseVersion()) > 0;
-          let available = updates.isUpdatePending;
-          let candidate = manifestReleaseVersion(updates.downloadedUpdate?.manifest);
-          if (Updates.isEnabled) {
+          if (Updates.isEnabled && !updates.isUpdatePending) {
             try {
-              if (!available) {
-                const result = await Updates.checkForUpdateAsync();
-                if (result.isAvailable) candidate = manifestReleaseVersion(result.manifest);
-                available = result.isAvailable && (!candidate || compareVersions(candidate, releaseVersion()) > 0);
+              const result = await Updates.checkForUpdateAsync();
+              const candidate = result.isAvailable ? manifestReleaseVersion(result.manifest) : null;
+              if (result.isAvailable && (!candidate || compareVersions(candidate, releaseVersion()) > 0)) {
+                await Updates.fetchUpdateAsync();
               }
-              if (available && candidate) setOtaVersion(candidate);
             }
             catch { /* Verificarea versiunii native rămâne disponibilă fără serviciul OTA. */ }
           }
-          if (!nativeUpdateAvailable && !publishedOtaAvailable && !available) return;
+          if (!nativeUpdateAvailable) return;
           setPublished(info);
-          setOtaAvailable(available || publishedOtaAvailable);
           setVisible(true);
         } catch {
           // Pornirea aplicației nu trebuie blocată dacă verificarea nu este disponibilă.
@@ -59,55 +49,25 @@ export function AppUpdateCoordinator() {
     }, 1200);
 
     return () => clearTimeout(timer);
-  }, [ready, session, updates.downloadedUpdate?.manifest, updates.isUpdatePending]);
+  }, [updates.isUpdatePending]);
 
-  const install = async () => {
-    if (installing) return;
-    if (!otaAvailable || !Updates.isEnabled) {
-      setVisible(false);
-      router.push('/app-update');
-      return;
-    }
-    setInstalling(true);
-    try {
-      if (updates.isUpdatePending) {
-        await Updates.reloadAsync();
-        return;
-      }
-      const check = await Updates.checkForUpdateAsync();
-      if (!check.isAvailable) {
-        setInstalling(false);
-        setVisible(false);
-        return;
-      }
-      const result = await Updates.fetchUpdateAsync();
-      if (!result.isNew) {
-        setInstalling(false);
-        setVisible(false);
-        return;
-      }
-      await Updates.reloadAsync();
-    } catch {
-      setInstalling(false);
-      setVisible(false);
-      router.push('/app-update');
-    }
+  const openNativeUpdate = () => {
+    setVisible(false);
+    router.push('/app-update');
   };
 
-  const availableVersion = otaAvailable ? otaVersion ?? published?.latestVersion ?? releaseVersion() : published?.latestVersion ?? releaseVersion();
-  const notes = otaAvailable
-    ? ['Actualizare rapidă OTA, fără reinstalarea aplicației.', 'Îmbunătățiri noi de funcționalitate, design și stabilitate.']
-    : published?.releaseNotes.slice(0, 2) ?? [];
+  const availableVersion = published?.latestVersion ?? releaseVersion();
+  const notes = published?.releaseNotes.slice(0, 2) ?? [];
 
-  return <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => !installing && setVisible(false)}>
+  return <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setVisible(false)}>
     <ModalSafeBottom style={[styles.overlay, { backgroundColor: colors.overlay }]}>
-      <Pressable style={StyleSheet.absoluteFill} disabled={installing} onPress={() => setVisible(false)} />
+      <Pressable style={StyleSheet.absoluteFill} onPress={() => setVisible(false)} />
       <View style={[styles.card, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
         <LinearGradient colors={isDark ? ['#32146F', '#075CFF'] : ['#6937E6', '#075CFF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
           <View pointerEvents="none" style={styles.glow} />
           <View style={styles.updateIcon}><Ionicons name="cloud-download-outline" size={31} color="#FFFFFF" /></View>
-          <View style={styles.heroCopy}><AppText variant="caption" style={styles.eyebrow}>ACTUALIZARE G-SHOP</AppText><AppText variant="title" style={styles.heroTitle}>O versiune nouă este gata</AppText><AppText style={styles.heroText}>{otaAvailable ? 'Se instalează direct, fără să descarci din nou APK-ul.' : 'Este disponibilă o versiune nouă a aplicației Android.'}</AppText></View>
-          <Pressable accessibilityLabel="Mai târziu" disabled={installing} onPress={() => setVisible(false)} style={styles.close}><Ionicons name="close" size={22} color="#FFFFFF" /></Pressable>
+          <View style={styles.heroCopy}><AppText variant="caption" style={styles.eyebrow}>ACTUALIZARE G-SHOP</AppText><AppText variant="title" style={styles.heroTitle}>O versiune nouă este gata</AppText><AppText style={styles.heroText}>Este disponibilă o versiune nouă a aplicației Android.</AppText></View>
+          <Pressable accessibilityLabel="Mai târziu" onPress={() => setVisible(false)} style={styles.close}><Ionicons name="close" size={22} color="#FFFFFF" /></Pressable>
         </LinearGradient>
 
         <View style={styles.body}>
@@ -119,8 +79,8 @@ export function AppUpdateCoordinator() {
 
           <View style={styles.notes}>{notes.map((note) => <View key={note} style={styles.note}><View style={[styles.check, { backgroundColor: `${palette.success}18` }]}><Ionicons name="checkmark" size={15} color={palette.success} /></View><AppText style={styles.noteCopy}>{note}</AppText></View>)}</View>
 
-          <Button label={otaAvailable ? 'Actualizează acum' : 'Vezi actualizarea'} icon="sparkles-outline" loading={installing} onPress={() => void install()} />
-          <Pressable disabled={installing} onPress={() => setVisible(false)} style={styles.later}><AppText variant="label" muted>Mai târziu</AppText></Pressable>
+          <Button label="Vezi actualizarea" icon="sparkles-outline" onPress={openNativeUpdate} />
+          <Pressable onPress={() => setVisible(false)} style={styles.later}><AppText variant="label" muted>Mai târziu</AppText></Pressable>
         </View>
       </View>
     </ModalSafeBottom>
