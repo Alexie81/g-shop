@@ -51,11 +51,13 @@ const roles = Object.keys(ROLE_LABELS) as UserRole[];
 export default function UserDetails() {
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const { activeProperty, properties } = useProperty();
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, hasPermission } = useAuth();
   const { colors, isDark } = useAppTheme();
   const { showToast } = useToast();
   const { width } = useWindowDimensions();
   const compact = width < 620;
+  const canManageUsers = hasPermission('users.manage');
+  const canManageRoles = hasPermission('roles.manage');
   const state = useAsyncData(
     async () => (await userRepository.list(activeProperty?.id ?? '')).find((item) => item.id === userId) ?? Promise.reject(new Error('Utilizatorul nu există.')),
     [userId, activeProperty?.id],
@@ -79,6 +81,7 @@ export default function UserDetails() {
   }, [state.data]);
 
   const returnToUsers = () => router.replace('/service/users');
+  if (!canManageRoles) return <Screen header={<AppHeader title="Utilizator" back onBack={returnToUsers} />}><ErrorState message="Nu ai permisiunea «Configurează roluri». Profilurile utilizatorilor sunt blocate." /></Screen>;
   if (state.loading) return <Screen header={<AppHeader title="Utilizator" back onBack={returnToUsers} />}><LoadingState /></Screen>;
   if (state.error || !state.data) return <Screen header={<AppHeader title="Utilizator" back onBack={returnToUsers} />}><ErrorState message={state.error?.message ?? 'Utilizator inexistent.'} /></Screen>;
 
@@ -89,14 +92,15 @@ export default function UserDetails() {
   const selectedPropertyCount = globalAccess ? properties.length : propertyIds.length;
   const selectedPermissionCount = globalAccess ? ALL_PERMISSIONS.length : permissions.length;
   const togglePermission = (permission: Permission) => {
-    if (globalAccess) return;
+    if (globalAccess || !canManageRoles) return;
     setPermissions((current) => current.includes(permission) ? current.filter((item) => item !== permission) : [...current, permission]);
   };
   const toggleProperty = (propertyId: string) => {
-    if (globalAccess) return;
+    if (globalAccess || !canManageRoles) return;
     setPropertyIds((current) => current.includes(propertyId) ? current.filter((id) => id !== propertyId) : [...current, propertyId]);
   };
   const saveAccess = async (source: 'access' | 'permissions') => {
+    if (!canManageRoles) return showToast('Nu ai permisiunea de a configura roluri și acces.', 'error');
     setSaving(source);
     try {
       const updated = await userRepository.updatePermissions(target.id, permissions, globalAccess ? target.propertyIds : propertyIds);
@@ -107,7 +111,7 @@ export default function UserDetails() {
     } finally { setSaving(''); }
   };
   const saveRole = async () => {
-    if (role === target.role || primaryAdmin) return;
+    if (role === target.role || primaryAdmin || !canManageRoles) return;
     setSaving('role');
     try {
       const updated = await userRepository.update(target.id, { role });
@@ -119,6 +123,7 @@ export default function UserDetails() {
     } finally { setSaving(''); }
   };
   const resetPassword = async () => {
+    if (!canManageUsers) return showToast('Nu ai permisiunea de a gestiona utilizatori.', 'error');
     if (password.length < 8) return showToast('Parola trebuie să aibă minimum 8 caractere.', 'error');
     setSaving('password');
     try {
@@ -130,7 +135,7 @@ export default function UserDetails() {
     } finally { setSaving(''); }
   };
   const deleteUser = async () => {
-    if (deleting) return;
+    if (deleting || !canManageUsers) return;
     setDeleting(true);
     try {
       await userRepository.remove(target.id);
@@ -142,7 +147,7 @@ export default function UserDetails() {
     } finally { setDeleting(false); }
   };
   const changeAccountStatus = async () => {
-    if (statusSaving) return;
+    if (statusSaving || !canManageUsers) return;
     setStatusSaving(true);
     try {
       const updated = await userRepository.setActive(target.id, !target.isActive);
@@ -192,7 +197,7 @@ export default function UserDetails() {
               key={item}
               accessibilityRole="radio"
               accessibilityState={{ selected }}
-              disabled={primaryAdmin}
+              disabled={primaryAdmin || !canManageRoles}
               onPress={() => setRole(item)}
               style={({ pressed }) => [styles.roleOption, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.primarySoft : colors.surface, opacity: pressed ? 0.78 : 1 }]}
             >
@@ -203,7 +208,7 @@ export default function UserDetails() {
           })}
         </View>
         {primaryAdmin ? <View style={[styles.notice, { backgroundColor: colors.primarySoft, borderColor: `${colors.primary}30` }]}><View style={[styles.noticeIcon, { backgroundColor: colors.primary }]}><Ionicons name="lock-closed-outline" size={20} color="#fff" /></View><AppText variant="caption" style={styles.noticeCopy}>Rolul Administratorului principal este protejat și nu poate fi schimbat.</AppText></View> : null}
-        <View style={styles.sectionAction}><Button label={primaryAdmin ? 'Rol protejat' : role === target.role ? 'Rol salvat' : 'Salvează rolul'} icon={primaryAdmin ? 'lock-closed-outline' : 'ribbon-outline'} loading={saving === 'role'} disabled={primaryAdmin || role === target.role || Boolean(saving && saving !== 'role')} onPress={() => void saveRole()} /></View>
+        <View style={styles.sectionAction}><Button label={primaryAdmin ? 'Rol protejat' : role === target.role ? 'Rol salvat' : 'Salvează rolul'} icon={primaryAdmin ? 'lock-closed-outline' : 'ribbon-outline'} loading={saving === 'role'} disabled={primaryAdmin || !canManageRoles || role === target.role || Boolean(saving && saving !== 'role')} onPress={() => void saveRole()} /></View>
       </Card>
 
       <Card style={styles.section} elevated>
@@ -215,8 +220,8 @@ export default function UserDetails() {
             return <Pressable
               key={property.id}
               accessibilityRole="checkbox"
-              accessibilityState={{ checked: enabled, disabled: globalAccess }}
-              disabled={globalAccess}
+              accessibilityState={{ checked: enabled, disabled: globalAccess || !canManageRoles }}
+              disabled={globalAccess || !canManageRoles}
               onPress={() => toggleProperty(property.id)}
               style={({ pressed }) => [styles.propertyAccess, { borderColor: enabled ? colors.primary : colors.border, backgroundColor: enabled ? colors.primarySoft : colors.surface, opacity: pressed ? 0.78 : 1 }]}
             >
@@ -224,7 +229,7 @@ export default function UserDetails() {
               <View style={styles.propertyCopy}><AppText variant="label" numberOfLines={2}>{property.name}</AppText><AppText variant="caption" muted>{property.type === 'SERVICE' ? 'Service' : 'Magazin'} · {enabled ? 'Acces permis' : 'Fără acces'}</AppText></View>
               <Switch
                 value={enabled}
-                disabled={globalAccess}
+                disabled={globalAccess || !canManageRoles}
                 onValueChange={() => toggleProperty(property.id)}
                 trackColor={{ false: colors.border, true: colors.primary }}
               />
@@ -232,7 +237,7 @@ export default function UserDetails() {
           })}
         </View>
         {!globalAccess && !propertyIds.length ? <View style={[styles.notice, { backgroundColor: isDark ? '#39270C' : palette.warningSoft, borderColor: `${palette.warning}35` }]}><View style={[styles.noticeIcon, { backgroundColor: palette.warning }]}><Ionicons name="warning-outline" size={20} color="#fff" /></View><AppText variant="caption" style={styles.noticeCopy}>Fără o proprietate selectată, utilizatorul se poate autentifica, dar nu poate deschide datele aplicației.</AppText></View> : null}
-        <View style={styles.sectionAction}><Button label={primaryAdmin ? 'Acces protejat' : 'Salvează accesul'} icon={primaryAdmin ? 'lock-closed-outline' : 'business-outline'} loading={saving === 'access'} disabled={primaryAdmin || globalAccess || Boolean(saving && saving !== 'access')} onPress={() => void saveAccess('access')} /></View>
+        <View style={styles.sectionAction}><Button label={primaryAdmin ? 'Acces protejat' : 'Salvează accesul'} icon={primaryAdmin ? 'lock-closed-outline' : 'business-outline'} loading={saving === 'access'} disabled={primaryAdmin || globalAccess || !canManageRoles || Boolean(saving && saving !== 'access')} onPress={() => void saveAccess('access')} /></View>
       </Card>
 
       <Card style={styles.section} elevated>
@@ -240,22 +245,22 @@ export default function UserDetails() {
         <View style={[styles.permissionSummary, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}><View><AppText variant="heading">{selectedPermissionCount} din {ALL_PERMISSIONS.length}</AppText><AppText variant="caption" muted>permisiuni active</AppText></View><View style={[styles.permissionProgress, { backgroundColor: colors.border }]}><View style={[styles.permissionProgressFill, { width: `${Math.round(selectedPermissionCount / ALL_PERMISSIONS.length * 100)}%`, backgroundColor: palette.purple }]} /></View></View>
         <View style={styles.permissionGrid}>{ALL_PERMISSIONS.map((permission) => {
           const enabled = globalAccess || permissions.includes(permission);
-          return <Pressable key={permission} disabled={globalAccess} onPress={() => togglePermission(permission)} style={({ pressed }) => [styles.permission, { borderColor: enabled ? `${palette.purple}70` : colors.border, backgroundColor: enabled ? (isDark ? '#251A48' : '#F4EFFF') : colors.surface, opacity: pressed ? 0.78 : 1 }]}>
+          return <Pressable key={permission} disabled={globalAccess || !canManageRoles} onPress={() => togglePermission(permission)} style={({ pressed }) => [styles.permission, { borderColor: enabled ? `${palette.purple}70` : colors.border, backgroundColor: enabled ? (isDark ? '#251A48' : '#F4EFFF') : colors.surface, opacity: pressed ? 0.78 : 1 }]}>
             <View style={[styles.permissionCheck, { backgroundColor: enabled ? palette.purple : colors.surfaceMuted }]}><Ionicons name={enabled ? 'checkmark' : 'remove'} size={16} color={enabled ? '#fff' : colors.textMuted} /></View>
             <View style={styles.permissionCopy}><AppText variant="label">{permissionLabels[permission]}</AppText><AppText variant="caption" muted>{permission}</AppText></View>
             <Switch
               value={enabled}
-              disabled={globalAccess}
+              disabled={globalAccess || !canManageRoles}
               onValueChange={() => togglePermission(permission)}
               trackColor={{ false: colors.border, true: palette.purple }}
             />
           </Pressable>;
         })}</View>
         {primaryAdmin ? <View style={[styles.notice, { backgroundColor: colors.primarySoft, borderColor: `${colors.primary}30` }]}><Ionicons name="lock-closed-outline" size={20} color={colors.primary} /><AppText variant="caption" style={styles.noticeCopy}>Administratorul principal are permanent toate cele 21 de permisiuni. Acestea nu pot fi retrase nici din propriul cont.</AppText></View> : null}
-        <View style={styles.sectionAction}><Button label={primaryAdmin ? 'Permisiuni protejate' : 'Salvează permisiunile'} icon={primaryAdmin ? 'lock-closed-outline' : 'shield-checkmark-outline'} loading={saving === 'permissions'} disabled={primaryAdmin || globalAccess || Boolean(saving && saving !== 'permissions')} onPress={() => void saveAccess('permissions')} /></View>
+        <View style={styles.sectionAction}><Button label={primaryAdmin ? 'Permisiuni protejate' : 'Salvează permisiunile'} icon={primaryAdmin ? 'lock-closed-outline' : 'shield-checkmark-outline'} loading={saving === 'permissions'} disabled={primaryAdmin || globalAccess || !canManageRoles || Boolean(saving && saving !== 'permissions')} onPress={() => void saveAccess('permissions')} /></View>
       </Card>
 
-      <Card style={styles.section} elevated>
+      {canManageUsers ? <Card style={styles.section} elevated>
         <SectionHeading icon="key-outline" color={palette.cyan} title="Parolă nouă" description="Schimbarea parolei închide sesiunile vechi ale utilizatorului." />
         <View style={[styles.passwordPanel, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
           <Input label="Parolă nouă" secureTextEntry autoCapitalize="none" autoCorrect={false} value={password} onChangeText={setPassword} />
@@ -263,17 +268,17 @@ export default function UserDetails() {
         </View>
         {protectedFromCurrent ? <View style={[styles.notice, { backgroundColor: colors.primarySoft, borderColor: `${colors.primary}30` }]}><Ionicons name="lock-closed-outline" size={20} color={colors.primary} /><AppText variant="caption" style={styles.noticeCopy}>Doar Administratorul principal își poate schimba propria parolă.</AppText></View> : null}
         <View style={styles.sectionAction}><Button variant="outline" label={protectedFromCurrent ? 'Parolă protejată' : 'Actualizează parola'} icon={protectedFromCurrent ? 'lock-closed-outline' : 'key-outline'} loading={saving === 'password'} disabled={protectedFromCurrent || Boolean(saving && saving !== 'password')} onPress={() => void resetPassword()} /></View>
-      </Card>
+      </Card> : null}
 
-      <Card style={[styles.section, styles.statusSection, { backgroundColor: target.isActive ? (isDark ? '#2F240E' : '#FFFBF1') : (isDark ? '#102B23' : '#F2FCF8'), borderColor: target.isActive ? `${palette.warning}45` : `${palette.success}45` }]}>
+      {canManageUsers ? <Card style={[styles.section, styles.statusSection, { backgroundColor: target.isActive ? (isDark ? '#2F240E' : '#FFFBF1') : (isDark ? '#102B23' : '#F2FCF8'), borderColor: target.isActive ? `${palette.warning}45` : `${palette.success}45` }]}>
         <SectionHeading icon={target.isActive ? 'pause-circle-outline' : 'play-circle-outline'} color={target.isActive ? palette.warning : palette.success} title={target.isActive ? 'Dezactivare temporară' : 'Reactivare utilizator'} description={target.isActive ? 'Blochează autentificarea, dar păstrează utilizatorul, rolul și accesul pentru reactivare.' : 'Redă utilizatorului accesul cu rolul și permisiunile păstrate.'} />
         {primaryAdmin ? <View style={[styles.notice, { backgroundColor: colors.surface, borderColor: `${colors.primary}30` }]}><Ionicons name="lock-closed-outline" size={20} color={colors.primary} /><AppText variant="caption" style={styles.noticeCopy}>Administratorul principal nu poate fi dezactivat.</AppText></View> : target.id !== currentUser?.id ? <View style={styles.sectionAction}><Button variant={target.isActive ? 'outline' : 'primary'} label={target.isActive ? 'Dezactivează utilizatorul' : 'Reactivează utilizatorul'} icon={target.isActive ? 'pause-circle-outline' : 'play-circle-outline'} onPress={() => setStatusOpen(true)} /></View> : <View style={[styles.notice, { backgroundColor: colors.surface, borderColor: `${palette.warning}30` }]}><Ionicons name="shield-outline" size={20} color={palette.warning} /><AppText variant="caption" style={styles.noticeCopy}>Nu îți poți dezactiva propriul cont cât timp ești autentificat cu el.</AppText></View>}
-      </Card>
+      </Card> : null}
 
-      <Card style={[styles.section, styles.dangerSection, { backgroundColor: isDark ? '#29131B' : '#FFF7F8', borderColor: `${palette.danger}45` }]}>
+      {canManageUsers ? <Card style={[styles.section, styles.dangerSection, { backgroundColor: isDark ? '#29131B' : '#FFF7F8', borderColor: `${palette.danger}45` }]}>
         <SectionHeading icon="trash-outline" color={palette.danger} title="Ștergere utilizator" description="Elimină accesul contului, păstrând istoricul necesar pentru audit." />
         {primaryAdmin ? <View style={[styles.notice, { backgroundColor: colors.surface, borderColor: `${colors.primary}30` }]}><Ionicons name="lock-closed-outline" size={20} color={colors.primary} /><AppText variant="caption" style={styles.noticeCopy}>Administratorul principal este permanent și nu poate fi șters.</AppText></View> : target.id !== currentUser?.id ? <View style={styles.sectionAction}><Button variant="danger" label="Șterge utilizatorul" icon="trash-outline" onPress={() => setDeleteOpen(true)} /></View> : <View style={[styles.notice, { backgroundColor: colors.surface, borderColor: `${palette.danger}30` }]}><Ionicons name="shield-outline" size={20} color={palette.danger} /><AppText variant="caption" style={styles.noticeCopy}>Nu îți poți șterge propriul cont cât timp ești autentificat cu el.</AppText></View>}
-      </Card>
+      </Card> : null}
     </Screen>
 
     <Modal visible={statusOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={() => !statusSaving && setStatusOpen(false)}>

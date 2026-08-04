@@ -67,9 +67,32 @@ function is_primary_admin_id(string $userId): bool { return strtolower($userId) 
 function ensure_primary_admin_editable(array $actor, array $target, bool $allowSelf = false): void {
     if (!empty($target['isPrimaryAdmin']) && (!$allowSelf || $actor['id'] !== $target['id'])) fail('Administratorul principal este protejat și nu poate fi modificat.', 403);
 }
-function supported_user_permissions(): array {
-    return ['dashboard.view','clients.view','clients.create','clients.update','clients.delete','qr.generate','qr.scan','qr.share','service_sheets.view','service_sheets.create','service_sheets.update','service_sheets.sign','collaborators.view','collaborators.manage','users.view','users.manage','roles.manage','reports.view','financials.view','audit.view','settings.manage'];
+function user_permission_catalog(): array {
+    return [
+        ['key'=>'dashboard.view','label'=>'Vezi dashboard','group'=>'Dashboard'],
+        ['key'=>'clients.view','label'=>'Vezi clienți','group'=>'Clienți'],
+        ['key'=>'clients.create','label'=>'Adaugă clienți','group'=>'Clienți'],
+        ['key'=>'clients.update','label'=>'Editează clienți','group'=>'Clienți'],
+        ['key'=>'clients.delete','label'=>'Dezactivează clienți','group'=>'Clienți'],
+        ['key'=>'qr.generate','label'=>'Generează QR','group'=>'QR'],
+        ['key'=>'qr.scan','label'=>'Scanează QR','group'=>'QR'],
+        ['key'=>'qr.share','label'=>'Trimite QR','group'=>'QR'],
+        ['key'=>'service_sheets.view','label'=>'Vezi fișe service','group'=>'Fișe service'],
+        ['key'=>'service_sheets.create','label'=>'Creează fișe','group'=>'Fișe service'],
+        ['key'=>'service_sheets.update','label'=>'Modifică fișe','group'=>'Fișe service'],
+        ['key'=>'service_sheets.sign','label'=>'Înregistrează semnături','group'=>'Fișe service'],
+        ['key'=>'collaborators.view','label'=>'Vezi colaboratori','group'=>'Colaboratori'],
+        ['key'=>'collaborators.manage','label'=>'Gestionează colaboratori','group'=>'Colaboratori'],
+        ['key'=>'users.view','label'=>'Vezi utilizatori','group'=>'Utilizatori'],
+        ['key'=>'users.manage','label'=>'Gestionează utilizatori','group'=>'Utilizatori'],
+        ['key'=>'roles.manage','label'=>'Configurează roluri','group'=>'Utilizatori'],
+        ['key'=>'reports.view','label'=>'Vezi rapoarte','group'=>'Rapoarte'],
+        ['key'=>'financials.view','label'=>'Vezi date financiare','group'=>'Rapoarte'],
+        ['key'=>'audit.view','label'=>'Vezi jurnal audit','group'=>'Administrare'],
+        ['key'=>'settings.manage','label'=>'Gestionează setări','group'=>'Administrare'],
+    ];
 }
+function supported_user_permissions(): array { return array_column(user_permission_catalog(), 'key'); }
 function normalize_user_permissions(mixed $value): array {
     $decoded = is_array($value) ? $value : json_decode((string)$value, true);
     if (!is_array($decoded)) return [];
@@ -1411,6 +1434,7 @@ try {
         respond(auth_session(user_record($session['user_id']), (string)$session['device']));
     }
     if ($method === 'GET' && $path === '/auth/me') respond(current_user());
+    if ($method === 'GET' && $path === '/permissions') { require_permission('users.view'); respond(user_permission_catalog()); }
     if ($method === 'PUT' && $path === '/auth/profile') {
         $user = current_user();
         $body = json_body();
@@ -2122,7 +2146,7 @@ try {
     if ($method==='GET'&&$path==='/users') { $user=require_permission('users.view');ensure_user_deletion_field();ensure_user_permission_catalog();$propertyId=(string)($_GET['propertyId']??'');ensure_property($propertyId,$user);$select='SELECT '.uuid_sql('u.id').' id,u.username,u.first_name,u.last_name,u.email,u.phone,u.role,u.permissions,u.is_active,u.last_login_at,u.created_at,u.updated_at,'.uuid_sql('u.created_by').' created_by,'.uuid_sql('u.updated_by').' updated_by FROM users u';$args=[];if(empty($user['isPrimaryAdmin'])){$select.=' JOIN user_properties up ON up.user_id=u.id WHERE u.deleted_at IS NULL AND up.property_id=?';$args[] = uuid_bin($propertyId);}else{$select.=' WHERE u.deleted_at IS NULL';}$select.=' ORDER BY (u.id=?) DESC,u.is_active DESC,u.first_name,u.last_name';$args[]=uuid_bin(primary_admin_id());$stmt=db()->prepare($select);$stmt->execute($args);$data=[];foreach($stmt->fetchAll()as$row){$item=entity_base($row);$item['isPrimaryAdmin']=is_primary_admin_id($item['id']);$item['permissions']=normalize_user_permissions($row['permissions']);$item['propertyIds']=[];$pstmt=db()->prepare('SELECT '.uuid_sql('property_id').' id FROM user_properties WHERE user_id=?');$pstmt->execute([uuid_bin($item['id'])]);$item['propertyIds']=array_column($pstmt->fetchAll(),'id');$data[]=$item;}respond($data); }
     if ($method==='POST'&&$path==='/users') { $admin=require_permission('users.manage');ensure_user_deletion_field();$body=json_body();if(strlen(trim((string)($body['username']??'')))<3||strlen((string)($body['password']??''))<8)fail('Utilizator invalid sau parolă prea scurtă.',422);$propertyIds=$body['propertyIds']??[];foreach($propertyIds as$propertyId)ensure_property($propertyId,$admin);$id=uuid_v4();$now=now_utc();$pdo=db();$pdo->beginTransaction();try{$pdo->prepare('INSERT INTO users (id,username,password_hash,first_name,last_name,email,phone,role,permissions,is_active,deleted_at,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,1,NULL,?,?,?,?)')->execute([uuid_bin($id),trim($body['username']),password_hash($body['password'],PASSWORD_DEFAULT),trim((string)$body['firstName']),trim((string)$body['lastName']),$body['email']??null,$body['phone']??null,$body['role']??'OPERATOR',json_encode(normalize_user_permissions($body['permissions']??[])),$now,$now,uuid_bin($admin['id']),uuid_bin($admin['id'])]);$link=$pdo->prepare('INSERT INTO user_properties (user_id,property_id) VALUES (?,?)');foreach($propertyIds as$propertyId)$link->execute([uuid_bin($id),uuid_bin($propertyId)]);$pdo->commit();audit_log('USER_CREATED','users','Utilizator creat: '.$body['username'],'User',$id,$propertyIds[0]??null,null,array_diff_key($body,['password'=>true]),$admin);respond(user_record($id),201);}catch(PDOException$e){$pdo->rollBack();if((int)$e->errorInfo[1]===1062)fail('Numele de utilizator există deja.',409);throw$e;} }
     if ($method==='PUT'&&path_match('/users/{id}',$path,$params)) {
-        $admin=require_permission('users.manage');$body=json_body();$role=strtoupper(trim((string)($body['role']??'')));$roles=['ADMIN','MANAGER','OPERATOR','TECHNICIAN','COLLABORATOR'];
+        $admin=require_permission('roles.manage');$body=json_body();$role=strtoupper(trim((string)($body['role']??'')));$roles=['ADMIN','MANAGER','OPERATOR','TECHNICIAN','COLLABORATOR'];
         if(!in_array($role,$roles,true))fail('Rolul selectat nu este valid.',422);
         if($params['id']===$admin['id']&&$role!=='ADMIN')fail('Nu îți poți elimina propriul rol de administrator.',422);
         $before=user_record($params['id'],false);ensure_primary_admin_editable($admin,$before);db()->prepare('UPDATE users SET role=?,updated_at=?,updated_by=? WHERE id=? AND deleted_at IS NULL')->execute([$role,now_utc(),uuid_bin($admin['id']),uuid_bin($params['id'])]);$after=user_record($params['id'],false);

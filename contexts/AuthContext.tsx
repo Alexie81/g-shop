@@ -3,7 +3,7 @@ import { apiRequest, sessionManager } from '@/services/api';
 import { preferenceStorage, secureSessionStorage } from '@/services/storage';
 import { AuthSession, Permission, User } from '@/types';
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 type AuthContextValue = {
   session: AuthSession | null;
@@ -49,6 +49,36 @@ export function AuthProvider({ children }: PropsWithChildren) {
       }
     }).finally(() => setReady(true));
   }, []);
+
+  useEffect(() => {
+    if (!ready || !session?.user.id) return;
+    let syncing = false;
+    const syncAccess = async () => {
+      if (syncing || !sessionManager.get()) return;
+      syncing = true;
+      try {
+        const user = await apiRequest<User>('/auth/me');
+        const current = sessionManager.get();
+        if (!current || current.user.id !== user.id) return;
+        if (JSON.stringify(current.user) === JSON.stringify(user)) return;
+        const next = { ...current, user };
+        sessionManager.set(next);
+        if (await secureSessionStorage.get()) await secureSessionStorage.set(JSON.stringify(next));
+      } catch {
+        // API-ul invalidează automat sesiunea dacă utilizatorul a fost dezactivat.
+      } finally {
+        syncing = false;
+      }
+    };
+    const appStateSubscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') void syncAccess();
+    });
+    const interval = setInterval(() => void syncAccess(), 8000);
+    return () => {
+      appStateSubscription.remove();
+      clearInterval(interval);
+    };
+  }, [ready, session?.user.id]);
 
   const login = useCallback(async (username: string, password: string, remember: boolean) => {
     const next = await authRepository.login(username.trim(), password, `${Platform.OS} ${Platform.Version}`);
