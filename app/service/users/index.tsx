@@ -1,6 +1,7 @@
 import { AppHeader } from '@/components/layout/AppHeader';
 import { AppText } from '@/components/ui/AppText';
 import { Card } from '@/components/ui/Card';
+import { KeyboardAwareScrollView } from '@/components/ui/KeyboardAwareScrollView';
 import { Screen } from '@/components/ui/Screen';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
 import { ALL_PERMISSIONS, ROLE_LABELS } from '@/constants/permissions';
@@ -87,7 +88,7 @@ export default function UsersScreen() {
         </Pressable> : null}
       </LinearGradient>
 
-      <ScrollView
+      <KeyboardAwareScrollView
         style={styles.scroll}
         contentContainerStyle={[styles.scrollContent, { paddingTop: heroHeight + spacing.xs }]}
         showsVerticalScrollIndicator={false}
@@ -126,7 +127,7 @@ export default function UsersScreen() {
 
           {state.loading ? <LoadingState rows={5} /> : state.error ? <ErrorState message={state.error.message} onRetry={() => void state.reload()} /> : !filteredUsers.length ? <EmptyState icon={query || filter !== 'ALL' ? 'search-outline' : 'people-outline'} title={query || filter !== 'ALL' ? 'Niciun rezultat' : 'Niciun utilizator'} message={query || filter !== 'ALL' ? 'Schimbă termenul de căutare sau filtrul selectat.' : 'Adaugă primul utilizator pentru această proprietate.'} /> : <View style={styles.list}>{filteredUsers.map((user, index) => <UserCard key={user.id} user={user} colorsIndex={index} locked={Boolean(user.isPrimaryAdmin) || !canManageRoles} onPress={() => router.push(`/service/users/${user.id}`)} />)}</View>}
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   </Screen>;
 }

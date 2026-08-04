@@ -6,6 +6,7 @@ import { AnimatedRefreshIcon } from '@/components/ui/AnimatedRefreshIcon';
 import { AppText } from '@/components/ui/AppText';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
+import { KeyboardAwareScrollView } from '@/components/ui/KeyboardAwareScrollView';
 import { Screen } from '@/components/ui/Screen';
 import { ErrorState, LoadingState } from '@/components/ui/States';
 import { useProperty } from '@/contexts/PropertyContext';
@@ -179,7 +180,7 @@ export default function ReportsScreen() {
         </Pressable>
       </LinearGradient>
 
-      <ScrollView
+      <KeyboardAwareScrollView
         style={styles.scroll}
         contentContainerStyle={[styles.scrollContent, { paddingTop: heroHeight + spacing.xs }]}
         showsVerticalScrollIndicator={false}
@@ -256,7 +257,7 @@ export default function ReportsScreen() {
             {visibleCommissions.length ? <View style={styles.commissions}>{visibleCommissions.map((item) => <CommissionRow key={item.id} item={item} collaboratorName={item.collaboratorName ?? collaboratorNames.get(item.collaboratorId)} clientName={item.clientName ?? clientNames.get(item.clientId)} />)}</View> : <View style={styles.empty}><View style={[styles.emptyIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="receipt-outline" size={28} color={colors.primary} /></View><AppText variant="heading">Niciun comision</AppText><AppText variant="caption" muted style={styles.center}>{commissionFilter === 'DUE' ? 'Nu ai comisioane de achitat în intervalul selectat.' : 'Nu există comisioane în intervalul selectat.'}</AppText></View>}
           </Card>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
       <CollaboratorFinanceSheet visible={financeOpen} propertyId={propertyId} onClose={() => setFinanceOpen(false)} onChanged={() => void state.reload(true)} />
     </View>
   </Screen>;

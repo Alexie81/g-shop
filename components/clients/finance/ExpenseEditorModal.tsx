@@ -2,6 +2,7 @@ import { FinanceNumberField } from '@/components/clients/finance/FinanceNumberFi
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { KeyboardAwareScrollView } from '@/components/ui/KeyboardAwareScrollView';
 import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { palette, radius, spacing } from '@/theme/tokens';
@@ -55,6 +56,7 @@ export function ExpenseEditorModal({ visible, currencyCode, expense, onSubmit, o
     <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
       <View style={[styles.modal, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <KeyboardAwareScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalContent}>
         <View style={styles.header}>
           <View style={[styles.icon, { backgroundColor: `${palette.warning}18` }]}><Ionicons name="receipt-outline" size={23} color={palette.warning} /></View>
           <View style={styles.headerCopy}><AppText variant="title">{expense ? 'Editează cheltuiala' : 'Cheltuială nouă'}</AppText><AppText variant="caption" muted>Cost intern suplimentar asociat clientului</AppText></View>
@@ -67,6 +69,7 @@ export function ExpenseEditorModal({ visible, currencyCode, expense, onSubmit, o
           <Button variant="outline" label="Anulează" onPress={onClose} disabled={saving} style={styles.action} />
           <Button label={expense ? 'Salvează modificarea' : 'Adaugă cheltuiala'} icon="checkmark" loading={saving} onPress={() => void submit()} style={styles.action} />
         </View>
+        </KeyboardAwareScrollView>
       </View>
     </KeyboardAvoidingView>
     </ModalSafeBottom>
@@ -75,7 +78,8 @@ export function ExpenseEditorModal({ visible, currencyCode, expense, onSubmit, o
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
-  modal: { width: '100%', maxWidth: 560, borderWidth: 1, borderRadius: radius.xl, padding: spacing.xl, gap: spacing.lg, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 24, elevation: 12 },
+  modal: { width: '100%', maxWidth: 560, maxHeight: '100%', borderWidth: 1, borderRadius: radius.xl, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 24, elevation: 12 },
+  modalContent: { padding: spacing.xl, gap: spacing.lg },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   icon: { width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   headerCopy: { flex: 1, minWidth: 0 },

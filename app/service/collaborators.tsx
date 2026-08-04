@@ -242,7 +242,7 @@ export default function CollaboratorsScreen() {
       </View>
     </LinearGradient>
 
-    <ScrollView
+    <KeyboardAwareScrollView
       style={styles.pageScroll}
       contentContainerStyle={[styles.pageScrollContent, { paddingTop: heroHeight + spacing.lg }]}
       showsVerticalScrollIndicator={false}
@@ -323,7 +323,7 @@ export default function CollaboratorsScreen() {
     </View>}
 
       </View>
-    </ScrollView>
+    </KeyboardAwareScrollView>
 
     <ActionSheet
       collaborator={actionsFor}
