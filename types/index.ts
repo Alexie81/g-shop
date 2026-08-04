@@ -27,6 +27,8 @@ export type Permission =
   | 'service_sheets.create'
   | 'service_sheets.update'
   | 'service_sheets.sign'
+  | 'interventions.view'
+  | 'interventions.manage'
   | 'collaborators.view'
   | 'collaborators.manage'
   | 'users.view'

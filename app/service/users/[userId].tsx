@@ -36,6 +36,8 @@ const permissionLabels: Record<Permission, string> = {
   'service_sheets.create': 'Creează fișe',
   'service_sheets.update': 'Modifică fișe',
   'service_sheets.sign': 'Înregistrează semnături',
+  'interventions.view': 'Vezi intervenții',
+  'interventions.manage': 'Gestionează intervenții',
   'collaborators.view': 'Vezi colaboratori',
   'collaborators.manage': 'Gestionează colaboratori',
   'users.view': 'Vezi utilizatori',
@@ -267,7 +269,7 @@ export default function UserDetails() {
           <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
           <View style={styles.deleteHeader}><View style={[styles.deleteIcon, { backgroundColor: target.isActive ? (isDark ? '#4A340B' : palette.warningSoft) : (isDark ? '#0B4934' : palette.successSoft) }]}><Ionicons name={target.isActive ? 'pause-circle-outline' : 'play-circle-outline'} size={29} color={target.isActive ? palette.warning : palette.success} /></View><View style={styles.deleteCopy}><AppText variant="title">{target.isActive ? 'Dezactivezi utilizatorul?' : 'Reactivezi utilizatorul?'}</AppText><AppText variant="caption" muted>{target.firstName} {target.lastName} · @{target.username}</AppText></View><Pressable accessibilityLabel="Închide" disabled={statusSaving} onPress={() => setStatusOpen(false)} style={[styles.modalClose, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={21} color={colors.text} /></Pressable></View>
           <View style={[styles.deleteWarning, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}><Ionicons name="information-circle-outline" size={21} color={target.isActive ? palette.warning : palette.success} /><AppText style={styles.noticeCopy}>{target.isActive ? 'Sesiunile curente vor fi închise și autentificarea va fi blocată. Contul rămâne în lista Utilizatori și poate fi reactivat oricând.' : 'Utilizatorul va putea să se autentifice din nou, cu același rol, aceleași proprietăți și aceleași permisiuni.'}</AppText></View>
-          <View style={[styles.modalActions, compact && styles.modalActionsCompact]}><Button variant="outline" label="Anulează" disabled={statusSaving} onPress={() => setStatusOpen(false)} style={styles.modalButton} /><Button label={target.isActive ? 'Dezactivează' : 'Reactivează'} icon={target.isActive ? 'pause-circle-outline' : 'play-circle-outline'} loading={statusSaving} onPress={() => void changeAccountStatus()} style={styles.modalButton} /></View>
+          <View style={[styles.modalActions, compact && styles.modalActionsCompact]}><Button variant="outline" label="Anulează" disabled={statusSaving} onPress={() => setStatusOpen(false)} style={[styles.modalButton, compact && styles.modalButtonCompact]} /><Button label={target.isActive ? 'Dezactivează' : 'Reactivează'} icon={target.isActive ? 'pause-circle-outline' : 'play-circle-outline'} loading={statusSaving} onPress={() => void changeAccountStatus()} style={[styles.modalButton, compact && styles.modalButtonCompact]} /></View>
         </View>
       </ModalSafeBottom>
     </Modal>
@@ -279,7 +281,7 @@ export default function UserDetails() {
           <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
           <View style={styles.deleteHeader}><View style={[styles.deleteIcon, { backgroundColor: isDark ? '#551D2A' : palette.dangerSoft }]}><Ionicons name="trash-outline" size={29} color={palette.danger} /></View><View style={styles.deleteCopy}><AppText variant="title">Ștergi utilizatorul?</AppText><AppText variant="caption" muted>{target.firstName} {target.lastName} · @{target.username}</AppText></View><Pressable accessibilityLabel="Închide" disabled={deleting} onPress={() => setDeleteOpen(false)} style={[styles.modalClose, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={21} color={colors.text} /></Pressable></View>
           <View style={[styles.deleteWarning, { backgroundColor: isDark ? '#331922' : '#FFF2F4', borderColor: `${palette.danger}35` }]}><Ionicons name="alert-circle-outline" size={21} color={palette.danger} /><AppText style={styles.noticeCopy}>Contul va dispărea din aplicație, toate sesiunile vor fi închise și autentificarea va fi blocată. Istoricul acțiunilor rămâne în jurnalul de audit.</AppText></View>
-          <View style={[styles.modalActions, compact && styles.modalActionsCompact]}><Button variant="outline" label="Anulează" disabled={deleting} onPress={() => setDeleteOpen(false)} style={styles.modalButton} /><Button variant="danger" label="Șterge definitiv" icon="trash-outline" loading={deleting} onPress={() => void deleteUser()} style={styles.modalButton} /></View>
+          <View style={[styles.modalActions, compact && styles.modalActionsCompact]}><Button variant="outline" label="Anulează" disabled={deleting} onPress={() => setDeleteOpen(false)} style={[styles.modalButton, compact && styles.modalButtonCompact]} /><Button variant="danger" label="Șterge definitiv" icon="trash-outline" loading={deleting} onPress={() => void deleteUser()} style={[styles.modalButton, compact && styles.modalButtonCompact]} /></View>
         </View>
       </ModalSafeBottom>
     </Modal>
@@ -359,6 +361,7 @@ const styles = StyleSheet.create({
   modalClose: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   deleteWarning: { borderWidth: 1, borderRadius: radius.lg, padding: spacing.lg, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   modalActions: { flexDirection: 'row', gap: spacing.md },
-  modalActionsCompact: { flexDirection: 'column-reverse' },
-  modalButton: { minWidth: 0, flex: 1 },
+  modalActionsCompact: { flexDirection: 'column-reverse', alignItems: 'stretch' },
+  modalButton: { minWidth: 0, flexGrow: 1, flexShrink: 1 },
+  modalButtonCompact: { width: '100%', flexGrow: 0, flexShrink: 0 },
 });
