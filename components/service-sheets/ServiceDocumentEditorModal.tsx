@@ -144,7 +144,7 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
 
   return <Modal visible={visible} transparent animationType="slide" statusBarTranslucent onRequestClose={close}>
     <ModalSafeBottom style={{ backgroundColor: colors.overlay }}>
-    <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Pressable accessibilityRole="button" accessibilityLabel="Închide editorul documentului" style={StyleSheet.absoluteFill} onPress={close} />
       <View style={[styles.sheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <View style={styles.handleWrap}><View style={[styles.handle, { backgroundColor: colors.border }]} /></View>
@@ -154,7 +154,7 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
           <Pressable accessibilityRole="button" accessibilityLabel="Închide" disabled={saving} onPress={close} style={[styles.close, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={22} color={colors.text} /></Pressable>
         </View>
 
-        <ScrollView automaticallyAdjustKeyboardInsets keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} keyboardShouldPersistTaps="handled" style={styles.content} contentContainerStyle={styles.contentInner}>
+        <ScrollView automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'} keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} keyboardShouldPersistTaps="handled" style={styles.content} contentContainerStyle={styles.contentInner}>
           <View style={[styles.autoNotice, { backgroundColor: colors.primarySoft, borderColor: `${colors.primary}30` }]}><Ionicons name="sparkles-outline" size={20} color={colors.primary} /><AppText variant="caption" style={styles.noticeCopy}>Firma, clientul, echipamentul, numărul fișei, valorile financiare și semnătura se preiau automat.</AppText></View>
 
           {type === 'INTAKE' ? <View style={styles.section}>
