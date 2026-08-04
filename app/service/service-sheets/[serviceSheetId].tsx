@@ -178,7 +178,7 @@ export default function ServiceSheetDetails() {
       })}</View>
     </Card> : null}
 
-    <ServiceDocumentsPanel sheet={sheet} initialEditorType={initialDocumentType} style={mobile && styles.cardMobile} />
+    <ServiceDocumentsPanel sheet={sheet} initialEditorType={initialDocumentType} style={mobile && styles.cardMobile} onGenerated={() => state.reload(true)} />
 
     {financials ? <FinanceSummary overview={financials} mobile={mobile} onOpenClient={() => router.push(`/service/clients/${sheet.clientId}`)} /> : null}
 

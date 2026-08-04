@@ -66,6 +66,7 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
   const [finalNotes, setFinalNotes] = useState('');
   const [parts, setParts] = useState<DraftItem[]>([]);
   const [labor, setLabor] = useState<DraftItem[]>([]);
+  const [finalItemsDirty, setFinalItemsDirty] = useState(false);
   const [estimatedCosts, setEstimatedCosts] = useState<EstimatedCosts>(() => calculateEstimatedCosts({ currencyCode: 'RON' }));
   const [warrantyPeriod, setWarrantyPeriod] = useState('');
   const [warrantyStartAt, setWarrantyStartAt] = useState('');
@@ -88,12 +89,22 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
     setTechnicalAssessment(document?.technicalAssessment ?? sheet.technicalAssessment ?? '');
     setDefectCause(document?.defectCause ?? '');
     setFinalNotes(document?.finalNotes ?? '');
-    setParts(toDraftItems(document?.parts?.length ? document.parts : defaultParts(sheet, financialOverview?.financials.actualPartsCost)));
-    setLabor(toDraftItems(document?.labor?.length ? document.labor : defaultLabor(sheet)));
+    setParts(toDraftItems(document?.parts?.length ? document.parts : defaultParts(
+      sheet,
+      financialOverview?.financials.displayedPartsCost,
+      financialOverview?.financials.actualPartsCost,
+    )));
+    setLabor(toDraftItems(document?.labor?.length ? document.labor : defaultLabor(
+      sheet,
+      financialOverview?.financials.displayedLaborCost,
+    )));
+    setFinalItemsDirty(false);
     setEstimatedCosts(normalizeEstimatedCosts(document?.estimatedCosts ?? currentEstimatedCosts(sheet, financialOverview)));
-    setWarrantyPeriod(document?.warrantyPeriod ?? sheet.warranty ?? '');
-    setWarrantyStartAt(document?.warrantyStartAt ?? sheet.warrantyStartAt ?? sheet.completedAt ?? now);
-    setWarrantyEndAt(document?.warrantyEndAt ?? sheet.warrantyEndAt ?? '');
+    const nextWarrantyPeriod = document?.warrantyPeriod ?? sheet.warranty ?? '';
+    const nextWarrantyStartAt = document?.warrantyStartAt ?? sheet.warrantyStartAt ?? sheet.completedAt ?? now;
+    setWarrantyPeriod(nextWarrantyPeriod);
+    setWarrantyStartAt(nextWarrantyStartAt);
+    setWarrantyEndAt(document?.warrantyEndAt ?? sheet.warrantyEndAt ?? calculateWarrantyEndAt(nextWarrantyStartAt, nextWarrantyPeriod));
     setWarrantyRemediation(document?.warrantyRemediation ?? sheet.warrantyRemediation ?? '');
     setSaving(false);
     setError('');
@@ -125,7 +136,7 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
     const input: GenerateServiceDocumentInput = type === 'INTAKE'
       ? { agreementAt, agreementStatus, estimatedRepairDays: days, estimatedCosts }
       : type === 'FINAL_ESTIMATE'
-        ? { agreementAt, agreementStatus, technicalAssessment: technicalAssessment.trim(), defectCause: defectCause.trim() || undefined, finalNotes: finalNotes.trim() || undefined, parts: cleanParts, labor: cleanLabor }
+        ? { agreementAt, agreementStatus, technicalAssessment: technicalAssessment.trim(), defectCause: defectCause.trim() || undefined, finalNotes: finalNotes.trim() || undefined, parts: cleanParts, labor: cleanLabor, syncFinancialsFromItems: finalItemsDirty }
         : type === 'EXIT'
           ? { documentAt, productState }
           : { documentAt, warrantyPeriod: warrantyPeriod.trim(), warrantyStartAt, warrantyEndAt, warrantyRemediation: warrantyRemediation.trim() };
@@ -205,8 +216,8 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
             </View>
             <Input label="Cauza defectului" value={defectCause} onChangeText={setDefectCause} maxLength={40} placeholder="Ex: componentă defectă" />
             <Input label="Observații finale" value={finalNotes} onChangeText={setFinalNotes} maxLength={2000} multiline numberOfLines={4} textAlignVertical="top" style={styles.textArea} placeholder="Mențiuni pentru deviz și client" />
-            <DocumentItemsEditor title="Piese" description="Costul intern este vizibil doar personalului și nu apare clientului." items={parts} onChange={setParts} currencyCode={currencyCode} showDirectCost />
-            <DocumentItemsEditor title="Manoperă" description="Adaugă doar operațiunile care trebuie să apară în deviz." items={labor} onChange={setLabor} currencyCode={currencyCode} />
+            <DocumentItemsEditor title="Piese" description="Costul intern este vizibil doar personalului și nu apare clientului." items={parts} onChange={(items) => { setParts(items); setFinalItemsDirty(true); }} currencyCode={currencyCode} showDirectCost />
+            <DocumentItemsEditor title="Manoperă" description="Adaugă doar operațiunile care trebuie să apară în deviz." items={labor} onChange={(items) => { setLabor(items); setFinalItemsDirty(true); }} currencyCode={currencyCode} />
             <View style={[styles.summary, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
               <SummaryValue label="Piese afișate" value={formatFinanceMoney(totals.parts, currencyCode)} />
               <SummaryValue label="Manoperă" value={formatFinanceMoney(totals.labor, currencyCode)} />
@@ -226,9 +237,17 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
 
           {type === 'WARRANTY' ? <View style={styles.section}>
             <DateTimeField label="Data și ora certificatului" value={documentAt} onChange={setDocumentAt} allowClear showNow />
-            <Input label="Perioada garanției *" value={warrantyPeriod} onChangeText={setWarrantyPeriod} maxLength={120} placeholder="ex. 90 zile" />
+            <Input label="Perioada garanției *" value={warrantyPeriod} onChangeText={(value) => {
+              setWarrantyPeriod(value);
+              const calculated = calculateWarrantyEndAt(warrantyStartAt, value);
+              if (calculated || !value.trim()) setWarrantyEndAt(calculated);
+            }} maxLength={120} placeholder="ex. 90 zile, 3 luni sau 1 an" />
             <View style={styles.dateRow}>
-              <View style={styles.dateField}><DateTimeField label="Garanție de la" value={warrantyStartAt} onChange={setWarrantyStartAt} allowClear showNow /></View>
+              <View style={styles.dateField}><DateTimeField label="Garanție de la" value={warrantyStartAt} onChange={(value) => {
+                setWarrantyStartAt(value);
+                const calculated = calculateWarrantyEndAt(value, warrantyPeriod);
+                if (calculated || !value) setWarrantyEndAt(calculated);
+              }} allowClear showNow /></View>
               <View style={styles.dateField}><DateTimeField label="Garanție până la" value={warrantyEndAt} onChange={setWarrantyEndAt} allowClear /></View>
             </View>
             <Input label="Remediere estimată" value={warrantyRemediation} onChangeText={setWarrantyRemediation} maxLength={160} placeholder="ex. 10 zile lucrătoare" />
@@ -297,17 +316,19 @@ function toDraftItems(items: ServiceDocumentItem[]): DraftItem[] {
   }));
 }
 
-function defaultParts(sheet: ServiceSheet, actualPartsCost?: number): ServiceDocumentItem[] {
+function defaultParts(sheet: ServiceSheet, displayedPartsCost?: number, actualPartsCost?: number): ServiceDocumentItem[] {
   const name = compactName(sheet.partsUsed, 'Piese și componente');
+  const displayedCost = roundMoney(displayedPartsCost ?? sheet.partsCost);
   const internalCost = roundMoney(actualPartsCost ?? 0);
-  if (!sheet.partsUsed?.trim() && sheet.partsCost <= 0 && internalCost <= 0) return [];
-  return [{ name, quantity: 1, unitPrice: roundMoney(sheet.partsCost), totalPrice: roundMoney(sheet.partsCost), directCost: internalCost }];
+  if (!sheet.partsUsed?.trim() && displayedCost <= 0 && internalCost <= 0) return [];
+  return [{ name, quantity: 1, unitPrice: displayedCost, totalPrice: displayedCost, directCost: internalCost }];
 }
 
-function defaultLabor(sheet: ServiceSheet): ServiceDocumentItem[] {
+function defaultLabor(sheet: ServiceSheet, displayedLaborCost?: number): ServiceDocumentItem[] {
   const name = compactName(sheet.workPerformed, 'Manoperă service');
-  if (!sheet.workPerformed?.trim() && sheet.laborCost <= 0) return [];
-  return [{ name, quantity: 1, unitPrice: roundMoney(sheet.laborCost), totalPrice: roundMoney(sheet.laborCost) }];
+  const displayedCost = roundMoney(displayedLaborCost ?? sheet.laborCost);
+  if (!sheet.workPerformed?.trim() && displayedCost <= 0) return [];
+  return [{ name, quantity: 1, unitPrice: displayedCost, totalPrice: displayedCost }];
 }
 
 function compactName(value: string | undefined, fallback: string) {
@@ -342,6 +363,33 @@ function inferEstimatedDays(sheet: ServiceSheet): number | undefined {
 }
 
 function validDate(value: string) { return value.trim() !== '' && !Number.isNaN(new Date(value).getTime()); }
+
+function calculateWarrantyEndAt(startAt: string, period: string): string {
+  const start = new Date(startAt);
+  if (!startAt.trim() || Number.isNaN(start.getTime())) return '';
+  const normalized = period.trim().toLocaleLowerCase('ro-RO').replace(/ă/g, 'a');
+  const match = normalized.match(/^(\d{1,4})(?:\s*([a-z]+))?/);
+  if (!match) return '';
+  const amount = Number(match[1]);
+  if (!Number.isInteger(amount) || amount < 1) return '';
+  const unit = match[2] ?? '';
+  const isDays = unit === '' || 'zile'.startsWith(unit) || unit === 'zi';
+  const isMonths = 'luni'.startsWith(unit) || 'luna'.startsWith(unit);
+  const isYears = 'ani'.startsWith(unit) || unit === 'an';
+  if (!isDays && !isMonths && !isYears) return '';
+  const result = new Date(start);
+  if (isDays) {
+    result.setDate(result.getDate() + amount);
+  } else {
+    const months = isYears ? amount * 12 : amount;
+    const originalDay = result.getDate();
+    result.setDate(1);
+    result.setMonth(result.getMonth() + months);
+    const lastDay = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
+    result.setDate(Math.min(originalDay, lastDay));
+  }
+  return result.toISOString();
+}
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },

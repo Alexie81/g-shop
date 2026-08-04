@@ -17,7 +17,7 @@ import { ComponentProps, useState } from 'react';
 import { ActivityIndicator, Linking, Modal, Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
-type Props = { sheet: ServiceSheet; initialEditorType?: ServiceDocumentType | null; style?: StyleProp<ViewStyle> };
+type Props = { sheet: ServiceSheet; initialEditorType?: ServiceDocumentType | null; style?: StyleProp<ViewStyle>; onGenerated?: (type: ServiceDocumentType) => void | Promise<void> };
 
 const DOCUMENTS: { type: ServiceDocumentType; label: string; description: string; icon: IconName; color: string }[] = [
   { type: 'INTAKE', label: 'Fișă de intrare', description: 'Primire, cost estimativ și acord inițial', icon: 'enter-outline', color: palette.electric },
@@ -26,7 +26,7 @@ const DOCUMENTS: { type: ServiceDocumentType; label: string; description: string
   { type: 'WARRANTY', label: 'Certificat de garanție', description: 'Perioadă, termene și confirmarea predării', icon: 'shield-checkmark-outline', color: palette.cyan },
 ];
 
-export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style }: Props) {
+export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style, onGenerated }: Props) {
   const { colors, isDark } = useAppTheme();
   const { hasPermission } = useAuth();
   const { showToast } = useToast();
@@ -76,7 +76,11 @@ export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style }
 
   const generate = async (type: ServiceDocumentType, input: GenerateServiceDocumentInput) => {
     const generated = await serviceSheetRepository.generateDocument(sheet.id, type, input);
-    await state.reload(true);
+    await Promise.all([
+      state.reload(true),
+      type === 'FINAL_ESTIMATE' && canViewFinancials ? financialState.reload(true) : Promise.resolve(null),
+    ]);
+    await onGenerated?.(type);
     showToast(`Documentul „${generated.label}” a fost generat.`, 'success');
     if (!generated.url) {
       showToast('Documentul a fost generat, dar linkul nu este încă disponibil.', 'error');

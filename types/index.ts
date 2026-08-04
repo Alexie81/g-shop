@@ -422,6 +422,7 @@ export interface GenerateServiceDocumentInput {
   estimatedCosts?: EstimatedCosts;
   parts?: ServiceDocumentItem[];
   labor?: ServiceDocumentItem[];
+  syncFinancialsFromItems?: boolean;
 }
 
 export interface ServiceDocumentRegisterRow {
