@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
   FocusEvent,
   Keyboard,
@@ -8,6 +8,7 @@ import {
   ScrollView,
   ScrollViewProps,
   UIManager,
+  View,
 } from 'react-native';
 
 const DEFAULT_KEYBOARD_GAP = 12;
@@ -24,6 +25,8 @@ type Props = ScrollViewProps & {
  */
 export const KeyboardAwareScrollView = forwardRef<ScrollView, Props>(function KeyboardAwareScrollView({
   automaticallyAdjustKeyboardInsets,
+  children,
+  contentContainerStyle,
   keyboardDismissMode,
   keyboardGap = DEFAULT_KEYBOARD_GAP,
   keyboardShouldPersistTaps,
@@ -36,6 +39,7 @@ export const KeyboardAwareScrollView = forwardRef<ScrollView, Props>(function Ke
   const focusedTargetRef = useRef<number | null>(null);
   const scrollYRef = useRef(0);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const [keyboardInset, setKeyboardInset] = useState(0);
 
   useImperativeHandle(forwardedRef, () => scrollRef.current as ScrollView, []);
 
@@ -68,14 +72,35 @@ export const KeyboardAwareScrollView = forwardRef<ScrollView, Props>(function Ke
     });
   }, [keyboardGap]);
 
+  const updateKeyboardInset = useCallback(() => {
+    const scroll = scrollRef.current;
+    const keyboard = Keyboard.metrics();
+    const nativeScroll = scroll?.getNativeScrollRef();
+    if (!nativeScroll || !keyboard || keyboard.height <= 0) {
+      setKeyboardInset(0);
+      return;
+    }
+
+    nativeScroll.measureInWindow((_scrollX, scrollY, _scrollWidth, scrollHeight) => {
+      const coveredHeight = Math.max(0, scrollY + scrollHeight - keyboard.screenY);
+      setKeyboardInset(coveredHeight > 0 ? Math.ceil(coveredHeight + keyboardGap) : 0);
+    });
+  }, [keyboardGap]);
+
   const scheduleReveal = useCallback(() => {
     clearTimers();
-    timersRef.current = REVEAL_DELAYS.map((delay) => setTimeout(revealFocusedInput, delay));
-  }, [clearTimers, revealFocusedInput]);
+    timersRef.current = REVEAL_DELAYS.flatMap((delay) => [
+      setTimeout(updateKeyboardInset, delay),
+      setTimeout(revealFocusedInput, delay + 36),
+    ]);
+  }, [clearTimers, revealFocusedInput, updateKeyboardInset]);
 
   useEffect(() => {
     const shown = Keyboard.addListener('keyboardDidShow', scheduleReveal);
-    const hidden = Keyboard.addListener('keyboardDidHide', clearTimers);
+    const hidden = Keyboard.addListener('keyboardDidHide', () => {
+      clearTimers();
+      setKeyboardInset(0);
+    });
     return () => {
       shown.remove();
       hidden.remove();
@@ -98,10 +123,14 @@ export const KeyboardAwareScrollView = forwardRef<ScrollView, Props>(function Ke
     ref={scrollRef}
     {...props}
     automaticallyAdjustKeyboardInsets={automaticallyAdjustKeyboardInsets ?? Platform.OS === 'ios'}
+    contentContainerStyle={contentContainerStyle}
     keyboardDismissMode={keyboardDismissMode ?? (Platform.OS === 'ios' ? 'interactive' : 'on-drag')}
     keyboardShouldPersistTaps={keyboardShouldPersistTaps ?? 'handled'}
     onFocus={handleFocus}
     onScroll={handleScroll}
     scrollEventThrottle={scrollEventThrottle ?? 16}
-  />;
+  >
+    {children}
+    {keyboardInset > 0 ? <View pointerEvents="none" style={{ height: keyboardInset }} /> : null}
+  </ScrollView>;
 });
