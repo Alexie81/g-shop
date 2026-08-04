@@ -85,7 +85,7 @@ export default function UserDetails() {
   const target = state.data;
   const primaryAdmin = Boolean(target.isPrimaryAdmin);
   const protectedFromCurrent = primaryAdmin && target.id !== currentUser?.id;
-  const globalAccess = target.role === 'ADMIN';
+  const globalAccess = primaryAdmin;
   const selectedPropertyCount = globalAccess ? properties.length : propertyIds.length;
   const selectedPermissionCount = globalAccess ? ALL_PERMISSIONS.length : permissions.length;
   const togglePermission = (permission: Permission) => {
@@ -197,7 +197,7 @@ export default function UserDetails() {
               style={({ pressed }) => [styles.roleOption, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.primarySoft : colors.surface, opacity: pressed ? 0.78 : 1 }]}
             >
               <View style={[styles.roleOptionIcon, { backgroundColor: selected ? colors.primary : colors.surfaceMuted }]}><Ionicons name={item === 'ADMIN' ? 'shield-checkmark-outline' : item === 'TECHNICIAN' ? 'construct-outline' : item === 'COLLABORATOR' ? 'people-outline' : 'person-outline'} size={21} color={selected ? '#fff' : colors.textMuted} /></View>
-              <View style={styles.roleOptionCopy}><AppText variant="label">{ROLE_LABELS[item]}</AppText><AppText variant="caption" muted>{item === 'ADMIN' ? 'Acces global' : item === 'MANAGER' ? 'Coordonare și rapoarte' : item === 'OPERATOR' ? 'Clienți și fișe' : item === 'TECHNICIAN' ? 'Lucrări și semnături' : 'Acces de colaborator'}</AppText></View>
+              <View style={styles.roleOptionCopy}><AppText variant="label">{ROLE_LABELS[item]}</AppText><AppText variant="caption" muted>{item === 'ADMIN' ? 'Acces administrativ configurabil' : item === 'MANAGER' ? 'Coordonare și rapoarte' : item === 'OPERATOR' ? 'Clienți și fișe' : item === 'TECHNICIAN' ? 'Lucrări și semnături' : 'Acces de colaborator'}</AppText></View>
               <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={22} color={selected ? colors.primary : colors.border} />
             </Pressable>;
           })}

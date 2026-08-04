@@ -50,7 +50,7 @@ export default function ProfileScreen() {
   );
 
   if (!user) return null;
-  const permissionCount = user.role === 'ADMIN' ? ALL_PERMISSIONS.length : user.permissions.filter((permission) => ALL_PERMISSIONS.includes(permission)).length;
+  const permissionCount = user.isPrimaryAdmin ? ALL_PERMISSIONS.length : user.permissions.filter((permission) => ALL_PERMISSIONS.includes(permission)).length;
 
   const saveName = async () => {
     const nextErrors = {

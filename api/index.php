@@ -105,11 +105,11 @@ function current_user(): array {
 }
 function require_permission(string $permission): array {
     $user = current_user();
-    if ($user['role'] !== 'ADMIN' && !in_array($permission, $user['permissions'], true)) fail('Nu ai permisiunea necesară pentru această acțiune.', 403);
+    if (empty($user['isPrimaryAdmin']) && !in_array($permission, $user['permissions'], true)) fail('Nu ai permisiunea necesară pentru această acțiune.', 403);
     return $user;
 }
 function ensure_property(string $propertyId, array $user): void {
-    if ($user['role'] !== 'ADMIN' && !in_array($propertyId, $user['propertyIds'], true)) fail('Nu ai acces la această proprietate.', 403);
+    if (empty($user['isPrimaryAdmin']) && !in_array($propertyId, $user['propertyIds'], true)) fail('Nu ai acces la această proprietate.', 403);
 }
 function audit_log(string $action, string $module, string $summary, ?string $entityType = null, ?string $entityId = null, ?string $propertyId = null, ?array $before = null, ?array $after = null, ?array $user = null): void {
     try {
@@ -673,7 +673,7 @@ function client_audit_snapshot(array $client): array {
     return $client;
 }
 function user_has_permission(array $user, string $permission): bool {
-    return $user['role'] === 'ADMIN' || in_array($permission, $user['permissions'], true);
+    return !empty($user['isPrimaryAdmin']) || in_array($permission, $user['permissions'], true);
 }
 function client_for_user(array $client, array $user): array {
     if (!empty($client['qr']) && !user_has_permission($user, 'qr.share')) {
@@ -840,7 +840,7 @@ function service_document_reference(string $sheetId, string $type): ?array {
 function require_service_document_write(bool $existing = false): array {
     $user=current_user();
     $canUpdate=in_array('service_sheets.update',$user['permissions'],true);$canCreate=in_array('service_sheets.create',$user['permissions'],true);
-    if($user['role']!=='ADMIN'&&($existing?!$canUpdate:!$canUpdate&&!$canCreate))fail('Nu ai permisiunea necesară pentru generarea documentelor.',403);
+    if(empty($user['isPrimaryAdmin'])&&($existing?!$canUpdate:!$canUpdate&&!$canCreate))fail('Nu ai permisiunea necesară pentru generarea documentelor.',403);
     return$user;
 }
 function stream_service_document_row(array $row): void {
@@ -1124,7 +1124,7 @@ function commission_amount(float $totalValue, float $netValue, string $type, flo
 }
 function require_financial_write(): array {
     $user = current_user();
-    if ($user['role'] !== 'ADMIN' && (!in_array('financials.view', $user['permissions'], true) || !in_array('clients.update', $user['permissions'], true))) {
+    if (empty($user['isPrimaryAdmin']) && (!in_array('financials.view', $user['permissions'], true) || !in_array('clients.update', $user['permissions'], true))) {
         fail('Nu ai permisiunea necesară pentru modificarea datelor financiare.', 403);
     }
     return $user;
@@ -1463,7 +1463,7 @@ try {
 
     if ($method === 'GET' && $path === '/properties') {
         $user = current_user(); $sql = 'SELECT ' . uuid_sql('p.id') . ' id,p.name,p.domain,p.type,p.enabled_modules,p.is_active,p.created_at,p.updated_at,' . uuid_sql('p.created_by') . ' created_by,' . uuid_sql('p.updated_by') . ' updated_by FROM properties p';
-        $args=[]; if ($user['role'] !== 'ADMIN') { $sql .= ' JOIN user_properties up ON up.property_id=p.id WHERE up.user_id=?'; $args[] = uuid_bin($user['id']); } else $sql .= ' WHERE 1=1';
+        $args=[]; if (empty($user['isPrimaryAdmin'])) { $sql .= ' JOIN user_properties up ON up.property_id=p.id WHERE up.user_id=?'; $args[] = uuid_bin($user['id']); } else $sql .= ' WHERE 1=1';
         $sql .= ' AND p.is_active=1 ORDER BY p.type,p.name'; $stmt=db()->prepare($sql);$stmt->execute($args);$rows=[];foreach($stmt->fetchAll() as $row){$item=entity_base($row);$item['enabledModules']=json_decode((string)$row['enabled_modules'],true)?:[];unset($item['enabledModules'][0]);$item['enabledModules']=json_decode((string)$row['enabled_modules'],true)?:[];$rows[]=$item;}respond($rows);
     }
     if ($method === 'PUT' && path_match('/properties/{id}',$path,$params)) {
@@ -2119,7 +2119,7 @@ try {
         $paidAt=$paid&&$after?iso_date($after[0]['paid_at']):null;gshop_queue_client_service_sheet_pdf($clientId);respond(['updated'=>$update->rowCount(),'status'=>$status,'paid'=>$paid,'paidAt'=>$paidAt,'amount'=>$afterAmount]);
     }
 
-    if ($method==='GET'&&$path==='/users') { $user=require_permission('users.view');ensure_user_deletion_field();ensure_user_permission_catalog();$propertyId=(string)($_GET['propertyId']??'');ensure_property($propertyId,$user);$select='SELECT '.uuid_sql('u.id').' id,u.username,u.first_name,u.last_name,u.email,u.phone,u.role,u.permissions,u.is_active,u.last_login_at,u.created_at,u.updated_at,'.uuid_sql('u.created_by').' created_by,'.uuid_sql('u.updated_by').' updated_by FROM users u';$args=[];if($user['role']!=='ADMIN'){$select.=' JOIN user_properties up ON up.user_id=u.id WHERE u.deleted_at IS NULL AND up.property_id=?';$args[] = uuid_bin($propertyId);}else{$select.=' WHERE u.deleted_at IS NULL';}$select.=' ORDER BY (u.id=?) DESC,u.is_active DESC,u.first_name,u.last_name';$args[]=uuid_bin(primary_admin_id());$stmt=db()->prepare($select);$stmt->execute($args);$data=[];foreach($stmt->fetchAll()as$row){$item=entity_base($row);$item['isPrimaryAdmin']=is_primary_admin_id($item['id']);$item['permissions']=normalize_user_permissions($row['permissions']);$item['propertyIds']=[];$pstmt=db()->prepare('SELECT '.uuid_sql('property_id').' id FROM user_properties WHERE user_id=?');$pstmt->execute([uuid_bin($item['id'])]);$item['propertyIds']=array_column($pstmt->fetchAll(),'id');$data[]=$item;}respond($data); }
+    if ($method==='GET'&&$path==='/users') { $user=require_permission('users.view');ensure_user_deletion_field();ensure_user_permission_catalog();$propertyId=(string)($_GET['propertyId']??'');ensure_property($propertyId,$user);$select='SELECT '.uuid_sql('u.id').' id,u.username,u.first_name,u.last_name,u.email,u.phone,u.role,u.permissions,u.is_active,u.last_login_at,u.created_at,u.updated_at,'.uuid_sql('u.created_by').' created_by,'.uuid_sql('u.updated_by').' updated_by FROM users u';$args=[];if(empty($user['isPrimaryAdmin'])){$select.=' JOIN user_properties up ON up.user_id=u.id WHERE u.deleted_at IS NULL AND up.property_id=?';$args[] = uuid_bin($propertyId);}else{$select.=' WHERE u.deleted_at IS NULL';}$select.=' ORDER BY (u.id=?) DESC,u.is_active DESC,u.first_name,u.last_name';$args[]=uuid_bin(primary_admin_id());$stmt=db()->prepare($select);$stmt->execute($args);$data=[];foreach($stmt->fetchAll()as$row){$item=entity_base($row);$item['isPrimaryAdmin']=is_primary_admin_id($item['id']);$item['permissions']=normalize_user_permissions($row['permissions']);$item['propertyIds']=[];$pstmt=db()->prepare('SELECT '.uuid_sql('property_id').' id FROM user_properties WHERE user_id=?');$pstmt->execute([uuid_bin($item['id'])]);$item['propertyIds']=array_column($pstmt->fetchAll(),'id');$data[]=$item;}respond($data); }
     if ($method==='POST'&&$path==='/users') { $admin=require_permission('users.manage');ensure_user_deletion_field();$body=json_body();if(strlen(trim((string)($body['username']??'')))<3||strlen((string)($body['password']??''))<8)fail('Utilizator invalid sau parolă prea scurtă.',422);$propertyIds=$body['propertyIds']??[];foreach($propertyIds as$propertyId)ensure_property($propertyId,$admin);$id=uuid_v4();$now=now_utc();$pdo=db();$pdo->beginTransaction();try{$pdo->prepare('INSERT INTO users (id,username,password_hash,first_name,last_name,email,phone,role,permissions,is_active,deleted_at,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,1,NULL,?,?,?,?)')->execute([uuid_bin($id),trim($body['username']),password_hash($body['password'],PASSWORD_DEFAULT),trim((string)$body['firstName']),trim((string)$body['lastName']),$body['email']??null,$body['phone']??null,$body['role']??'OPERATOR',json_encode(normalize_user_permissions($body['permissions']??[])),$now,$now,uuid_bin($admin['id']),uuid_bin($admin['id'])]);$link=$pdo->prepare('INSERT INTO user_properties (user_id,property_id) VALUES (?,?)');foreach($propertyIds as$propertyId)$link->execute([uuid_bin($id),uuid_bin($propertyId)]);$pdo->commit();audit_log('USER_CREATED','users','Utilizator creat: '.$body['username'],'User',$id,$propertyIds[0]??null,null,array_diff_key($body,['password'=>true]),$admin);respond(user_record($id),201);}catch(PDOException$e){$pdo->rollBack();if((int)$e->errorInfo[1]===1062)fail('Numele de utilizator există deja.',409);throw$e;} }
     if ($method==='PUT'&&path_match('/users/{id}',$path,$params)) {
         $admin=require_permission('users.manage');$body=json_body();$role=strtoupper(trim((string)($body['role']??'')));$roles=['ADMIN','MANAGER','OPERATOR','TECHNICIAN','COLLABORATOR'];

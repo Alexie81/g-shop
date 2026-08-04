@@ -138,8 +138,8 @@ function FilterChip({ label, icon, selected, onPress }: { label: string; icon: k
 function UserCard({ user, colorsIndex, locked, onPress }: { user: User; colorsIndex: number; locked: boolean; onPress: () => void }) {
   const { colors, isDark } = useAppTheme();
   const roleColor = user.role === 'ADMIN' ? palette.purple : user.role === 'COLLABORATOR' ? palette.cyan : palette.electric;
-  const accessLabel = user.role === 'ADMIN' ? 'Acces global' : `${user.propertyIds.length} ${user.propertyIds.length === 1 ? 'proprietate' : 'proprietăți'}`;
-  const permissionCount = user.role === 'ADMIN' ? ALL_PERMISSIONS.length : user.permissions.filter((permission) => ALL_PERMISSIONS.includes(permission)).length;
+  const accessLabel = user.isPrimaryAdmin ? 'Acces global' : `${user.propertyIds.length} ${user.propertyIds.length === 1 ? 'proprietate' : 'proprietăți'}`;
+  const permissionCount = user.isPrimaryAdmin ? ALL_PERMISSIONS.length : user.permissions.filter((permission) => ALL_PERMISSIONS.includes(permission)).length;
   return <Pressable accessibilityRole="button" accessibilityLabel={locked ? `${user.firstName} ${user.lastName}, Administrator principal protejat` : `Deschide utilizatorul ${user.firstName} ${user.lastName}`} accessibilityState={{ disabled: locked }} disabled={locked} onPress={onPress} style={({ pressed }) => ({ opacity: pressed ? 0.82 : 1, transform: [{ scale: pressed ? 0.992 : 1 }] })}>
     <Card style={[styles.userCard, { borderColor: locked ? `${palette.purple}70` : user.isActive ? colors.border : `${palette.danger}45` }]}>
       <View style={[styles.accent, { backgroundColor: user.isActive ? palette.electric : palette.danger }]} />

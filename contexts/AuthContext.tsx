@@ -98,7 +98,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     changePassword: authRepository.changePassword,
     updateProfile,
     completePropertySelection: () => setRequiresPropertySelection(false),
-    hasPermission: (permission) => session?.user.role === 'ADMIN' || session?.user.permissions.includes(permission) === true,
+    hasPermission: (permission) => session?.user.isPrimaryAdmin === true || session?.user.permissions.includes(permission) === true,
   }), [login, logout, ready, requiresPropertySelection, savedUsername, session, updateProfile]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
