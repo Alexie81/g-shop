@@ -2,6 +2,7 @@ import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { AppText } from '@/components/ui/AppText';
 import { LoadingGlyph } from '@/components/ui/LoadingExperience';
 import { Input } from '@/components/ui/Input';
+import { KeyboardAwareScrollView } from '@/components/ui/KeyboardAwareScrollView';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { palette, radius, spacing } from '@/theme/tokens';
@@ -10,7 +11,7 @@ import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Animated, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 export default function LoginScreen() {
   const { colors, isDark } = useAppTheme();
@@ -52,7 +53,7 @@ export default function LoginScreen() {
     <LinearGradient pointerEvents="none" colors={['transparent', isDark ? 'rgba(32,111,255,0.30)' : 'rgba(32,111,255,0.16)', 'transparent']} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={styles.lightBeam} />
 
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={[styles.scroll, keyboardVisible && styles.scrollKeyboard]} keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <KeyboardAwareScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={[styles.scroll, keyboardVisible && styles.scrollKeyboard]} keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <Animated.View style={[styles.shell, keyboardVisible && styles.shellKeyboard, { opacity: entrance, transform: [{ translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }, { scale: entrance.interpolate({ inputRange: [0, 1], outputRange: [0.98, 1] }) }] }]}>
           <View style={[styles.logoArea, keyboardVisible && styles.hiddenWhileTyping]}>
             <LinearGradient colors={isDark ? ['rgba(38,113,255,0.36)', 'rgba(7,33,77,0.52)'] : ['rgba(255,255,255,0.98)', 'rgba(226,238,255,0.94)']} style={[styles.logoHalo, { borderColor: isDark ? 'rgba(91,151,255,0.40)' : 'rgba(7,92,255,0.16)' }]}>
@@ -110,7 +111,7 @@ export default function LoginScreen() {
             <ThemeToggle />
           </View>
         </Animated.View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </KeyboardAvoidingView>
   </LinearGradient>;
 }

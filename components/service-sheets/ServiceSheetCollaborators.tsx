@@ -3,6 +3,7 @@ import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
+import { KeyboardAwareScrollView } from '@/components/ui/KeyboardAwareScrollView';
 import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -13,7 +14,7 @@ import { ClientFinancialCollaborator, ClientFinancialOverview, Collaborator, Com
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 type AssignmentDraft = {
   collaboratorId: UUID;
@@ -181,7 +182,7 @@ export function ServiceSheetCollaborators({ propertyId, clientId, overview, hasS
           <Input label="Caută colaborator" value={query} onChangeText={setQuery} placeholder="Nume sau rol" />
           {error ? <View style={[styles.notice, { backgroundColor: `${palette.danger}12` }]}><Ionicons name="alert-circle-outline" size={19} color={palette.danger} /><AppText variant="caption" style={[styles.copy, { color: palette.danger }]}>{error}</AppText></View> : null}
 
-          <ScrollView automaticallyAdjustKeyboardInsets keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} style={styles.content} contentContainerStyle={styles.contentInner} keyboardShouldPersistTaps="handled">
+          <KeyboardAwareScrollView automaticallyAdjustKeyboardInsets keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} style={styles.content} contentContainerStyle={styles.contentInner} keyboardShouldPersistTaps="handled">
             <View style={styles.options}>
               {loading ? <AppText muted>Se încarcă lista…</AppText> : filtered.map((item) => {
                 const selected = drafts.some((draft) => draft.collaboratorId === item.id);
@@ -204,7 +205,7 @@ export function ServiceSheetCollaborators({ propertyId, clientId, overview, hasS
                 <Input label={draft.commissionType === 'FIXED' ? 'Sumă fixă' : 'Procent'} keyboardType="decimal-pad" value={draft.commissionValue} onChangeText={(value) => updateDraft(draft.collaboratorId, { commissionValue: value })} />
               </View>;
             })}
-          </ScrollView>
+          </KeyboardAwareScrollView>
 
           <Button label="Salvează colaboratorii" icon="checkmark-circle-outline" loading={saving} disabled={loading} onPress={() => void save()} />
         </Card>

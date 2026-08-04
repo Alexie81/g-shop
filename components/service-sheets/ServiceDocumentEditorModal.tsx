@@ -3,6 +3,7 @@ import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { DateTimeField } from '@/components/ui/DateTimeField';
 import { Input } from '@/components/ui/Input';
+import { KeyboardAwareScrollView } from '@/components/ui/KeyboardAwareScrollView';
 import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { palette, radius, spacing } from '@/theme/tokens';
@@ -11,7 +12,7 @@ import { formatFinanceMoney } from '@/utils/client-finance';
 import { calculateEstimatedCosts } from '@/utils/estimated-costs';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 type Props = {
   visible: boolean;
@@ -165,7 +166,7 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
           <Pressable accessibilityRole="button" accessibilityLabel="Închide" disabled={saving} onPress={close} style={[styles.close, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={22} color={colors.text} /></Pressable>
         </View>
 
-        <ScrollView automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'} keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} keyboardShouldPersistTaps="handled" style={styles.content} contentContainerStyle={styles.contentInner}>
+        <KeyboardAwareScrollView automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'} keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'} keyboardShouldPersistTaps="handled" style={styles.content} contentContainerStyle={styles.contentInner}>
           <View style={[styles.autoNotice, { backgroundColor: colors.primarySoft, borderColor: `${colors.primary}30` }]}><Ionicons name="sparkles-outline" size={20} color={colors.primary} /><AppText variant="caption" style={styles.noticeCopy}>Firma, clientul, echipamentul, numărul fișei, valorile financiare și semnătura se preiau automat.</AppText></View>
 
           {type === 'INTAKE' ? <View style={styles.section}>
@@ -255,7 +256,7 @@ export function ServiceDocumentEditorModal({ visible, type, sheet, document, fin
           </View> : null}
 
           {error ? <View accessibilityRole="alert" style={[styles.error, { backgroundColor: `${palette.danger}12`, borderColor: `${palette.danger}35` }]}><Ionicons name="alert-circle-outline" size={19} color={palette.danger} /><AppText variant="caption" style={[styles.noticeCopy, { color: palette.danger }]}>{error}</AppText></View> : null}
-        </ScrollView>
+        </KeyboardAwareScrollView>
 
         <View style={styles.actions}>
           <Button variant="outline" label="Anulează" disabled={saving} onPress={close} style={styles.action} />

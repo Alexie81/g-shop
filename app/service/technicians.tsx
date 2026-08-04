@@ -3,6 +3,7 @@ import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
+import { KeyboardAwareScrollView } from '@/components/ui/KeyboardAwareScrollView';
 import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { Screen } from '@/components/ui/Screen';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
@@ -125,12 +126,12 @@ function EditorModal({ draft, saving, onChange, onSave, onClose }: { draft: Draf
         {draft ? <View style={[styles.editor, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
           <View style={[styles.handle, { backgroundColor: colors.border }]} />
           <View style={styles.modalHeader}><View style={[styles.modalIcon, { backgroundColor: `${palette.purple}18` }]}><Ionicons name="person-add-outline" size={24} color={palette.purple} /></View><View style={styles.modalCopy}><AppText variant="title">{draft.id ? 'Editează tehnicianul' : 'Tehnician nou'}</AppText><AppText variant="caption" muted>Date compacte, reutilizate în toate fișele.</AppText></View><Pressable accessibilityLabel="Închide" disabled={saving} onPress={onClose} style={[styles.close, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={22} color={colors.text} /></Pressable></View>
-          <ScrollView style={styles.editorScroll} contentContainerStyle={styles.editorContent} automaticallyAdjustKeyboardInsets keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <KeyboardAwareScrollView style={styles.editorScroll} contentContainerStyle={styles.editorContent} automaticallyAdjustKeyboardInsets keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <Input label="Nume și prenume *" value={draft.name} autoFocus onChangeText={(name) => onChange({ ...draft, name })} placeholder="ex. Andrei Popescu" />
             <View style={styles.formRow}><View style={styles.formField}><Input label="Telefon" value={draft.phone} keyboardType="phone-pad" onChangeText={(phone) => onChange({ ...draft, phone })} placeholder="07..." /></View><View style={styles.formField}><Input label="Specializare" value={draft.specialty} onChangeText={(specialty) => onChange({ ...draft, specialty })} placeholder="Laptopuri, GSM..." /></View></View>
             <Input label="Notițe" value={draft.notes} multiline numberOfLines={3} style={styles.multiline} onChangeText={(notes) => onChange({ ...draft, notes })} placeholder="Opțional" />
             <View style={styles.modalActions}><Button label="Renunță" variant="outline" disabled={saving} onPress={onClose} style={styles.actionButton} /><Button label={draft.id ? 'Salvează' : 'Adaugă tehnicianul'} icon="checkmark-circle-outline" loading={saving} onPress={onSave} style={styles.actionPrimary} /></View>
-          </ScrollView>
+          </KeyboardAwareScrollView>
         </View> : null}
       </KeyboardAvoidingView>
     </ModalSafeBottom>

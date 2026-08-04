@@ -5,6 +5,7 @@ import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { DateTimeField } from '@/components/ui/DateTimeField';
 import { Input } from '@/components/ui/Input';
+import { KeyboardAwareScrollView } from '@/components/ui/KeyboardAwareScrollView';
 import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
@@ -24,7 +25,6 @@ import {
   PanResponder,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
@@ -373,7 +373,7 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
             <Pressable accessibilityRole="button" accessibilityLabel="Anulează și închide" onPress={dismiss} style={[styles.close, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={23} color={colors.text} /></Pressable>
           </View>
 
-          <ScrollView
+          <KeyboardAwareScrollView
             automaticallyAdjustKeyboardInsets
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
@@ -443,7 +443,7 @@ export function ScanServiceSheetModal({ visible, propertyId, clientId, clientNam
               style={styles.submit}
             />
             <Button variant="ghost" label="Anulează" onPress={dismiss} />
-          </ScrollView>
+          </KeyboardAwareScrollView>
         </Animated.View>
       </KeyboardAvoidingView>
     </ModalSafeBottom>

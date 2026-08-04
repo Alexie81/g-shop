@@ -1,6 +1,7 @@
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { KeyboardAwareScrollView } from '@/components/ui/KeyboardAwareScrollView';
 import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -99,12 +100,12 @@ export function TechnicianField({ propertyId, technicianId, technicianName, onCh
               <Pressable accessibilityLabel="Închide" disabled={saving} onPress={close} style={[styles.close, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={22} color={colors.text} /></Pressable>
             </View>
 
-            {adding ? <ScrollView style={styles.formScroll} automaticallyAdjustKeyboardInsets keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.form}>
+            {adding ? <KeyboardAwareScrollView style={styles.formScroll} automaticallyAdjustKeyboardInsets keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.form}>
               <Input label="Nume și prenume *" value={draft.name} autoFocus onChangeText={(name) => setDraft((value) => ({ ...value, name }))} placeholder="ex. Andrei Popescu" />
               <View style={styles.row}><View style={styles.flex}><Input label="Telefon" value={draft.phone} keyboardType="phone-pad" onChangeText={(phone) => setDraft((value) => ({ ...value, phone }))} placeholder="07..." /></View><View style={styles.flex}><Input label="Specializare" value={draft.specialty} onChangeText={(specialty) => setDraft((value) => ({ ...value, specialty }))} placeholder="Laptopuri, GSM..." /></View></View>
               <Input label="Notițe" value={draft.notes} onChangeText={(notes) => setDraft((value) => ({ ...value, notes }))} multiline numberOfLines={3} style={styles.multiline} placeholder="Opțional" />
               <View style={styles.actions}><Button label="Înapoi" variant="outline" disabled={saving} onPress={() => setAdding(false)} style={styles.flex} /><Button label="Salvează și selectează" icon="checkmark-circle-outline" loading={saving} onPress={() => void save()} style={styles.flexWide} /></View>
-            </ScrollView> : <>
+            </KeyboardAwareScrollView> : <>
               <View style={[styles.help, { backgroundColor: isDark ? '#221544' : '#F4EFFF', borderColor: isDark ? '#5639A5' : '#DDD0FF' }]}><Ionicons name="information-circle-outline" size={20} color={palette.purple} /><AppText variant="caption" style={styles.helpCopy}>Poți gestiona lista completă și din Mai mult → Tehnicieni.</AppText></View>
               <ScrollView style={styles.list} contentContainerStyle={styles.listContent} keyboardShouldPersistTaps="handled">
                 {loading ? <View style={styles.empty}><Ionicons name="sync-outline" size={24} color={colors.primary} /><AppText muted>Se încarcă tehnicienii…</AppText></View> : items.length ? items.map((item) => <Pressable key={item.id} onPress={() => select(item)} style={({ pressed }) => [styles.item, { backgroundColor: item.id === technicianId ? colors.primarySoft : colors.surfaceMuted, borderColor: item.id === technicianId ? `${colors.primary}70` : colors.border, opacity: pressed ? 0.75 : 1 }]}>

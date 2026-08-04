@@ -4,6 +4,7 @@ import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
+import { KeyboardAwareScrollView } from '@/components/ui/KeyboardAwareScrollView';
 import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { Screen } from '@/components/ui/Screen';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
@@ -577,7 +578,7 @@ function EditorModal({ visible, isEditing, compact, form, saving, onChange, onSa
           </View>
         </View>
 
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.editorContent} showsVerticalScrollIndicator={false}>
+        <KeyboardAwareScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.editorContent} showsVerticalScrollIndicator={false}>
           <View style={styles.formSection}>
             <View style={styles.formSectionTitle}>
               <Ionicons name="person-outline" size={18} color={colors.primary} />
@@ -680,7 +681,7 @@ function EditorModal({ visible, isEditing, compact, form, saving, onChange, onSa
             <Input label="Cont bancar / IBAN" icon="card-outline" autoCapitalize="characters" value={form.bankAccount} onChangeText={(value) => onChange('bankAccount', value)} />
             <Input label="Observații interne" multiline numberOfLines={3} textAlignVertical="top" style={styles.notesInput} value={form.notes} onChangeText={(value) => onChange('notes', value)} />
           </View>
-        </ScrollView>
+        </KeyboardAwareScrollView>
 
         <View style={[styles.editorFooter, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
           <Button variant="ghost" label="Anulează" onPress={onClose} style={styles.footerButton} />

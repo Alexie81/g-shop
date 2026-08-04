@@ -1,5 +1,6 @@
 import { AppHeader } from '@/components/layout/AppHeader';
 import { AppText } from '@/components/ui/AppText';
+import { KeyboardAwareScrollView } from '@/components/ui/KeyboardAwareScrollView';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
@@ -160,12 +161,12 @@ function EditorModal({ draft, saving, onChange, onSave, onClose }: { draft: Draf
           <View style={styles.modalHeader}><View style={[styles.modalIcon, { backgroundColor: '#25D36618' }]}><Ionicons name="logo-whatsapp" size={25} color="#18B95D" /></View><View style={styles.modalTitle}><AppText variant="title">{draft.id ? 'Editează mesajul' : 'Mesaj WhatsApp nou'}</AppText><AppText variant="caption" muted>Textul rămâne asociat exclusiv contului tău.</AppText></View></View>
         </View>
         <Pressable accessibilityLabel="Închide" hitSlop={8} disabled={saving} onPress={onClose} style={[styles.closeButton, styles.closeButtonFloating, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={22} color={colors.text} /></Pressable>
-        <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.editorContent}>
+        <KeyboardAwareScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.editorContent}>
           <View style={styles.field}><AppText variant="label">Titlu</AppText><TextInput value={draft.title} onChangeText={(title) => onChange({ ...draft, title })} maxLength={80} placeholder="Ex: Reparația este finalizată" placeholderTextColor={colors.textMuted} style={[styles.input, { color: colors.text, backgroundColor: colors.input, borderColor: colors.border }]} /></View>
           <View style={styles.field}><View style={styles.fieldLabelRow}><AppText variant="label">Mesaj</AppText><AppText variant="caption" muted>{draft.message.length}/1000</AppText></View><TextInput value={draft.message} onChangeText={(message) => onChange({ ...draft, message })} maxLength={1000} multiline textAlignVertical="top" placeholder="Scrie mesajul trimis clientului…" placeholderTextColor={colors.textMuted} style={[styles.input, styles.messageInput, { color: colors.text, backgroundColor: colors.input, borderColor: colors.border }]} /></View>
           <View style={styles.tokens}><AppText variant="caption" muted>Apasă pentru a insera o variabilă:</AppText><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tokenRow}>{WHATSAPP_MESSAGE_TOKENS.map((token) => <Pressable key={token} onPress={() => appendToken(token)} style={[styles.token, { backgroundColor: isDark ? '#063B2A' : '#EAFBF2', borderColor: isDark ? '#13764E' : '#BFEFD2' }]}><AppText variant="caption" style={styles.tokenText}>{token}</AppText></Pressable>)}</ScrollView></View>
           <View style={styles.field}><AppText variant="label">Ordinea afișării</AppText><TextInput value={draft.sortOrder} onChangeText={(sortOrder) => onChange({ ...draft, sortOrder: sortOrder.replace(/\D/g, '').slice(0, 3) })} keyboardType="number-pad" maxLength={3} placeholder="1" placeholderTextColor={colors.textMuted} style={[styles.input, styles.orderInput, { color: colors.text, backgroundColor: colors.input, borderColor: colors.border }]} /><AppText variant="caption" muted>Pozițiile sunt păstrate automat consecutiv: 1, 2, 3, 4…</AppText></View>
-        </ScrollView>
+        </KeyboardAwareScrollView>
         <View style={styles.modalActions}><Button label="Renunță" variant="outline" disabled={saving} onPress={onClose} style={styles.actionButton} /><Button label={draft.id ? 'Salvează' : 'Adaugă mesajul'} icon="checkmark-circle-outline" loading={saving} onPress={onSave} style={styles.actionPrimary} /></View>
       </Animated.View> : null}
     </KeyboardAvoidingView>

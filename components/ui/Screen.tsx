@@ -1,8 +1,9 @@
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { spacing } from '@/theme/tokens';
 import { PropsWithChildren, ReactNode } from 'react';
-import { KeyboardAvoidingView, Platform, RefreshControl, ScrollView, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { KeyboardAvoidingView, Platform, RefreshControl, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollView } from '@/components/ui/KeyboardAwareScrollView';
 
 export function Screen({ children, scroll = true, refreshing = false, onRefresh, style, bottomInset = true, header }:
   PropsWithChildren<{ scroll?: boolean; refreshing?: boolean; onRefresh?: () => void; style?: StyleProp<ViewStyle>; bottomInset?: boolean; header?: ReactNode }>) {
@@ -12,13 +13,13 @@ export function Screen({ children, scroll = true, refreshing = false, onRefresh,
     <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safe, { backgroundColor: colors.background }]}>
       {header}
       <KeyboardAvoidingView style={styles.avoider} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        {scroll ? <ScrollView
+        {scroll ? <KeyboardAwareScrollView
           automaticallyAdjustKeyboardInsets
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.scroll}
           refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} /> : undefined}
-        >{content}</ScrollView> : content}
+        >{content}</KeyboardAwareScrollView> : content}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
