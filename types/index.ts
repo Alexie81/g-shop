@@ -27,8 +27,6 @@ export type Permission =
   | 'service_sheets.create'
   | 'service_sheets.update'
   | 'service_sheets.sign'
-  | 'interventions.view'
-  | 'interventions.manage'
   | 'collaborators.view'
   | 'collaborators.manage'
   | 'users.view'
@@ -90,6 +88,7 @@ export interface AppUpdateInfo {
 }
 
 export interface User extends BaseEntity {
+  isPrimaryAdmin?: boolean;
   username: string;
   firstName: string;
   lastName: string;

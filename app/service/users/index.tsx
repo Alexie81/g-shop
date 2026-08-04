@@ -120,7 +120,7 @@ export default function UsersScreen() {
             <FilterChip label="Inactivi" icon="pause-circle-outline" selected={filter === 'INACTIVE'} onPress={() => setFilter(filter === 'INACTIVE' ? 'ALL' : 'INACTIVE')} />
           </ScrollView>
 
-          {state.loading ? <LoadingState rows={5} /> : state.error ? <ErrorState message={state.error.message} onRetry={() => void state.reload()} /> : !filteredUsers.length ? <EmptyState icon={query || filter !== 'ALL' ? 'search-outline' : 'people-outline'} title={query || filter !== 'ALL' ? 'Niciun rezultat' : 'Niciun utilizator'} message={query || filter !== 'ALL' ? 'Schimbă termenul de căutare sau filtrul selectat.' : 'Adaugă primul utilizator pentru această proprietate.'} /> : <View style={styles.list}>{filteredUsers.map((user, index) => <UserCard key={user.id} user={user} colorsIndex={index} onPress={() => router.push(`/service/users/${user.id}`)} />)}</View>}
+          {state.loading ? <LoadingState rows={5} /> : state.error ? <ErrorState message={state.error.message} onRetry={() => void state.reload()} /> : !filteredUsers.length ? <EmptyState icon={query || filter !== 'ALL' ? 'search-outline' : 'people-outline'} title={query || filter !== 'ALL' ? 'Niciun rezultat' : 'Niciun utilizator'} message={query || filter !== 'ALL' ? 'Schimbă termenul de căutare sau filtrul selectat.' : 'Adaugă primul utilizator pentru această proprietate.'} /> : <View style={styles.list}>{filteredUsers.map((user, index) => <UserCard key={user.id} user={user} colorsIndex={index} locked={Boolean(user.isPrimaryAdmin)} onPress={() => router.push(`/service/users/${user.id}`)} />)}</View>}
         </View>
       </ScrollView>
     </View>
@@ -135,27 +135,27 @@ function FilterChip({ label, icon, selected, onPress }: { label: string; icon: k
   </Pressable>;
 }
 
-function UserCard({ user, colorsIndex, onPress }: { user: User; colorsIndex: number; onPress: () => void }) {
+function UserCard({ user, colorsIndex, locked, onPress }: { user: User; colorsIndex: number; locked: boolean; onPress: () => void }) {
   const { colors, isDark } = useAppTheme();
   const roleColor = user.role === 'ADMIN' ? palette.purple : user.role === 'COLLABORATOR' ? palette.cyan : palette.electric;
   const accessLabel = user.role === 'ADMIN' ? 'Acces global' : `${user.propertyIds.length} ${user.propertyIds.length === 1 ? 'proprietate' : 'proprietăți'}`;
-  return <Pressable accessibilityRole="button" accessibilityLabel={`Deschide utilizatorul ${user.firstName} ${user.lastName}`} onPress={onPress} style={({ pressed }) => ({ opacity: pressed ? 0.82 : 1, transform: [{ scale: pressed ? 0.992 : 1 }] })}>
-    <Card style={[styles.userCard, { borderColor: user.isActive ? colors.border : `${palette.danger}45` }]}>
+  return <Pressable accessibilityRole="button" accessibilityLabel={locked ? `${user.firstName} ${user.lastName}, Administrator principal protejat` : `Deschide utilizatorul ${user.firstName} ${user.lastName}`} accessibilityState={{ disabled: locked }} disabled={locked} onPress={onPress} style={({ pressed }) => ({ opacity: pressed ? 0.82 : 1, transform: [{ scale: pressed ? 0.992 : 1 }] })}>
+    <Card style={[styles.userCard, { borderColor: locked ? `${palette.purple}70` : user.isActive ? colors.border : `${palette.danger}45` }]}>
       <View style={[styles.accent, { backgroundColor: user.isActive ? palette.electric : palette.danger }]} />
       <LinearGradient colors={avatarGradients[colorsIndex % avatarGradients.length]} style={styles.avatar}><AppText variant="label" style={styles.avatarText}>{initials(user.firstName, user.lastName)}</AppText></LinearGradient>
       <View style={styles.userContent}>
         <View style={styles.nameRow}>
           <AppText variant="heading" numberOfLines={1} style={styles.userName}>{user.firstName} {user.lastName}</AppText>
-          <View style={[styles.status, { backgroundColor: user.isActive ? (isDark ? '#0B4D35' : palette.successSoft) : (isDark ? '#57202A' : palette.dangerSoft) }]}><View style={[styles.statusDot, { backgroundColor: user.isActive ? palette.success : palette.danger }]} /><AppText variant="caption" style={{ color: user.isActive ? palette.success : palette.danger, fontWeight: '800' }}>{user.isActive ? 'Activ' : 'Inactiv'}</AppText></View>
+          <View style={[styles.status, { backgroundColor: locked ? (isDark ? '#2B1D55' : '#F2ECFF') : user.isActive ? (isDark ? '#0B4D35' : palette.successSoft) : (isDark ? '#57202A' : palette.dangerSoft) }]}>{locked ? <Ionicons name="pin" size={13} color={palette.purple} /> : <View style={[styles.statusDot, { backgroundColor: user.isActive ? palette.success : palette.danger }]} />}<AppText variant="caption" style={{ color: locked ? palette.purple : user.isActive ? palette.success : palette.danger, fontWeight: '800' }}>{locked ? 'Principal' : user.isActive ? 'Activ' : 'Inactiv'}</AppText></View>
         </View>
         <View style={styles.identityRow}><Ionicons name={user.role === 'ADMIN' ? 'shield-checkmark-outline' : 'person-outline'} size={15} color={roleColor} /><AppText variant="caption" numberOfLines={1} style={{ color: roleColor, fontWeight: '800' }}>@{user.username} · {ROLE_LABELS[user.role]}</AppText></View>
         <View style={styles.metaRow}>
           <View style={styles.metaItem}><Ionicons name="key-outline" size={14} color={colors.textMuted} /><AppText variant="caption" muted>{user.permissions.length} permisiuni</AppText></View>
           <View style={styles.metaItem}><Ionicons name="business-outline" size={14} color={colors.textMuted} /><AppText variant="caption" muted>{accessLabel}</AppText></View>
         </View>
-        <View style={styles.lastLogin}><Ionicons name="time-outline" size={14} color={colors.textMuted} /><AppText variant="caption" muted numberOfLines={1}>{user.lastLoginAt ? `Ultima autentificare ${formatDate(user.lastLoginAt, true)}` : 'Nu s-a autentificat încă'}</AppText></View>
+        <View style={styles.lastLogin}><Ionicons name={locked ? 'lock-closed-outline' : 'time-outline'} size={14} color={locked ? palette.purple : colors.textMuted} /><AppText variant="caption" muted numberOfLines={1}>{locked ? 'Cont protejat · se modifică numai din Profil' : user.lastLoginAt ? `Ultima autentificare ${formatDate(user.lastLoginAt, true)}` : 'Nu s-a autentificat încă'}</AppText></View>
       </View>
-      <View style={[styles.chevron, { backgroundColor: colors.primarySoft }]}><Ionicons name="chevron-forward" size={20} color={colors.primary} /></View>
+      <View style={[styles.chevron, { backgroundColor: locked ? (isDark ? '#2B1D55' : '#F2ECFF') : colors.primarySoft }]}><Ionicons name={locked ? 'lock-closed' : 'chevron-forward'} size={20} color={locked ? palette.purple : colors.primary} /></View>
     </Card>
   </Pressable>;
 }

@@ -4,7 +4,6 @@ export const ALL_PERMISSIONS: Permission[] = [
   'dashboard.view', 'clients.view', 'clients.create', 'clients.update', 'clients.delete',
   'qr.generate', 'qr.scan', 'qr.share', 'service_sheets.view', 'service_sheets.create',
   'service_sheets.update', 'service_sheets.sign',
-  'interventions.view', 'interventions.manage',
   'collaborators.view', 'collaborators.manage', 'users.view', 'users.manage', 'roles.manage',
   'reports.view', 'financials.view', 'audit.view', 'settings.manage',
 ];
