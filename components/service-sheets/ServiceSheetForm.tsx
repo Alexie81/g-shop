@@ -373,6 +373,12 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
     };
 
     setLoading(true);
+    const intakeDocumentInput = {
+      agreementAt: form.intakeAgreementAt,
+      agreementStatus: form.repairRefused ? 'REFUSED' as const : 'ACCEPTED' as const,
+      estimatedRepairDays,
+      estimatedCosts,
+    };
     try {
       let documentWarning: string | null = null;
       if (canEditFinancials) await clientRepository.updateFinancials(form.clientId, financeValue);
@@ -386,12 +392,7 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
         });
       if (!sheet) {
         try {
-          await serviceSheetRepository.generateDocument(saved.id, 'INTAKE', {
-            agreementAt: form.intakeAgreementAt,
-            agreementStatus: form.repairRefused ? 'REFUSED' : 'ACCEPTED',
-            estimatedRepairDays,
-            estimatedCosts,
-          });
+          await serviceSheetRepository.generateDocument(saved.id, 'INTAKE', intakeDocumentInput);
         } catch (documentError) {
           documentWarning = documentError instanceof Error ? `Fișa a fost salvată, dar documentul de intrare nu a putut fi generat: ${documentError.message}` : 'Fișa a fost salvată, dar documentul de intrare nu a putut fi generat.';
         }
@@ -402,7 +403,17 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
       if (!sheet && error instanceof ApiError && error.status === 409) {
         const details = error.details as { code?: unknown; serviceSheetId?: unknown } | undefined;
         if (details?.code === 'SERVICE_SHEET_ALREADY_EXISTS' && typeof details.serviceSheetId === 'string') {
-          showToast('Clientul are deja o fișă de service. Am deschis fișa existentă.', 'success');
+          let recoveryWarning: string | null = null;
+          try {
+            const documents = await serviceSheetRepository.listDocuments(details.serviceSheetId);
+            const intakeExists = documents.some((document) => document.type === 'INTAKE' && document.available);
+            if (!intakeExists) await serviceSheetRepository.generateDocument(details.serviceSheetId, 'INTAKE', intakeDocumentInput);
+          } catch (documentError) {
+            recoveryWarning = documentError instanceof Error
+              ? `Fișa existentă a fost recuperată, dar documentul de intrare nu a putut fi generat: ${documentError.message}`
+              : 'Fișa existentă a fost recuperată, dar documentul de intrare nu a putut fi generat.';
+          }
+          showToast(recoveryWarning ?? 'Fișa existentă și documentul de intrare sunt pregătite.', recoveryWarning ? 'error' : 'success');
           router.replace(('/service/service-sheets/' + details.serviceSheetId) as never);
           return;
         }

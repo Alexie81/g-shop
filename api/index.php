@@ -984,6 +984,8 @@ function gshop_flush_pending_service_sheet_pdfs(): void {
 }
 
 function ensure_technicians_table(PDO $pdo): void {
+    static $ready = false;
+    if ($ready) return;
     $pdo->exec("CREATE TABLE IF NOT EXISTS technicians (
         id BINARY(16) PRIMARY KEY,
         property_id BINARY(16) NOT NULL,
@@ -999,6 +1001,7 @@ function ensure_technicians_table(PDO $pdo): void {
         INDEX idx_technicians_property_active (property_id,is_active,name),
         CONSTRAINT fk_technician_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $ready = true;
 }
 function technician_select(): string {
     return 'SELECT '.uuid_sql('t.id').' id,'.uuid_sql('t.property_id').' property_id,t.name,t.phone,t.specialty,t.notes,t.is_active,t.created_at,t.updated_at,'.uuid_sql('t.created_by').' created_by,'.uuid_sql('t.updated_by').' updated_by FROM technicians t';
@@ -1961,6 +1964,9 @@ try {
         $technicianName=trim((string)($body['technicianName']??($selectedTechnician['name']??'')));$technicianName=$technicianName===''?null:validated_person_name($technicianName,'Numele tehnicianului');
         if(!empty($client['collaboratorId']))collaborator_for_property((string)$client['collaboratorId'],$propertyId);
         $activeCompany=company_details_record($propertyId);$activeCompanyId=!empty($activeCompany['id'])?(string)$activeCompany['id']:null;$activeCompanySnapshot=$activeCompanyId?company_sheet_snapshot(company_details_by_id($activeCompanyId,$propertyId,true)):null;
+        // Pregătește toate structurile folosite de get_sheet() înainte de tranzacție.
+        // MySQL face COMMIT implicit la DDL, inclusiv la CREATE TABLE IF NOT EXISTS.
+        ensure_service_warranty_fields(db());ensure_technicians_table(db());
         $id=uuid_v4();$now=now_utc();$pdo=db();$pdo->beginTransaction();$commissionCreated=false;$financeSync=null;
         try{
             $clientLock=$pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE');$clientLock->execute([uuid_bin($clientId)]);
@@ -1976,7 +1982,7 @@ try {
             $createdSheet=get_sheet($id);$financeSync=sync_client_financials_from_service_sheet($pdo,$client,$createdSheet,$user);$financial=$financeSync['after'];$expenses=$financeSync['expenses'];
             $syncResult=sync_client_commission($pdo,$client,$financial,$expenses,$user,false);$commissionCreated=!empty($syncResult['changed'])&&$collaboratorId!==null;
             $pdo->commit();
-        }catch(Throwable$e){$pdo->rollBack();throw$e;}
+        }catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}
         audit_log('SERVICE_SHEET_CREATED','service_sheets','Fișă creată: '.$number,'ServiceSheet',$id,$propertyId,null,$body,$user);
         if(!empty($financeSync['changed']))audit_log('CLIENT_FINANCIALS_SYNCED_FROM_SHEET','financials','Costurile clientului au fost sincronizate din fișa '.$number,'Client',$clientId,$propertyId,financial_mutable_snapshot($financeSync['before']),financial_mutable_snapshot($financeSync['after']),$user);
         if($commissionCreated)audit_log('COMMISSION_CREATED','commissions','Comision aprobat automat pentru fișa '.$number,'Client',$clientId,$propertyId,null,client_financial_bundle($client)['collaborator'],$user);
