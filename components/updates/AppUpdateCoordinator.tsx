@@ -6,7 +6,7 @@ import { useAppTheme } from '@/contexts/ThemeContext';
 import { appUpdateRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { AppUpdateInfo } from '@/types';
-import { compareVersions, isNativeUpdateAvailable, releaseVersion } from '@/utils/app-version';
+import { compareVersions, isNativeUpdateAvailable, manifestReleaseVersion, releaseVersion } from '@/utils/app-version';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -17,6 +17,7 @@ import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 export function AppUpdateCoordinator() {
   const { ready, session } = useAuth();
   const { colors, isDark } = useAppTheme();
+  const updates = Updates.useUpdates();
   const checked = useRef(false);
   const [visible, setVisible] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -33,23 +34,23 @@ export function AppUpdateCoordinator() {
         try {
           const info = await appUpdateRepository.get();
           const nativeUpdateAvailable = isNativeUpdateAvailable(info.latestBuildNumber, info.latestVersion);
-          let available = false;
+          const publishedOtaAvailable = compareVersions(info.latestVersion, releaseVersion()) > 0;
+          let available = updates.isUpdatePending;
+          let candidate = manifestReleaseVersion(updates.downloadedUpdate?.manifest);
           if (Updates.isEnabled) {
             try {
-              const result = await Updates.checkForUpdateAsync();
-              let candidate: string | null = null;
-              if (result.isAvailable && 'extra' in result.manifest) {
-                const configured = result.manifest.extra?.expoClient?.extra?.releaseVersion;
-                if (typeof configured === 'string' && configured.trim()) candidate = configured.trim();
+              if (!available) {
+                const result = await Updates.checkForUpdateAsync();
+                if (result.isAvailable) candidate = manifestReleaseVersion(result.manifest);
+                available = result.isAvailable && (!candidate || compareVersions(candidate, releaseVersion()) > 0);
               }
-              available = result.isAvailable && (!candidate || compareVersions(candidate, releaseVersion()) > 0);
               if (available && candidate) setOtaVersion(candidate);
             }
             catch { /* Verificarea versiunii native rămâne disponibilă fără serviciul OTA. */ }
           }
-          if (!nativeUpdateAvailable && !available) return;
+          if (!nativeUpdateAvailable && !publishedOtaAvailable && !available) return;
           setPublished(info);
-          setOtaAvailable(available);
+          setOtaAvailable(available || publishedOtaAvailable);
           setVisible(true);
         } catch {
           // Pornirea aplicației nu trebuie blocată dacă verificarea nu este disponibilă.
@@ -58,7 +59,7 @@ export function AppUpdateCoordinator() {
     }, 1200);
 
     return () => clearTimeout(timer);
-  }, [ready, session]);
+  }, [ready, session, updates.downloadedUpdate?.manifest, updates.isUpdatePending]);
 
   const install = async () => {
     if (installing) return;
@@ -69,6 +70,16 @@ export function AppUpdateCoordinator() {
     }
     setInstalling(true);
     try {
+      if (updates.isUpdatePending) {
+        await Updates.reloadAsync();
+        return;
+      }
+      const check = await Updates.checkForUpdateAsync();
+      if (!check.isAvailable) {
+        setInstalling(false);
+        setVisible(false);
+        return;
+      }
       const result = await Updates.fetchUpdateAsync();
       if (!result.isNew) {
         setInstalling(false);
@@ -83,7 +94,7 @@ export function AppUpdateCoordinator() {
     }
   };
 
-  const availableVersion = otaAvailable ? otaVersion ?? releaseVersion() : published?.latestVersion ?? releaseVersion();
+  const availableVersion = otaAvailable ? otaVersion ?? published?.latestVersion ?? releaseVersion() : published?.latestVersion ?? releaseVersion();
   const notes = otaAvailable
     ? ['Actualizare rapidă OTA, fără reinstalarea aplicației.', 'Îmbunătățiri noi de funcționalitate, design și stabilitate.']
     : published?.releaseNotes.slice(0, 2) ?? [];

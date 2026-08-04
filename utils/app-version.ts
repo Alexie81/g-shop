@@ -36,3 +36,15 @@ export function compareVersions(a: string, b: string) {
   }
   return 0;
 }
+
+export function manifestReleaseVersion(manifest: unknown) {
+  if (!manifest || typeof manifest !== 'object') return null;
+  const root = manifest as Record<string, unknown>;
+  const extra = root.extra && typeof root.extra === 'object' ? root.extra as Record<string, unknown> : null;
+  const direct = extra?.releaseVersion;
+  if (typeof direct === 'string' && direct.trim()) return direct.trim();
+  const expoClient = extra?.expoClient && typeof extra.expoClient === 'object' ? extra.expoClient as Record<string, unknown> : null;
+  const expoExtra = expoClient?.extra && typeof expoClient.extra === 'object' ? expoClient.extra as Record<string, unknown> : null;
+  const configured = expoExtra?.releaseVersion;
+  return typeof configured === 'string' && configured.trim() ? configured.trim() : null;
+}

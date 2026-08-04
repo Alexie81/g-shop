@@ -22,12 +22,13 @@ export default function AppUpdateScreen() {
   useBackToAdministration();
   const { colors } = useAppTheme();
   const { showToast } = useToast();
+  const updates = Updates.useUpdates();
   const [installing, setInstalling] = useState(false);
   const [heroHeight, setHeroHeight] = useState(190);
   const state = useAsyncData(() => appUpdateRepository.get(), []);
   const currentVersion = releaseVersion();
   const serverVersion = state.data?.latestVersion ?? currentVersion;
-  const updateAvailable = state.data ? isNativeUpdateAvailable(state.data.latestBuildNumber, state.data.latestVersion) : false;
+  const updateAvailable = state.data ? isNativeUpdateAvailable(state.data.latestBuildNumber, state.data.latestVersion) || compareVersions(state.data.latestVersion, currentVersion) > 0 || updates.isUpdatePending : updates.isUpdatePending;
   const latest = updateAvailable ? serverVersion : currentVersion;
 
   const download = async () => {
@@ -41,6 +42,11 @@ export default function AppUpdateScreen() {
     setInstalling(true);
     try {
       if (Platform.OS !== 'web' && Updates.isEnabled) {
+        if (updates.isUpdatePending) {
+          showToast('Actualizarea este pregătită. Aplicația se va redeschide acum.', 'info');
+          await Updates.reloadAsync();
+          return;
+        }
         const ota = await Updates.checkForUpdateAsync();
         let otaVersion: string | null = null;
         if (ota.isAvailable && 'extra' in ota.manifest) {
