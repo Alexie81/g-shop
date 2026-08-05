@@ -142,11 +142,12 @@ function audit_log(string $action, string $module, string $summary, ?string $ent
         $stmt->execute([uuid_bin(uuid_v4()), isset($user['id']) ? uuid_bin($user['id']) : null, $propertyId ? uuid_bin($propertyId) : null, $action, $module, $entityType, $entityId ? uuid_bin($entityId) : null, $summary, $before ? json_encode($before, JSON_UNESCAPED_UNICODE) : null, $after ? json_encode($after, JSON_UNESCAPED_UNICODE) : null, request_ip(), substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ($user['device'] ?? '')), 0, 160), now_utc()]);
     } catch (Throwable $ignored) { /* Audit failure must not expose internal details to clients. */ }
 }
-function auth_session(array $user, string $device): array {
+function auth_session(array $user, string $device, bool $remember = false): array {
     [$access, $accessExpires] = jwt_issue($user['id']);
     $refresh = base64url_encode(random_bytes(32)); $refreshTtl = (int)env_value('REFRESH_TOKEN_TTL', '2592000');
+    $refreshExpiresAt = $remember ? '9999-12-31 23:59:59' : gmdate('Y-m-d H:i:s', time() + $refreshTtl);
     $stmt = db()->prepare('INSERT INTO refresh_sessions (id,user_id,token_hash,device,ip_address,expires_at,created_at) VALUES (?,?,?,?,?,?,?)');
-    $stmt->execute([uuid_bin(uuid_v4()), uuid_bin($user['id']), hash('sha256', $refresh, true), substr($device, 0, 100), request_ip(), gmdate('Y-m-d H:i:s', time() + $refreshTtl), now_utc()]);
+    $stmt->execute([uuid_bin(uuid_v4()), uuid_bin($user['id']), hash('sha256', $refresh, true), substr($device, 0, 100), request_ip(), $refreshExpiresAt, now_utc()]);
     return ['accessToken' => $access, 'refreshToken' => $refresh, 'expiresAt' => $accessExpires, 'user' => $user];
 }
 function entity_base(array $row): array { return camel_row($row); }
@@ -1456,15 +1457,16 @@ try {
         db()->prepare('UPDATE users SET last_login_at=?,updated_at=? WHERE id=?')->execute([now_utc(), now_utc(), uuid_bin($row['id'])]);
         $user = user_record($row['id']); $user['device'] = (string)($body['device'] ?? '');
         audit_log('LOGIN','auth','Autentificare reușită', 'User', $user['id'], null, null, null, $user);
-        respond(auth_session($user, (string)($body['device'] ?? 'Unknown device')));
+        respond(auth_session($user, (string)($body['device'] ?? 'Unknown device'), ($body['remember'] ?? false) === true));
     }
     if ($method === 'POST' && $path === '/auth/refresh') {
         $body = json_body(); $refresh = (string)($body['refreshToken'] ?? '');
         if ($refresh === '') fail('Refresh token lipsește.', 401);
-        $stmt = db()->prepare('SELECT ' . uuid_sql('id') . ' id,' . uuid_sql('user_id') . ' user_id,device FROM refresh_sessions WHERE token_hash=? AND revoked_at IS NULL AND expires_at>? LIMIT 1'); $stmt->execute([hash('sha256', $refresh, true), now_utc()]); $session = $stmt->fetch();
+        $stmt = db()->prepare('SELECT ' . uuid_sql('id') . ' id,' . uuid_sql('user_id') . ' user_id,device,expires_at FROM refresh_sessions WHERE token_hash=? AND revoked_at IS NULL AND expires_at>? LIMIT 1'); $stmt->execute([hash('sha256', $refresh, true), now_utc()]); $session = $stmt->fetch();
         if (!$session) fail('Sesiunea nu mai este validă.', 401);
         db()->prepare('UPDATE refresh_sessions SET revoked_at=? WHERE id=?')->execute([now_utc(), uuid_bin($session['id'])]);
-        respond(auth_session(user_record($session['user_id']), (string)$session['device']));
+        $remember = ($body['remember'] ?? false) === true || str_starts_with((string)$session['expires_at'], '9999-12-31');
+        respond(auth_session(user_record($session['user_id']), (string)$session['device'], $remember));
     }
     if ($method === 'GET' && $path === '/auth/me') respond(current_user());
     if ($method === 'GET' && $path === '/permissions') { require_permission('users.view'); respond(user_permission_catalog()); }

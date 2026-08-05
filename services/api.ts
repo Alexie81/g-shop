@@ -34,9 +34,10 @@ async function refreshSession() {
     refreshing = fetch(`${API_URL}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ refreshToken: currentSession.refreshToken }),
+      body: JSON.stringify({ refreshToken: currentSession.refreshToken, remember: persistSession }),
     }).then(async (response) => {
-      if (!response.ok) return null;
+      if (response.status === 401 || response.status === 403) return null;
+      if (!response.ok) throw new ApiError('Sesiunea nu poate fi reînnoită momentan.', response.status);
       const session = (await response.json()).data as AuthSession;
       sessionManager.set(session);
       if (persistSession) await secureSessionStorage.set(JSON.stringify(session));

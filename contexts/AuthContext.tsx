@@ -1,5 +1,5 @@
 import { authRepository } from '@/repositories/api-repositories';
-import { apiRequest, sessionManager } from '@/services/api';
+import { ApiError, apiRequest, sessionManager } from '@/services/api';
 import { preferenceStorage, secureSessionStorage } from '@/services/storage';
 import { AuthSession, Permission, User } from '@/types';
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useState } from 'react';
@@ -21,6 +21,18 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function parseStoredSession(value: string): AuthSession {
+  const parsed = JSON.parse(value) as Partial<AuthSession>;
+  if (!parsed || typeof parsed !== 'object'
+    || typeof parsed.accessToken !== 'string' || !parsed.accessToken
+    || typeof parsed.refreshToken !== 'string' || !parsed.refreshToken
+    || typeof parsed.expiresAt !== 'string'
+    || !parsed.user || typeof parsed.user.id !== 'string') {
+    throw new Error('Sesiunea salvată este invalidă.');
+  }
+  return parsed as AuthSession;
+}
+
 export function AuthProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [ready, setReady] = useState(false);
@@ -33,19 +45,43 @@ export function AuthProvider({ children }: PropsWithChildren) {
     Promise.all([secureSessionStorage.get(), preferenceStorage.get('username')]).then(async ([stored, username]) => {
       setSavedUsername(username ?? '');
       if (!stored) return;
+      let parsed: AuthSession;
       try {
-        const parsed = JSON.parse(stored) as AuthSession;
-        sessionManager.setPersistence(true);
-        sessionManager.set(parsed);
-        const user = await apiRequest<User>('/auth/me');
-        const restored = { ...parsed, user };
-        setRequiresPropertySelection(false);
-        sessionManager.set(restored);
-        setSession(restored);
+        parsed = parseStoredSession(stored);
       } catch {
         sessionManager.setPersistence(false);
         sessionManager.set(null);
         await secureSessionStorage.remove();
+        return;
+      }
+
+      sessionManager.setPersistence(true);
+      sessionManager.set(parsed);
+      try {
+        const user = await apiRequest<User>('/auth/me');
+        const activeSession = sessionManager.get();
+        if (!activeSession) throw new Error('Sesiunea nu a putut fi reînnoită.');
+        const restored = { ...activeSession, user };
+        setRequiresPropertySelection(false);
+        sessionManager.set(restored);
+        setSession(restored);
+        try {
+          await secureSessionStorage.set(JSON.stringify(restored));
+        } catch {
+          // Sesiunea reînnoită rămâne activă chiar dacă stocarea dispozitivului răspunde temporar lent.
+        }
+      } catch (error) {
+        if (!(error instanceof ApiError) || error.status === 401 || error.status === 403) {
+          sessionManager.setPersistence(false);
+          sessionManager.set(null);
+          await secureSessionStorage.remove();
+          return;
+        }
+        // Păstrează sesiunea memorată când serverul este temporar indisponibil.
+        // Sincronizarea periodică o va reînnoi imediat ce revine conexiunea.
+        const preserved = sessionManager.get() ?? parsed;
+        sessionManager.set(preserved);
+        setSession(preserved);
       }
     }).finally(() => setReady(true));
   }, []);
@@ -81,7 +117,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [ready, session?.user.id]);
 
   const login = useCallback(async (username: string, password: string, remember: boolean) => {
-    const next = await authRepository.login(username.trim(), password, `${Platform.OS} ${Platform.Version}`);
+    const next = await authRepository.login(username.trim(), password, `${Platform.OS} ${Platform.Version}`, remember);
     setRequiresPropertySelection(next.user.role === 'ADMIN');
     sessionManager.setPersistence(remember);
     sessionManager.set(next);

@@ -2,7 +2,7 @@ import { apiRequest } from '@/services/api';
 import { AppUpdateRepository, AuthRepository, AuditRepository, ClientRepository, CollaboratorRepository, CompanyDetailsRepository, DashboardRepository, PropertyRepository, ServiceSheetRepository, TechnicianRepository, UserRepository, WhatsAppMessageRepository } from '@/repositories/interfaces';
 
 export const authRepository: AuthRepository = {
-  login: (username, password, device) => apiRequest('/auth/login', { method: 'POST', authenticated: false, body: JSON.stringify({ username, password, device }) }),
+  login: (username, password, device, remember) => apiRequest('/auth/login', { method: 'POST', authenticated: false, body: JSON.stringify({ username, password, device, remember }) }),
   logout: () => apiRequest('/auth/logout', { method: 'POST' }),
   forgotPassword: (email) => apiRequest('/auth/forgot-password', { method: 'POST', authenticated: false, body: JSON.stringify({ email }) }),
   changePassword: (currentPassword, newPassword) => apiRequest('/auth/change-password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) }),

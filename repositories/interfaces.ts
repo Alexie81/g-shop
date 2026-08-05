@@ -1,7 +1,7 @@
 import { AppUpdateInfo, AuditLog, AuthSession, Client, ClientExpense, ClientExpenseDeleteResult, ClientFinancialOverview, ClientParticipant, Collaborator, CompanyDetails, CreateClientExpensePayload, DashboardMetrics, GenerateServiceDocumentInput, Paginated, Permission, Property, ServiceDocument, ServiceDocumentRegisterRow, ServiceDocumentType, ServiceSheet, ServiceSheetPdf, Technician, UpdateClientExpensePayload, UpdateClientFinancialsPayload, User, UUID, WhatsAppMessage } from '@/types';
 
 export interface AuthRepository {
-  login(username: string, password: string, device: string): Promise<AuthSession>;
+  login(username: string, password: string, device: string, remember: boolean): Promise<AuthSession>;
   logout(): Promise<void>;
   forgotPassword(email: string): Promise<void>;
   changePassword(currentPassword: string, newPassword: string): Promise<void>;
