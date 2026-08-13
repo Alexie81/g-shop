@@ -106,8 +106,12 @@ function normalize_user_permissions(mixed $value): array {
 function ensure_user_permission_catalog(): void {
     static $ready = false;
     if ($ready) return;
-    $ready = true;$pdo=db();$rows=$pdo->query('SELECT id,permissions FROM users')->fetchAll();$update=$pdo->prepare('UPDATE users SET permissions=? WHERE id=?');
-    foreach($rows as$row){$normalized=normalize_user_permissions($row['permissions']);$current=json_decode((string)$row['permissions'],true);if(!is_array($current)||array_values($current)!==$normalized)$update->execute([json_encode($normalized),$row['id']]);}
+    $ready = true;$pdo=db();
+    $pdo->exec("CREATE TABLE IF NOT EXISTS app_migrations (migration_key VARCHAR(100) PRIMARY KEY,applied_at DATETIME NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $migrationKey='grant_sales_sheet_permissions_v1';$check=$pdo->prepare('SELECT 1 FROM app_migrations WHERE migration_key=? LIMIT 1');$check->execute([$migrationKey]);$grantSalesPermissions=!$check->fetchColumn();
+    $rows=$pdo->query('SELECT id,role,permissions FROM users')->fetchAll();$update=$pdo->prepare('UPDATE users SET permissions=? WHERE id=?');
+    foreach($rows as$row){$normalized=normalize_user_permissions($row['permissions']);if($grantSalesPermissions&&($row['role']??'')==='ADMIN')$normalized=normalize_user_permissions(array_merge($normalized,['sales_sheets.view','sales_sheets.create','sales_sheets.update','sales_sheets.delete']));$current=json_decode((string)$row['permissions'],true);if(!is_array($current)||array_values($current)!==$normalized)$update->execute([json_encode($normalized),$row['id']]);}
+    if($grantSalesPermissions)$pdo->prepare('INSERT IGNORE INTO app_migrations (migration_key,applied_at) VALUES (?,?)')->execute([$migrationKey,now_utc()]);
 }
 function user_record(string $userId, bool $requireActive = true): array {
     ensure_user_deletion_field();
