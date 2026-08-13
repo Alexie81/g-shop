@@ -75,11 +75,11 @@ function gshop_sales_pdf_mini_card(GshopServiceDocumentPdf $pdf, float $x, float
 }
 
 function gshop_sales_pdf_financial_summary(GshopServiceDocumentPdf $pdf, array $sheet, string $currency): void {
-    $total=max(0,(float)($sheet['totalPrice']??0));$paymentStatus=strtoupper(trim((string)($sheet['paymentStatus']??'UNPAID')));$received=max(0,(float)($sheet['receivedAmount']??($paymentStatus==='PAID'?$total:($sheet['advancePaid']??0))));$received=min($received,$total);$remaining=max(0,(float)($sheet['remainingDue']??($total-$received)));$totalPaid=$paymentStatus==='PAID'||$remaining<=.009||($total>0&&$received>=$total-.009);$totalStatus=$totalPaid?'ACHITAT':'NEACHITAT';$restStatus=$received>.009?($remaining<=.009?'ACHITAT':'NEACHITAT'):null;
+    $total=max(0,(float)($sheet['totalPrice']??0));$paymentStatus=strtoupper(trim((string)($sheet['paymentStatus']??'UNPAID')));$received=max(0,(float)($sheet['receivedAmount']??($paymentStatus==='PAID'?$total:($sheet['advancePaid']??0))));$received=min($received,$total);$remaining=max(0,(float)($sheet['remainingDue']??($total-$received)));$totalPaid=$paymentStatus==='PAID'||$remaining<=.009||($total>0&&$received>=$total-.009);$totalStatus=$totalPaid?'ACHITAT':'NEACHITAT';$restStatus=$remaining<=.009?'ACHITAT':'NEACHITAT';
     $pdf->SetFillColor(255,255,255);$pdf->SetDrawColor(228,234,243);$pdf->SetLineWidth(0.7);$pdf->RoundedRect(22,488,551,80,9,'DF');
     gshop_sales_pdf_card($pdf,29,493,170,38,[7,92,255],[7,92,255],'TOTAL DE PLATĂ',gshop_pdf_money($total,$currency),[255,255,255],$totalStatus);
     gshop_sales_pdf_card($pdf,204,493,170,38,[255,255,255],[20,168,59],'BANI ÎNCASAȚI',gshop_pdf_money($received,$currency),[20,168,59]);
-    gshop_sales_pdf_card($pdf,379,493,185,38,[255,255,255],[255,159,10],'REST DE PLATĂ',gshop_pdf_money($remaining,$currency),[224,117,20],$restStatus);
+    gshop_sales_pdf_card($pdf,379,493,185,38,[255,255,255],[255,159,10],'REST DE PLATĂ',$remaining<=.009?'ACHITAT':gshop_pdf_money($remaining,$currency),$remaining<=.009?[20,168,59]:[224,117,20],$restStatus);
     gshop_sales_pdf_mini_card($pdf,29,537,130,'PREȚ PRODUS',gshop_pdf_money($sheet['productPrice']??0,$currency));
     gshop_sales_pdf_mini_card($pdf,164,537,120,'LIVRARE',gshop_pdf_money($sheet['deliveryPrice']??0,$currency));
     gshop_sales_pdf_mini_card($pdf,289,537,80,'MONEDĂ',$currency);
