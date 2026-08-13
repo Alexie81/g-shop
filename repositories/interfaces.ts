@@ -25,6 +25,7 @@ export interface SalesSheetRepository {
   get(id: UUID): Promise<SalesSheet>;
   create(input: CreateSalesSheetPayload): Promise<SalesSheet>;
   update(id: UUID, input: CreateSalesSheetPayload): Promise<SalesSheet>;
+  saveExpenses(id: UUID, expenses: SalesSheet['expenses']): Promise<SalesSheet>;
   saveSignature(id: UUID, signature: string): Promise<SalesSheet>;
   remove(id: UUID): Promise<void>;
 }

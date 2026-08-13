@@ -108,11 +108,12 @@ La actualizarea unei instalări existente, apelează `POST /admin/migrations/cli
 
 - `GET|POST /sales-sheets` — listează sau emite o fișă nouă și generează PDF-ul din șablonul A4
 - `GET|PUT|DELETE /sales-sheets/{id}` — consultă, regenerează sau elimină o fișă de vânzare
+- `PUT /sales-sheets/{id}/expenses` — salvează pozițiile de cheltuieli interne și recalculează suma rămasă pentru G-Shop
 - `POST /sales-sheets/{id}/signature` — salvează semnătura electronică a clientului și regenerează PDF-ul
 - `GET|POST /companies?propertyId={uuid}` — lista firmelor este comună între proprietăți
 - `PUT /companies/{id}/default` cu `{ "propertyId": "uuid" }` — selectează independent firma activă pentru proprietatea Service sau Shop
 
-Fișa de vânzare fixează un snapshot al firmei active în momentul emiterii. Schimbarea ulterioară a firmei active nu rescrie documentele deja emise. Totalul produselor, livrarea și restul de plată sunt recalculate pe server, iar semnătura clientului și ștampila firmei sunt aplicate automat în PDF.
+Fișa de vânzare fixează un snapshot al firmei active în momentul emiterii. Schimbarea ulterioară a firmei active nu rescrie documentele deja emise. Totalul produselor, livrarea și restul de plată sunt recalculate pe server, iar semnătura clientului și ștampila firmei sunt aplicate automat în PDF. Cheltuielile sunt valori interne protejate de permisiunea `financials.view`, nu apar în PDF și sunt folosite pentru calculul `bani încasați - cheltuieli = rămâne G-Shop`.
 
 ### Service
 

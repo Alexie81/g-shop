@@ -26,6 +26,7 @@ export const salesSheetRepository: SalesSheetRepository = {
   get: (id) => apiRequest(`/sales-sheets/${id}`),
   create: (input) => apiRequest('/sales-sheets', { method: 'POST', body: JSON.stringify(input) }),
   update: (id, input) => apiRequest(`/sales-sheets/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
+  saveExpenses: (id, expenses) => apiRequest(`/sales-sheets/${id}/expenses`, { method: 'PUT', body: JSON.stringify({ expenses: expenses ?? [] }) }),
   saveSignature: (id, signature) => apiRequest(`/sales-sheets/${id}/signature`, { method: 'POST', body: JSON.stringify({ signature }) }),
   remove: (id) => apiRequest(`/sales-sheets/${id}`, { method: 'DELETE' }),
 };
