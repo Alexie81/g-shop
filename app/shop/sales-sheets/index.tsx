@@ -38,6 +38,10 @@ export default function SalesSheetsScreen() {
   }, [query, state.data?.data]);
   const total = (state.data?.data ?? []).reduce((sum, item) => sum + item.totalPrice, 0);
   const remaining = (state.data?.data ?? []).reduce((sum, item) => sum + item.remainingDue, 0);
+  const collected = (state.data?.data ?? []).reduce((sum, item) => sum + item.advancePaid, 0);
+  const expenses = (state.data?.data ?? []).reduce((sum, item) => sum + (item.expenseTotal ?? 0), 0);
+  const gshopNet = (state.data?.data ?? []).reduce((sum, item) => sum + (item.gshopNet ?? item.advancePaid), 0);
+  const canViewFinancials = hasPermission('financials.view');
 
   if (!hasPermission('sales_sheets.view')) return <Redirect href="/shop/home" />;
   return <Screen header={<AppHeader title="Fișe de vânzări" />} refreshing={state.refreshing} onRefresh={() => void state.reload(true)}>
@@ -49,9 +53,7 @@ export default function SalesSheetsScreen() {
       </LinearGradient>
 
       <View style={[styles.metrics, compact && styles.metricsCompact]}>
-        <Metric icon="documents-outline" label="Fișe emise" value={String(state.data?.total ?? 0)} color={colors.primary} />
-        <Metric icon="cash-outline" label="Total vânzări" value={money(total, 'RON')} color={palette.success} />
-        <Metric icon="time-outline" label="Rest de încasat" value={money(remaining, 'RON')} color={remaining > 0 ? palette.warning : palette.success} />
+        {canViewFinancials ? <><Metric icon="cash-outline" label="Bani încasați" value={money(collected, 'RON')} color={palette.success} /><Metric icon="receipt-outline" label="Cheltuieli" value={money(expenses, 'RON')} color={palette.warning} /><Metric icon="wallet-outline" label="Rămâne G-Shop" value={money(gshopNet, 'RON')} color={gshopNet >= 0 ? colors.primary : palette.danger} /></> : <><Metric icon="documents-outline" label="Fișe emise" value={String(state.data?.total ?? 0)} color={colors.primary} /><Metric icon="cash-outline" label="Total vânzări" value={money(total, 'RON')} color={palette.success} /><Metric icon="time-outline" label="Rest de încasat" value={money(remaining, 'RON')} color={remaining > 0 ? palette.warning : palette.success} /></>}
       </View>
 
       <Input label="Caută rapid" icon="search-outline" value={query} onChangeText={setQuery} placeholder="Număr, client, telefon sau produs" />

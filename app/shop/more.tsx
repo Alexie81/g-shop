@@ -18,6 +18,7 @@ export default function ShopMoreScreen() {
   const { user, hasPermission } = useAuth();
   const allItems: Item[] = [
     { label: 'Datele firmei', description: 'Aceleași firme ca în Service, cu selecție separată pentru vânzări', icon: 'business-outline', color: palette.warning, route: '/company-details', permission: 'settings.manage', adminOnly: true },
+    { label: 'Produse', description: 'Catalogul de produse și categorii', icon: 'cube-outline', color: colors.primary, route: '/shop/products' },
     { label: 'Stocuri', description: 'Produse și disponibilitate', icon: 'layers-outline', color: palette.cyan, route: '/shop/stocks' },
     { label: 'Actualizare aplicație', description: 'Verifică versiunea instalată', icon: 'cloud-download-outline', color: palette.cyan, route: '/app-update' },
     { label: 'Setări', description: 'Temă, securitate și aplicație', icon: 'settings-outline', color: '#64748B', route: '/settings' },

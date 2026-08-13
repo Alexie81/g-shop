@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/Card';
 import { DateTimeField } from '@/components/ui/DateTimeField';
 import { Input } from '@/components/ui/Input';
 import { Screen } from '@/components/ui/Screen';
+import { useAuth } from '@/contexts/AuthContext';
 import { useProperty } from '@/contexts/PropertyContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -22,9 +23,11 @@ const numberValue = (value: string) => {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 };
 const money = (value: number, currency = 'RON') => new Intl.NumberFormat('ro-RO', { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+type ExpenseDraft = { id: string; name: string; amount: string };
 
 export function SalesSheetForm() {
   const { activeProperty } = useProperty();
+  const { hasPermission } = useAuth();
   const { colors } = useAppTheme();
   const { showToast } = useToast();
   const { width } = useWindowDimensions();
@@ -51,13 +54,17 @@ export function SalesSheetForm() {
   const [dueAt, setDueAt] = useState('');
   const [currencyCode, setCurrencyCode] = useState('RON');
   const [notes, setNotes] = useState('');
+  const [expenses, setExpenses] = useState<ExpenseDraft[]>([]);
+  const canManageFinancials = hasPermission('financials.view');
 
   const totals = useMemo(() => {
     const product = numberValue(quantity) * numberValue(productUnitPrice);
     const delivery = deliveryMode === 'DELIVERY' ? numberValue(deliveryPrice) : 0;
     const total = product + delivery;
-    return { product, delivery, total, remaining: Math.max(0, total - numberValue(advancePaid)) };
-  }, [advancePaid, deliveryMode, deliveryPrice, productUnitPrice, quantity]);
+    const collected = Math.min(total, numberValue(advancePaid));
+    const expenseTotal = expenses.reduce((sum, expense) => sum + numberValue(expense.amount), 0);
+    return { product, delivery, total, collected, expenseTotal, gshopNet: collected - expenseTotal, remaining: Math.max(0, total - collected) };
+  }, [advancePaid, deliveryMode, deliveryPrice, expenses, productUnitPrice, quantity]);
 
   const submit = async () => {
     if (!activeProperty) return;
@@ -66,13 +73,14 @@ export function SalesSheetForm() {
     if (productName.trim().length < 2) return showToast('Completează produsul sau modelul vândut.', 'error');
     if (numberValue(quantity) <= 0) return showToast('Cantitatea trebuie să fie mai mare decât zero.', 'error');
     if (numberValue(advancePaid) > totals.total) return showToast('Avansul nu poate depăși totalul fișei.', 'error');
+    if (canManageFinancials && expenses.some((expense) => (expense.name.trim() && numberValue(expense.amount) <= 0) || (!expense.name.trim() && numberValue(expense.amount) > 0))) return showToast('Completează denumirea și valoarea fiecărei cheltuieli.', 'error');
     setSaving(true);
     try {
       const created = await salesSheetRepository.create({
         propertyId: activeProperty.id, documentAt, customerName: customerName.trim(), customerPhone: customerPhone.trim(), customerEmail: customerEmail.trim(),
         deliveryAddress: deliveryAddress.trim(), customerNotes: customerNotes.trim(), productName: productName.trim(), productCode: productCode.trim(), serialNumber: serialNumber.trim(),
         quantity: numberValue(quantity), warranty: warranty.trim(), paymentMethod, deliveryMode, productUnitPrice: numberValue(productUnitPrice), deliveryPrice: totals.delivery,
-        advancePaid: numberValue(advancePaid), dueAt, currencyCode: currencyCode.trim().toUpperCase() || 'RON', notes: notes.trim(), ...(signature ? { signature } : {}),
+        advancePaid: numberValue(advancePaid), dueAt, currencyCode: currencyCode.trim().toUpperCase() || 'RON', notes: notes.trim(), expenses: canManageFinancials ? expenses.filter((expense) => expense.name.trim() && numberValue(expense.amount) > 0).map((expense) => ({ name: expense.name.trim(), amount: numberValue(expense.amount) })) : [], ...(signature ? { signature } : {}),
       });
       showToast('Fișa de vânzare și PDF-ul au fost emise.', 'success');
       router.replace(`/shop/sales-sheets/${created.id}` as never);
@@ -136,7 +144,27 @@ export function SalesSheetForm() {
           </View>
         </StepCard>
 
-        <StepCard number={5} title="Confirmare" subtitle="Data, observațiile și semnătura clientului" icon="checkmark-done-outline">
+        {canManageFinancials ? <StepCard number={5} title="Cheltuieli interne" subtitle="Nu apar în PDF-ul clientului" icon="receipt-outline">
+          <View style={styles.expenseHeading}>
+            <View style={styles.copy}><AppText variant="label">Poziții de cheltuieli</AppText><AppText variant="caption" muted>Cost produs, transport, ambalare sau orice alt cost intern.</AppText></View>
+            <Button compact variant="outline" label="Adaugă" icon="add-outline" onPress={() => setExpenses((current) => [...current, { id: `${Date.now()}-${current.length}`, name: '', amount: '' }])} />
+          </View>
+          {expenses.length ? <View style={styles.expenseList}>{expenses.map((expense, index) => <View key={expense.id} style={[styles.expenseRow, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
+            <View style={[styles.expenseNumber, { backgroundColor: colors.primarySoft }]}><AppText variant="label" style={{ color: colors.primary }}>{index + 1}</AppText></View>
+            <View style={styles.expenseFields}>
+              <View style={styles.expenseName}><Input label="Denumire" value={expense.name} onChangeText={(name) => setExpenses((current) => current.map((item) => item.id === expense.id ? { ...item, name } : item))} placeholder="Ex: Cost achiziție produs" /></View>
+              <View style={styles.expenseAmount}><Input label="Valoare" value={expense.amount} onChangeText={(amount) => setExpenses((current) => current.map((item) => item.id === expense.id ? { ...item, amount } : item))} keyboardType="decimal-pad" placeholder="0,00" /></View>
+            </View>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Șterge cheltuiala ${index + 1}`} onPress={() => setExpenses((current) => current.filter((item) => item.id !== expense.id))} style={[styles.expenseDelete, { backgroundColor: `${palette.danger}14` }]}><Ionicons name="trash-outline" size={20} color={palette.danger} /></Pressable>
+          </View>)}</View> : <View style={[styles.expenseEmpty, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}><Ionicons name="wallet-outline" size={25} color={colors.textMuted} /><View style={styles.copy}><AppText variant="label">Nicio cheltuială adăugată</AppText><AppText variant="caption" muted>Poți emite fișa și fără cheltuieli interne.</AppText></View></View>}
+          <View style={[styles.expenseSummary, { backgroundColor: colors.primarySoft, borderColor: `${colors.primary}35` }]}>
+            <Summary label="Bani încasați" value={money(totals.collected, currencyCode)} color={palette.success} />
+            <Summary label="Total cheltuieli" value={money(totals.expenseTotal, currencyCode)} color={palette.warning} />
+            <Summary label="Rămâne G-Shop" value={money(totals.gshopNet, currencyCode)} color={totals.gshopNet >= 0 ? colors.primary : palette.danger} />
+          </View>
+        </StepCard> : null}
+
+        <StepCard number={canManageFinancials ? 6 : 5} title="Confirmare" subtitle="Data, observațiile și semnătura clientului" icon="checkmark-done-outline">
           <DateTimeField label="Data și ora fișei" value={documentAt} onChange={setDocumentAt} showNow />
           <Input label="Observații" icon="document-text-outline" value={notes} onChangeText={setNotes} multiline numberOfLines={3} style={styles.textArea} />
           <View style={[styles.signature, { backgroundColor: colors.surfaceMuted, borderColor: signature ? palette.success : colors.border }]}>
@@ -171,6 +199,7 @@ const styles = StyleSheet.create({
   fields: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }, fieldsCompact: { flexDirection: 'column', flexWrap: 'nowrap' }, field: { minWidth: 240, flexGrow: 1, flexBasis: '46%' }, fieldCompact: { minWidth: 0, flexBasis: 'auto', width: '100%' }, wide: { width: '100%' },
   choiceGroup: { gap: spacing.sm }, choices: { flexDirection: 'row', gap: spacing.sm }, choicesCompact: { flexDirection: 'column' }, choice: { minHeight: 58, flex: 1, padding: spacing.sm, borderWidth: 1.5, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, choiceIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   summary: { padding: spacing.md, borderWidth: 1, borderRadius: radius.lg, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }, summaryItem: { minWidth: 130, flex: 1, gap: 3 }, textArea: { minHeight: 78, textAlignVertical: 'top' },
+  expenseHeading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.md }, expenseList: { gap: spacing.sm }, expenseRow: { padding: spacing.sm, borderWidth: 1, borderRadius: radius.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, expenseNumber: { width: 34, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }, expenseFields: { minWidth: 210, flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, expenseName: { minWidth: 190, flex: 2 }, expenseAmount: { minWidth: 130, flex: 1 }, expenseDelete: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }, expenseEmpty: { minHeight: 76, padding: spacing.md, borderWidth: 1, borderStyle: 'dashed', borderRadius: radius.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.md }, expenseSummary: { padding: spacing.md, borderWidth: 1, borderRadius: radius.lg, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   signature: { padding: spacing.md, borderWidth: 1.5, borderRadius: radius.lg, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.md }, signatureIcon: { width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   emitBar: { padding: spacing.md, borderWidth: 1, borderRadius: radius.lg, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.md }, emitCopy: { minWidth: 220, flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, emitButton: { minWidth: 250 },
 });
