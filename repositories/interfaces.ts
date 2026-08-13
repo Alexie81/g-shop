@@ -1,4 +1,4 @@
-import { AppUpdateInfo, AuditLog, AuthSession, Client, ClientExpense, ClientExpenseDeleteResult, ClientFinancialOverview, ClientParticipant, Collaborator, CompanyDetails, CreateClientExpensePayload, CreateSalesSheetPayload, DashboardMetrics, GenerateServiceDocumentInput, Paginated, Permission, Property, SalesSheet, ServiceDocument, ServiceDocumentRegisterRow, ServiceDocumentType, ServiceSheet, ServiceSheetPdf, Technician, UpdateClientExpensePayload, UpdateClientFinancialsPayload, User, UUID, WhatsAppMessage } from '@/types';
+import { AppUpdateInfo, AuditLog, AuthSession, Client, ClientExpense, ClientExpenseDeleteResult, ClientFinancialOverview, ClientParticipant, Collaborator, CompanyDetails, CreateClientExpensePayload, CreateSalesSheetPayload, DashboardMetrics, GenerateServiceDocumentInput, Paginated, Permission, Property, SalesPaymentStatus, SalesSheet, ServiceDocument, ServiceDocumentRegisterRow, ServiceDocumentType, ServiceSheet, ServiceSheetPdf, Technician, UpdateClientExpensePayload, UpdateClientFinancialsPayload, User, UUID, WhatsAppMessage } from '@/types';
 
 export interface AuthRepository {
   login(username: string, password: string, device: string, remember: boolean): Promise<AuthSession>;
@@ -25,6 +25,7 @@ export interface SalesSheetRepository {
   get(id: UUID): Promise<SalesSheet>;
   create(input: CreateSalesSheetPayload): Promise<SalesSheet>;
   update(id: UUID, input: CreateSalesSheetPayload): Promise<SalesSheet>;
+  savePayment(id: UUID, paymentStatus: SalesPaymentStatus, advancePaid: number): Promise<SalesSheet>;
   saveExpenses(id: UUID, expenses: SalesSheet['expenses']): Promise<SalesSheet>;
   saveSignature(id: UUID, signature: string): Promise<SalesSheet>;
   remove(id: UUID): Promise<void>;

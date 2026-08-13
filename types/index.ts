@@ -83,6 +83,7 @@ export interface CompanyDetails {
 
 export type SalesPaymentMethod = 'CASH' | 'BANK_TRANSFER' | 'CARD';
 export type SalesDeliveryMode = 'DELIVERY' | 'PICKUP';
+export type SalesPaymentStatus = 'UNPAID' | 'PAID';
 export interface SalesExpenseLine {
   name: string;
   amount: number;
@@ -111,7 +112,9 @@ export interface SalesSheet extends BaseEntity {
   deliveryPrice: number;
   totalPrice: number;
   advancePaid: number;
+  receivedAmount: number;
   remainingDue: number;
+  paymentStatus: SalesPaymentStatus;
   dueAt?: ISODate;
   currencyCode: string;
   notes?: string;
@@ -129,7 +132,7 @@ export type CreateSalesSheetPayload = Pick<SalesSheet,
   'propertyId' | 'documentAt' | 'customerName' | 'customerPhone' | 'customerEmail' |
   'deliveryAddress' | 'customerNotes' | 'productName' | 'productCode' | 'serialNumber' |
   'quantity' | 'warranty' | 'paymentMethod' | 'deliveryMode' | 'productUnitPrice' |
-  'deliveryPrice' | 'advancePaid' | 'dueAt' | 'currencyCode' | 'notes' | 'expenses'
+  'deliveryPrice' | 'advancePaid' | 'paymentStatus' | 'dueAt' | 'currencyCode' | 'notes' | 'expenses'
 > & { signature?: string };
 
 export interface AppUpdateInfo {
