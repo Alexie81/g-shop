@@ -1,0 +1,162 @@
+<?php
+declare(strict_types=1);
+
+require_once __DIR__ . '/service_document_pdf.php';
+
+use setasign\Fpdi\Tfpdf\Fpdi;
+
+function gshop_sales_pdf_local_date(mixed $value): string {
+    $raw = trim((string)($value ?? ''));
+    if ($raw === '') return '';
+    try {
+        $date = new DateTime($raw, new DateTimeZone('UTC'));
+        $date->setTimezone(new DateTimeZone('Europe/Bucharest'));
+        return $date->format('d.m.Y, H:i');
+    } catch (Throwable) { return $raw; }
+}
+
+function gshop_sales_pdf_text(Fpdi $pdf, float $x, float $baseline, mixed $value, float $width = 0, float $size = 7.2, string $style = ''): void {
+    $text = trim((string)($value ?? ''));
+    if ($text === '') return;
+    $pdf->SetFont('DejaVu', $style, $size);
+    $pdf->SetTextColor(7, 21, 45);
+    if ($width > 0) $text = gshop_pdf_fit($pdf, $text, $width);
+    $pdf->Text($x, $baseline, $text);
+}
+
+function gshop_sales_pdf_shrink_text(Fpdi $pdf, float $x, float $baseline, mixed $value, float $width, float $size = 6.8, float $minimum = 4.0, string $style = 'B'): void {
+    $text = trim((string)($value ?? ''));
+    if ($text === '') return;
+    do { $pdf->SetFont('DejaVu', $style, $size); $size -= 0.2; } while ($size >= $minimum && $pdf->GetStringWidth($text) > $width);
+    $pdf->SetTextColor(7, 21, 45);
+    $pdf->Text($x, $baseline, $text);
+}
+
+function gshop_sales_pdf_multiline(Fpdi $pdf, float $x, float $baseline, float $width, mixed $value, int $maxLines = 3): void {
+    $text = preg_replace('/\s+/u', ' ', trim((string)($value ?? ''))) ?? '';
+    if ($text === '') return;
+    $pdf->SetFont('DejaVu', '', 7.2);
+    $words = preg_split('/\s+/u', $text) ?: [];
+    $lines = [];$line = '';
+    foreach ($words as $word) {
+        $candidate = $line === '' ? $word : $line . ' ' . $word;
+        if ($pdf->GetStringWidth($candidate) <= $width) { $line = $candidate; continue; }
+        if ($line !== '') $lines[] = $line;
+        $line = $word;
+        if (count($lines) >= $maxLines) break;
+    }
+    if ($line !== '' && count($lines) < $maxLines) $lines[] = $line;
+    foreach (array_slice($lines, 0, $maxLines) as $index => $item) gshop_sales_pdf_text($pdf, $x, $baseline + $index * 16, $item, $width);
+}
+
+function gshop_sales_pdf_check(Fpdi $pdf, float $x, float $y): void {
+    $pdf->SetFont('DejaVu', 'B', 10);
+    $pdf->SetTextColor(7, 92, 255);
+    $pdf->Text($x, $y, '✓');
+}
+
+function gshop_sales_pdf_card(GshopServiceDocumentPdf $pdf, float $x, float $y, float $width, float $height, array $fill, array $stroke, string $label, string $value, array $valueColor): void {
+    $pdf->SetFillColor($fill[0], $fill[1], $fill[2]);$pdf->SetDrawColor($stroke[0], $stroke[1], $stroke[2]);$pdf->SetLineWidth(0.7);$pdf->RoundedRect($x,$y,$width,$height,7,'DF');
+    $pdf->SetTextColor($valueColor[0],$valueColor[1],$valueColor[2]);$pdf->SetFont('DejaVu','B',5.2);$pdf->Text($x+8,$y+12,$label);
+    $pdf->SetFont('DejaVu','B',9.2);$display=gshop_pdf_fit($pdf,$value,$width-16);$pdf->Text($x+8,$y+29,$display);
+}
+
+function gshop_sales_pdf_mini_card(GshopServiceDocumentPdf $pdf, float $x, float $y, float $width, string $label, string $value): void {
+    $pdf->SetFillColor(238,243,250);$pdf->SetDrawColor(228,234,243);$pdf->SetLineWidth(0.5);$pdf->RoundedRect($x,$y,$width,23,6,'DF');
+    $pdf->SetTextColor(98,113,138);$pdf->SetFont('DejaVu','B',4.5);$pdf->Text($x+6,$y+8,$label);
+    $pdf->SetTextColor(7,21,45);$pdf->SetFont('DejaVu','B',6.4);$pdf->Text($x+6,$y+18,gshop_pdf_fit($pdf,$value,$width-12));
+}
+
+function gshop_sales_pdf_financial_summary(GshopServiceDocumentPdf $pdf, array $sheet, string $currency): void {
+    $pdf->SetFillColor(255,255,255);$pdf->SetDrawColor(228,234,243);$pdf->SetLineWidth(0.7);$pdf->RoundedRect(22,488,551,80,9,'DF');
+    gshop_sales_pdf_card($pdf,29,493,170,38,[7,92,255],[7,92,255],'TOTAL DE PLATĂ',gshop_pdf_money($sheet['totalPrice']??0,$currency),[255,255,255]);
+    gshop_sales_pdf_card($pdf,204,493,170,38,[255,255,255],[20,168,59],'AVANS / ACHITAT',gshop_pdf_money($sheet['advancePaid']??0,$currency),[20,168,59]);
+    gshop_sales_pdf_card($pdf,379,493,185,38,[255,255,255],[255,159,10],'REST DE PLATĂ',gshop_pdf_money($sheet['remainingDue']??0,$currency),[224,117,20]);
+    gshop_sales_pdf_mini_card($pdf,29,537,130,'PREȚ PRODUS',gshop_pdf_money($sheet['productPrice']??0,$currency));
+    gshop_sales_pdf_mini_card($pdf,164,537,120,'LIVRARE',gshop_pdf_money($sheet['deliveryPrice']??0,$currency));
+    gshop_sales_pdf_mini_card($pdf,289,537,80,'MONEDĂ',$currency);
+    $due=gshop_sales_pdf_local_date($sheet['dueAt']??'');if($due!=='')$due=explode(',',$due)[0];
+    gshop_sales_pdf_mini_card($pdf,374,537,190,'SCADENȚĂ',$due!==''?$due:'Fără scadență');
+}
+
+function gshop_sales_pdf_image(Fpdi $pdf, ?string $relativePath, float $x, float $y, float $maxWidth, float $maxHeight, bool $signature = false): void {
+    $temporary = null;
+    $path = null;
+    if ($signature) {
+        $normalized = gshop_pdf_signature_image($relativePath);
+        $path = $normalized['path'] ?? null;
+        if ($path && str_starts_with($path, sys_get_temp_dir())) $temporary = $path;
+    } else {
+        $path = gshop_pdf_stamp_image($relativePath);
+        if ($path && str_starts_with($path, sys_get_temp_dir())) $temporary = $path;
+    }
+    if (!$path || !is_file($path)) return;
+    $dimensions = @getimagesize($path);
+    if (!$dimensions || empty($dimensions[0]) || empty($dimensions[1])) return;
+    $ratio = min($maxWidth / (float)$dimensions[0], $maxHeight / (float)$dimensions[1]);
+    $width = (float)$dimensions[0] * $ratio;$height = (float)$dimensions[1] * $ratio;
+    $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+    $imageType = in_array($extension, ['jpg', 'jpeg'], true) ? 'JPEG' : 'PNG';
+    $pdf->Image($path, $x, $y + ($maxHeight - $height) / 2, $width, $height, $imageType);
+    if ($temporary && is_file($temporary)) @unlink($temporary);
+}
+
+/** @return array{filePath:string,url:string,sha256:string,generatedAt:string} */
+function generate_sales_sheet_pdf(array $sheet, array $company, ?string $signaturePath, ?string $stampPath): array {
+    $template = __DIR__ . '/../assets/sales-sheet-templates/with-company/sales-sheet.pdf';
+    if (!is_file($template)) throw new RuntimeException('Șablonul fișei de vânzare nu este disponibil.');
+    $directory = __DIR__ . '/../uploads/sales-sheets';
+    if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) throw new RuntimeException('Directorul fișelor de vânzări nu poate fi creat.');
+    $id = preg_replace('/[^a-zA-Z0-9-]/', '', (string)($sheet['id'] ?? '')) ?: uuid_v4();
+    $relativePath = 'uploads/sales-sheets/' . $id . '.pdf';
+    $output = __DIR__ . '/../' . $relativePath;
+    $temporary = $output . '.tmp-' . bin2hex(random_bytes(5));
+    $currency = strtoupper(trim((string)($sheet['currencyCode'] ?? 'RON'))) ?: 'RON';
+
+    $pdf = new GshopServiceDocumentPdf('P', 'pt', 'A4');
+    $pdf->SetAutoPageBreak(false);
+    $pdf->AddFont('DejaVu', '', 'DejaVuSans.ttf', true);
+    $pdf->AddFont('DejaVu', 'B', 'DejaVuSans-Bold.ttf', true);
+    $pdf->setSourceFile($template);
+    $templateId = $pdf->importPage(1);
+    $size = $pdf->getTemplateSize($templateId);
+    $pdf->AddPage($size['orientation'], [$size['width'], $size['height']]);
+    $pdf->useTemplate($templateId);
+
+    gshop_sales_pdf_shrink_text($pdf, 398, 61, $sheet['number'] ?? '', 48, 6.4, 4.2);
+    gshop_sales_pdf_shrink_text($pdf, 518, 61, gshop_sales_pdf_local_date($sheet['documentAt'] ?? ''), 38, 5.8, 3.8);
+    gshop_sales_pdf_shrink_text($pdf, 110, 110, $company['legalName'] ?? '', 96, 6.2, 4.8);
+    gshop_sales_pdf_shrink_text($pdf, 245, 110, $company['taxId'] ?? '', 137, 6.5, 4.8);
+    gshop_sales_pdf_shrink_text($pdf, 482, 110, $company['tradeRegisterNumber'] ?? '', 72, 6.0, 4.0);
+    gshop_sales_pdf_text($pdf, 56, 129, gshop_pdf_full_address($company), 228, 6.1);
+    gshop_sales_pdf_text($pdf, 326, 129, $company['phone'] ?? '', 100, 6.2);
+    gshop_sales_pdf_text($pdf, 460, 129, $company['email'] ?? '', 100, 6.0);
+
+    gshop_sales_pdf_text($pdf, 121, 204, $sheet['customerName'] ?? '', 219, 7.2, 'B');
+    gshop_sales_pdf_text($pdf, 404, 204, $sheet['customerPhone'] ?? '', 158, 7.2);
+    gshop_sales_pdf_text($pdf, 76, 227, $sheet['customerEmail'] ?? '', 180, 6.8);
+    gshop_sales_pdf_text($pdf, 361, 227, $sheet['deliveryAddress'] ?? '', 200, 6.6);
+    gshop_sales_pdf_text($pdf, 120, 248, $sheet['customerNotes'] ?? '', 440, 6.6);
+
+    gshop_sales_pdf_text($pdf, 128, 319, $sheet['productName'] ?? '', 243, 7.3, 'B');
+    gshop_sales_pdf_text($pdf, 450, 319, $sheet['productCode'] ?? '', 110, 6.8);
+    gshop_sales_pdf_text($pdf, 150, 343, $sheet['serialNumber'] ?? '', 132, 6.6);
+    gshop_sales_pdf_text($pdf, 350, 343, rtrim(rtrim(number_format((float)($sheet['quantity'] ?? 1), 2, ',', ''), '0'), ','), 54, 7.2, 'B');
+    gshop_sales_pdf_text($pdf, 471, 343, $sheet['warranty'] ?? '', 90, 6.8);
+
+    $payment = (string)($sheet['paymentMethod'] ?? 'CASH');
+    gshop_sales_pdf_check($pdf, $payment === 'BANK_TRANSFER' ? 135 : ($payment === 'CARD' ? 255 : 43), 429);
+    gshop_sales_pdf_check($pdf, ($sheet['deliveryMode'] ?? 'PICKUP') === 'DELIVERY' ? 393 : 488, 429);
+
+    gshop_sales_pdf_financial_summary($pdf,$sheet,$currency);
+    gshop_sales_pdf_multiline($pdf, 36, 646, 523, $sheet['notes'] ?? '', 3);
+
+    gshop_sales_pdf_image($pdf, $stampPath, 36, 716, 110, 42, false);
+    gshop_sales_pdf_image($pdf, $signaturePath, 310, 716, 130, 42, true);
+
+    $pdf->Output('F', $temporary);
+    if (!@rename($temporary, $output)) { @unlink($temporary); throw new RuntimeException('Fișa de vânzare nu a putut fi publicată.'); }
+    @chmod($output, 0644);
+    $generatedAt = gmdate('c');
+    return ['filePath'=>$relativePath,'url'=>public_base_url().'/'.$relativePath.'?v='.rawurlencode($generatedAt),'sha256'=>hash_file('sha256',$output)?:'','generatedAt'=>$generatedAt];
+}

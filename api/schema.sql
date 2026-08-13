@@ -101,6 +101,63 @@ CREATE TABLE IF NOT EXISTS property_companies (
   CONSTRAINT fk_property_companies_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS property_company_selections (
+  property_id BINARY(16) PRIMARY KEY,
+  company_id BINARY(16) NOT NULL,
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  created_by BINARY(16) NULL,
+  updated_by BINARY(16) NULL,
+  INDEX idx_company_selections_company (company_id),
+  CONSTRAINT fk_company_selection_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE,
+  CONSTRAINT fk_company_selection_company FOREIGN KEY (company_id) REFERENCES property_companies(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS sales_sheets (
+  id BINARY(16) PRIMARY KEY,
+  property_id BINARY(16) NOT NULL,
+  company_id BINARY(16) NULL,
+  company_snapshot LONGTEXT NULL,
+  number VARCHAR(40) NOT NULL,
+  document_at DATETIME NOT NULL,
+  customer_name VARCHAR(160) NOT NULL,
+  customer_phone VARCHAR(30) NOT NULL,
+  customer_email VARCHAR(140) NULL,
+  delivery_address VARCHAR(260) NULL,
+  customer_notes VARCHAR(500) NULL,
+  product_name VARCHAR(220) NOT NULL,
+  product_code VARCHAR(80) NULL,
+  serial_number VARCHAR(120) NULL,
+  quantity DECIMAL(10,2) NOT NULL DEFAULT 1,
+  warranty VARCHAR(100) NULL,
+  payment_method ENUM('CASH','BANK_TRANSFER','CARD') NOT NULL,
+  delivery_mode ENUM('DELIVERY','PICKUP') NOT NULL,
+  product_unit_price DECIMAL(12,2) NOT NULL DEFAULT 0,
+  product_price DECIMAL(12,2) NOT NULL DEFAULT 0,
+  delivery_price DECIMAL(12,2) NOT NULL DEFAULT 0,
+  total_price DECIMAL(12,2) NOT NULL DEFAULT 0,
+  advance_paid DECIMAL(12,2) NOT NULL DEFAULT 0,
+  remaining_due DECIMAL(12,2) NOT NULL DEFAULT 0,
+  due_at DATETIME NULL,
+  currency_code CHAR(3) NOT NULL DEFAULT 'RON',
+  notes TEXT NULL,
+  signature_path VARCHAR(255) NULL,
+  signed_at DATETIME NULL,
+  file_path VARCHAR(255) NULL,
+  file_sha256 CHAR(64) NULL,
+  generated_at DATETIME NULL,
+  status ENUM('PUBLISHED') NOT NULL DEFAULT 'PUBLISHED',
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  created_by BINARY(16) NOT NULL,
+  updated_by BINARY(16) NOT NULL,
+  UNIQUE KEY uq_sales_sheet_number (property_id, number),
+  INDEX idx_sales_sheets_list (property_id, is_active, document_at),
+  CONSTRAINT fk_sales_sheet_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE,
+  CONSTRAINT fk_sales_sheet_company FOREIGN KEY (company_id) REFERENCES property_companies(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS refresh_sessions (
   id BINARY(16) PRIMARY KEY,
   user_id BINARY(16) NOT NULL,

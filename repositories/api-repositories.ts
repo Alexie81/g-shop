@@ -1,5 +1,5 @@
 import { apiRequest } from '@/services/api';
-import { AppUpdateRepository, AuthRepository, AuditRepository, ClientRepository, CollaboratorRepository, CompanyDetailsRepository, DashboardRepository, PropertyRepository, ServiceSheetRepository, TechnicianRepository, UserRepository, WhatsAppMessageRepository } from '@/repositories/interfaces';
+import { AppUpdateRepository, AuthRepository, AuditRepository, ClientRepository, CollaboratorRepository, CompanyDetailsRepository, DashboardRepository, PropertyRepository, SalesSheetRepository, ServiceSheetRepository, TechnicianRepository, UserRepository, WhatsAppMessageRepository } from '@/repositories/interfaces';
 
 export const authRepository: AuthRepository = {
   login: (username, password, device, remember) => apiRequest('/auth/login', { method: 'POST', authenticated: false, body: JSON.stringify({ username, password, device, remember }) }),
@@ -17,9 +17,17 @@ export const companyDetailsRepository: CompanyDetailsRepository = {
   list: (propertyId) => apiRequest(`/companies?propertyId=${propertyId}`),
   create: (propertyId, input) => apiRequest('/companies', { method: 'POST', body: JSON.stringify({ propertyId, ...input }) }),
   update: (companyId, input) => apiRequest(`/companies/${companyId}`, { method: 'PUT', body: JSON.stringify(input) }),
-  setDefault: (companyId) => apiRequest(`/companies/${companyId}/default`, { method: 'PUT' }),
+  setDefault: (companyId, propertyId) => apiRequest(`/companies/${companyId}/default`, { method: 'PUT', body: JSON.stringify({ propertyId }) }),
   saveStamp: (companyId, stamp) => apiRequest(`/companies/${companyId}/stamp`, { method: 'POST', body: JSON.stringify({ stamp }) }),
   removeStamp: (companyId) => apiRequest(`/companies/${companyId}/stamp`, { method: 'DELETE' }),
+};
+export const salesSheetRepository: SalesSheetRepository = {
+  list: (propertyId) => apiRequest(`/sales-sheets?propertyId=${encodeURIComponent(propertyId)}`),
+  get: (id) => apiRequest(`/sales-sheets/${id}`),
+  create: (input) => apiRequest('/sales-sheets', { method: 'POST', body: JSON.stringify(input) }),
+  update: (id, input) => apiRequest(`/sales-sheets/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
+  saveSignature: (id, signature) => apiRequest(`/sales-sheets/${id}/signature`, { method: 'POST', body: JSON.stringify({ signature }) }),
+  remove: (id) => apiRequest(`/sales-sheets/${id}`, { method: 'DELETE' }),
 };
 export const appUpdateRepository: AppUpdateRepository = { get: () => apiRequest('/app-update', { authenticated: false }) };
 export const dashboardRepository: DashboardRepository = { get: (propertyId) => apiRequest(`/dashboard?propertyId=${propertyId}`) };

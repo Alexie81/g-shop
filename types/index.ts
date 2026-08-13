@@ -27,6 +27,10 @@ export type Permission =
   | 'service_sheets.create'
   | 'service_sheets.update'
   | 'service_sheets.sign'
+  | 'sales_sheets.view'
+  | 'sales_sheets.create'
+  | 'sales_sheets.update'
+  | 'sales_sheets.delete'
   | 'collaborators.view'
   | 'collaborators.manage'
   | 'users.view'
@@ -76,6 +80,50 @@ export interface CompanyDetails {
   createdAt?: ISODate | null;
   updatedAt?: ISODate | null;
 }
+
+export type SalesPaymentMethod = 'CASH' | 'BANK_TRANSFER' | 'CARD';
+export type SalesDeliveryMode = 'DELIVERY' | 'PICKUP';
+
+export interface SalesSheet extends BaseEntity {
+  propertyId: UUID;
+  companyId?: UUID;
+  companyName?: string;
+  number: string;
+  documentAt: ISODate;
+  customerName: string;
+  customerPhone: string;
+  customerEmail?: string;
+  deliveryAddress?: string;
+  customerNotes?: string;
+  productName: string;
+  productCode?: string;
+  serialNumber?: string;
+  quantity: number;
+  warranty?: string;
+  paymentMethod: SalesPaymentMethod;
+  deliveryMode: SalesDeliveryMode;
+  productUnitPrice: number;
+  productPrice: number;
+  deliveryPrice: number;
+  totalPrice: number;
+  advancePaid: number;
+  remainingDue: number;
+  dueAt?: ISODate;
+  currencyCode: string;
+  notes?: string;
+  signatureUrl?: string;
+  signedAt?: ISODate;
+  generatedAt?: ISODate;
+  pdfUrl?: string;
+  status: 'PUBLISHED';
+}
+
+export type CreateSalesSheetPayload = Pick<SalesSheet,
+  'propertyId' | 'documentAt' | 'customerName' | 'customerPhone' | 'customerEmail' |
+  'deliveryAddress' | 'customerNotes' | 'productName' | 'productCode' | 'serialNumber' |
+  'quantity' | 'warranty' | 'paymentMethod' | 'deliveryMode' | 'productUnitPrice' |
+  'deliveryPrice' | 'advancePaid' | 'dueAt' | 'currencyCode' | 'notes'
+> & { signature?: string };
 
 export interface AppUpdateInfo {
   platform: 'android';

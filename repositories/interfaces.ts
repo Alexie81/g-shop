@@ -1,4 +1,4 @@
-import { AppUpdateInfo, AuditLog, AuthSession, Client, ClientExpense, ClientExpenseDeleteResult, ClientFinancialOverview, ClientParticipant, Collaborator, CompanyDetails, CreateClientExpensePayload, DashboardMetrics, GenerateServiceDocumentInput, Paginated, Permission, Property, ServiceDocument, ServiceDocumentRegisterRow, ServiceDocumentType, ServiceSheet, ServiceSheetPdf, Technician, UpdateClientExpensePayload, UpdateClientFinancialsPayload, User, UUID, WhatsAppMessage } from '@/types';
+import { AppUpdateInfo, AuditLog, AuthSession, Client, ClientExpense, ClientExpenseDeleteResult, ClientFinancialOverview, ClientParticipant, Collaborator, CompanyDetails, CreateClientExpensePayload, CreateSalesSheetPayload, DashboardMetrics, GenerateServiceDocumentInput, Paginated, Permission, Property, SalesSheet, ServiceDocument, ServiceDocumentRegisterRow, ServiceDocumentType, ServiceSheet, ServiceSheetPdf, Technician, UpdateClientExpensePayload, UpdateClientFinancialsPayload, User, UUID, WhatsAppMessage } from '@/types';
 
 export interface AuthRepository {
   login(username: string, password: string, device: string, remember: boolean): Promise<AuthSession>;
@@ -16,9 +16,17 @@ export interface CompanyDetailsRepository {
   list(propertyId: UUID): Promise<CompanyDetails[]>;
   create(propertyId: UUID, input: Omit<CompanyDetails, 'id' | 'propertyId' | 'isDefault' | 'stampUrl' | 'createdAt' | 'updatedAt'>): Promise<CompanyDetails>;
   update(companyId: UUID, input: Omit<CompanyDetails, 'id' | 'propertyId' | 'isDefault' | 'stampUrl' | 'createdAt' | 'updatedAt'>): Promise<CompanyDetails>;
-  setDefault(companyId: UUID): Promise<CompanyDetails>;
+  setDefault(companyId: UUID, propertyId: UUID): Promise<CompanyDetails>;
   saveStamp(companyId: UUID, stamp: string): Promise<CompanyDetails>;
   removeStamp(companyId: UUID): Promise<CompanyDetails>;
+}
+export interface SalesSheetRepository {
+  list(propertyId: UUID): Promise<Paginated<SalesSheet>>;
+  get(id: UUID): Promise<SalesSheet>;
+  create(input: CreateSalesSheetPayload): Promise<SalesSheet>;
+  update(id: UUID, input: CreateSalesSheetPayload): Promise<SalesSheet>;
+  saveSignature(id: UUID, signature: string): Promise<SalesSheet>;
+  remove(id: UUID): Promise<void>;
 }
 export interface AppUpdateRepository { get(): Promise<AppUpdateInfo>; }
 export interface DashboardRepository { get(propertyId: UUID): Promise<DashboardMetrics>; }

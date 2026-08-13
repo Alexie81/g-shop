@@ -4,6 +4,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   'dashboard.view', 'clients.view', 'clients.create', 'clients.update', 'clients.delete',
   'qr.generate', 'qr.scan', 'qr.share', 'service_sheets.view', 'service_sheets.create',
   'service_sheets.update', 'service_sheets.sign',
+  'sales_sheets.view', 'sales_sheets.create', 'sales_sheets.update', 'sales_sheets.delete',
   'collaborators.view', 'collaborators.manage', 'users.view', 'users.manage', 'roles.manage',
   'reports.view', 'financials.view', 'audit.view', 'settings.manage',
 ];
@@ -14,6 +15,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   OPERATOR: [
     'dashboard.view', 'clients.view', 'clients.create', 'clients.update', 'qr.generate', 'qr.scan',
     'qr.share', 'service_sheets.view', 'service_sheets.create', 'service_sheets.update',
+    'sales_sheets.view', 'sales_sheets.create', 'sales_sheets.update',
     'collaborators.view',
   ],
   TECHNICIAN: ['dashboard.view', 'clients.view', 'qr.scan', 'service_sheets.view', 'service_sheets.update', 'service_sheets.sign'],

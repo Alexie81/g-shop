@@ -81,6 +81,10 @@ function user_permission_catalog(): array {
         ['key'=>'service_sheets.create','label'=>'Creează fișe','group'=>'Fișe service'],
         ['key'=>'service_sheets.update','label'=>'Modifică fișe','group'=>'Fișe service'],
         ['key'=>'service_sheets.sign','label'=>'Înregistrează semnături','group'=>'Fișe service'],
+        ['key'=>'sales_sheets.view','label'=>'Vezi fișe de vânzări','group'=>'Fișe de vânzări'],
+        ['key'=>'sales_sheets.create','label'=>'Creează fișe de vânzări','group'=>'Fișe de vânzări'],
+        ['key'=>'sales_sheets.update','label'=>'Modifică fișe de vânzări','group'=>'Fișe de vânzări'],
+        ['key'=>'sales_sheets.delete','label'=>'Șterge fișe de vânzări','group'=>'Fișe de vânzări'],
         ['key'=>'collaborators.view','label'=>'Vezi colaboratori','group'=>'Colaboratori'],
         ['key'=>'collaborators.manage','label'=>'Gestionează colaboratori','group'=>'Colaboratori'],
         ['key'=>'users.view','label'=>'Vezi utilizatori','group'=>'Utilizatori'],
@@ -566,6 +570,19 @@ function ensure_property_companies_table(PDO $pdo): void {
     $column->execute(['company_snapshot']);if(!$column->fetchColumn())$pdo->exec('ALTER TABLE service_sheets ADD COLUMN company_snapshot LONGTEXT NULL AFTER company_id');
     if(!$companyColumnExists)$pdo->exec('UPDATE service_sheets SET show_company_details=1');
     $pdo->exec('UPDATE service_sheets s JOIN property_companies pc ON pc.property_id=s.property_id AND pc.is_active=1 AND pc.is_default=1 SET s.company_id=pc.id WHERE s.company_id IS NULL');
+    $pdo->exec("CREATE TABLE IF NOT EXISTS property_company_selections (
+        property_id BINARY(16) PRIMARY KEY,
+        company_id BINARY(16) NOT NULL,
+        created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL,
+        created_by BINARY(16) NULL,
+        updated_by BINARY(16) NULL,
+        INDEX idx_company_selections_company (company_id),
+        CONSTRAINT fk_company_selection_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE,
+        CONSTRAINT fk_company_selection_company FOREIGN KEY (company_id) REFERENCES property_companies(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("INSERT IGNORE INTO property_company_selections (property_id,company_id,created_at,updated_at,created_by,updated_by)
+        SELECT property_id,id,created_at,updated_at,created_by,updated_by FROM property_companies WHERE is_active=1 AND is_default=1");
     $ready = true;
 }
 function ensure_service_documents_table(PDO $pdo): void {
@@ -627,16 +644,84 @@ function map_company_details(array $row, bool $includeStampPath = false): array 
 }
 function empty_company_details(string $propertyId): array { return['id'=>'','propertyId'=>$propertyId,'isDefault'=>false,'legalName'=>'','taxId'=>'','tradeRegisterNumber'=>'','vatPayer'=>false,'address'=>'','city'=>'','county'=>'','postalCode'=>'','country'=>'România','phone'=>'','email'=>'','website'=>'','bankName'=>'','iban'=>'','representativeName'=>'','representativeRole'=>'','stampUrl'=>null,'createdAt'=>null,'updatedAt'=>null,'createdBy'=>null,'updatedBy'=>null]; }
 function company_details_record(string $propertyId): array {
-    ensure_property_companies_table(db());$stmt=db()->prepare(company_select().' WHERE property_id=? AND is_active=1 ORDER BY is_default DESC,created_at LIMIT 1');$stmt->execute([uuid_bin($propertyId)]);$row=$stmt->fetch();return$row?map_company_details($row):empty_company_details($propertyId);
+    ensure_property_companies_table(db());$selected=db()->prepare('SELECT '.uuid_sql('company_id').' company_id FROM property_company_selections WHERE property_id=? LIMIT 1');$selected->execute([uuid_bin($propertyId)]);$selectedId=$selected->fetchColumn();
+    if($selectedId)return company_details_by_id((string)$selectedId);
+    $stmt=db()->prepare(company_select().' WHERE is_active=1 ORDER BY (property_id=?) DESC,is_default DESC,created_at LIMIT 1');$stmt->execute([uuid_bin($propertyId)]);$row=$stmt->fetch();
+    if($row){$company=map_company_details($row);$now=now_utc();db()->prepare('INSERT IGNORE INTO property_company_selections (property_id,company_id,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,NULL,NULL)')->execute([uuid_bin($propertyId),uuid_bin((string)$company['id']),$now,$now]);return$company;}
+    return empty_company_details($propertyId);
 }
 function company_details_by_id(string $id, ?string $propertyId = null, bool $includeStampPath = false): array {
     ensure_property_companies_table(db());$sql=company_select().' WHERE id=? AND is_active=1';$args=[uuid_bin($id)];if($propertyId!==null){$sql.=' AND property_id=?';$args[]=uuid_bin($propertyId);}$sql.=' LIMIT 1';$stmt=db()->prepare($sql);$stmt->execute($args);$row=$stmt->fetch();if(!$row)fail('Firma nu există.',404);return map_company_details($row,$includeStampPath);
 }
 function company_details_list(string $propertyId): array {
-    ensure_property_companies_table(db());$stmt=db()->prepare(company_select().' WHERE property_id=? AND is_active=1 ORDER BY is_default DESC,legal_name,created_at');$stmt->execute([uuid_bin($propertyId)]);return array_map('map_company_details',$stmt->fetchAll());
+    ensure_property_companies_table(db());$selected=db()->prepare('SELECT '.uuid_sql('company_id').' company_id FROM property_company_selections WHERE property_id=? LIMIT 1');$selected->execute([uuid_bin($propertyId)]);$selectedId=(string)($selected->fetchColumn()?:'');
+    $stmt=db()->query(company_select().' WHERE is_active=1 ORDER BY legal_name,created_at');$items=[];
+    foreach($stmt->fetchAll()as$row){$item=map_company_details($row);$item['isDefault']=$item['id']===$selectedId;$items[]=$item;}
+    usort($items,fn($left,$right)=>((int)$right['isDefault']<=>(int)$left['isDefault'])?:strnatcasecmp((string)$left['legalName'],(string)$right['legalName']));return$items;
 }
 function company_sheet_snapshot(array $company): array {
     foreach(['stampUrl','createdAt','updatedAt','createdBy','updatedBy','isDefault']as$key)unset($company[$key]);return$company;
+}
+
+function ensure_sales_sheets_table(PDO $pdo): void {
+    static $ready=false;if($ready)return;ensure_property_companies_table($pdo);
+    $pdo->exec("CREATE TABLE IF NOT EXISTS sales_sheets (
+        id BINARY(16) PRIMARY KEY,property_id BINARY(16) NOT NULL,company_id BINARY(16) NULL,company_snapshot LONGTEXT NULL,number VARCHAR(40) NOT NULL,document_at DATETIME NOT NULL,
+        customer_name VARCHAR(160) NOT NULL,customer_phone VARCHAR(30) NOT NULL,customer_email VARCHAR(140) NULL,delivery_address VARCHAR(260) NULL,customer_notes VARCHAR(500) NULL,
+        product_name VARCHAR(220) NOT NULL,product_code VARCHAR(80) NULL,serial_number VARCHAR(120) NULL,quantity DECIMAL(10,2) NOT NULL DEFAULT 1,warranty VARCHAR(100) NULL,
+        payment_method ENUM('CASH','BANK_TRANSFER','CARD') NOT NULL,delivery_mode ENUM('DELIVERY','PICKUP') NOT NULL,product_unit_price DECIMAL(12,2) NOT NULL DEFAULT 0,
+        product_price DECIMAL(12,2) NOT NULL DEFAULT 0,delivery_price DECIMAL(12,2) NOT NULL DEFAULT 0,total_price DECIMAL(12,2) NOT NULL DEFAULT 0,advance_paid DECIMAL(12,2) NOT NULL DEFAULT 0,remaining_due DECIMAL(12,2) NOT NULL DEFAULT 0,
+        due_at DATETIME NULL,currency_code CHAR(3) NOT NULL DEFAULT 'RON',notes TEXT NULL,signature_path VARCHAR(255) NULL,signed_at DATETIME NULL,file_path VARCHAR(255) NULL,file_sha256 CHAR(64) NULL,generated_at DATETIME NULL,
+        status ENUM('PUBLISHED') NOT NULL DEFAULT 'PUBLISHED',is_active TINYINT(1) NOT NULL DEFAULT 1,created_at DATETIME NOT NULL,updated_at DATETIME NOT NULL,created_by BINARY(16) NOT NULL,updated_by BINARY(16) NOT NULL,
+        UNIQUE KEY uq_sales_sheet_number (property_id,number),INDEX idx_sales_sheets_list (property_id,is_active,document_at),
+        CONSTRAINT fk_sales_sheet_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE,CONSTRAINT fk_sales_sheet_company FOREIGN KEY (company_id) REFERENCES property_companies(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");$ready=true;
+}
+function sales_sheet_select(): string {
+    return 'SELECT '.uuid_sql('ss.id').' id,'.uuid_sql('ss.property_id').' property_id,'.uuid_sql('ss.company_id').' company_id,ss.company_snapshot,ss.number,ss.document_at,ss.customer_name,ss.customer_phone,ss.customer_email,ss.delivery_address,ss.customer_notes,ss.product_name,ss.product_code,ss.serial_number,ss.quantity,ss.warranty,ss.payment_method,ss.delivery_mode,ss.product_unit_price,ss.product_price,ss.delivery_price,ss.total_price,ss.advance_paid,ss.remaining_due,ss.due_at,ss.currency_code,ss.notes,ss.signature_path,ss.signed_at,ss.file_path,ss.file_sha256,ss.generated_at,ss.status,ss.is_active,ss.created_at,ss.updated_at,'.uuid_sql('ss.created_by').' created_by,'.uuid_sql('ss.updated_by').' updated_by,pc.legal_name company_name FROM sales_sheets ss LEFT JOIN property_companies pc ON pc.id=ss.company_id';
+}
+function map_sales_sheet(array $row, bool $includePaths=false): array {
+    $item=entity_base($row);foreach(['quantity','productUnitPrice','productPrice','deliveryPrice','totalPrice','advancePaid','remainingDue']as$key)$item[$key]=round((float)($item[$key]??0),2);
+    $item['pdfUrl']=!empty($item['filePath'])?public_base_url().'/'.ltrim((string)$item['filePath'],'/').'?v='.rawurlencode((string)($item['generatedAt']??'')):null;
+    $item['signatureUrl']=!empty($item['signaturePath'])?public_base_url().'/'.ltrim((string)$item['signaturePath'],'/').'?v='.rawurlencode((string)($item['signedAt']??'')):null;
+    if(!$includePaths)foreach(['companySnapshot','signaturePath','filePath','fileSha256']as$key)unset($item[$key]);return$item;
+}
+function sales_sheet_row(string $id): array {
+    ensure_sales_sheets_table(db());$stmt=db()->prepare(sales_sheet_select().' WHERE ss.id=? AND ss.is_active=1 LIMIT 1');$stmt->execute([uuid_bin(validated_uuid($id,'Fișa de vânzare'))]);$row=$stmt->fetch();if(!$row)fail('Fișa de vânzare nu există.',404);return$row;
+}
+function get_sales_sheet(string $id): array { return map_sales_sheet(sales_sheet_row($id)); }
+function sales_sheet_text(mixed $value,string $label,int $maximum,bool $required=false): ?string {
+    $text=preg_replace('/\s+/u',' ',trim((string)($value??'')))??'';$length=function_exists('mb_strlen')?mb_strlen($text,'UTF-8'):strlen($text);
+    if(($required&&$length<2)||$length>$maximum||preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u',$text))fail($label.' nu este valid.',422);return$text===''?null:$text;
+}
+function sales_sheet_number_value(mixed $value,string $label,float $maximum,bool $positive=false): float {
+    $normalized=is_string($value)?str_replace(',','.',trim($value)):$value;if($normalized===''||!is_numeric($normalized))fail($label.' nu este o valoare numerică validă.',422);$number=(float)$normalized;
+    if(!is_finite($number)||$number<0||($positive&&$number<=0)||$number>$maximum)fail($label.' este în afara limitelor permise.',422);return round($number,2);
+}
+function sales_sheet_db_date(mixed $value,string $label,bool $required=false): ?string {
+    $raw=trim((string)($value??''));if($raw===''){if($required)fail($label.' este obligatorie.',422);return null;}$timestamp=strtotime($raw);if($timestamp===false)fail($label.' nu este validă.',422);return gmdate('Y-m-d H:i:s',$timestamp);
+}
+function validated_sales_sheet_payload(array $body): array {
+    $quantity=sales_sheet_number_value($body['quantity']??1,'Cantitatea',9999,true);$unit=sales_sheet_number_value($body['productUnitPrice']??0,'Prețul produsului',999999999.99);$delivery=sales_sheet_number_value($body['deliveryPrice']??0,'Prețul livrării',999999999.99);$advance=sales_sheet_number_value($body['advancePaid']??0,'Avansul',999999999.99);
+    $productPrice=round($quantity*$unit,2);$total=round($productPrice+$delivery,2);if($advance>$total)fail('Avansul nu poate depăși prețul total.',422);$remaining=round($total-$advance,2);
+    $payment=(string)($body['paymentMethod']??'CASH');if(!in_array($payment,['CASH','BANK_TRANSFER','CARD'],true))fail('Modalitatea de plată nu este validă.',422);
+    $deliveryMode=(string)($body['deliveryMode']??'PICKUP');if(!in_array($deliveryMode,['DELIVERY','PICKUP'],true))fail('Modalitatea de livrare nu este validă.',422);
+    $currency=strtoupper(trim((string)($body['currencyCode']??'RON')));if(!preg_match('/^[A-Z]{3}$/',$currency))fail('Moneda nu este validă.',422);
+    return [
+        'documentAt'=>sales_sheet_db_date($body['documentAt']??now_utc(),'Data fișei',true),'customerName'=>sales_sheet_text($body['customerName']??null,'Numele clientului',160,true),'customerPhone'=>sales_sheet_text($body['customerPhone']??null,'Telefonul clientului',30,true),
+        'customerEmail'=>sales_sheet_text($body['customerEmail']??null,'Emailul clientului',140),'deliveryAddress'=>sales_sheet_text($body['deliveryAddress']??null,'Adresa de livrare',260),'customerNotes'=>sales_sheet_text($body['customerNotes']??null,'Observațiile clientului',500),
+        'productName'=>sales_sheet_text($body['productName']??null,'Produsul / modelul',220,true),'productCode'=>sales_sheet_text($body['productCode']??null,'Codul produsului',80),'serialNumber'=>sales_sheet_text($body['serialNumber']??null,'Seria / IMEI',120),'quantity'=>$quantity,'warranty'=>sales_sheet_text($body['warranty']??null,'Garanția',100),
+        'paymentMethod'=>$payment,'deliveryMode'=>$deliveryMode,'productUnitPrice'=>$unit,'productPrice'=>$productPrice,'deliveryPrice'=>$delivery,'totalPrice'=>$total,'advancePaid'=>$advance,'remainingDue'=>$remaining,'dueAt'=>sales_sheet_db_date($body['dueAt']??null,'Data scadenței'),'currencyCode'=>$currency,'notes'=>sales_sheet_text($body['notes']??null,'Observațiile',1600),
+    ];
+}
+function save_sales_signature_file(string $sheetId,string $data): string {
+    if(!preg_match('#^data:image/png;base64,(.+)$#',$data,$match))fail('Formatul semnăturii nu este valid.',422);$binary=base64_decode($match[1],true);if($binary===false||strlen($binary)<100||strlen($binary)>1500000)fail('Semnătura este invalidă sau prea mare.',422);
+    $directory=__DIR__.'/uploads/sales-signatures';if(!is_dir($directory)&&!mkdir($directory,0755,true)&&!is_dir($directory))throw new RuntimeException('Directorul pentru semnături nu poate fi creat.');$filename=$sheetId.'.png';$target=$directory.'/'.$filename;$temporary=tempnam($directory,'.signature-');if($temporary===false)throw new RuntimeException('Semnătura nu poate fi pregătită.');
+    try{if(file_put_contents($temporary,$binary,LOCK_EX)===false)throw new RuntimeException('Semnătura nu poate fi salvată.');validate_service_document_signature('uploads/sales-signatures/'.basename($temporary));if(!@rename($temporary,$target)){if(is_file($target))@unlink($target);if(!@rename($temporary,$target))throw new RuntimeException('Semnătura nu poate fi publicată.');}@chmod($target,0644);}finally{if(is_file($temporary))@unlink($temporary);}return'uploads/sales-signatures/'.$filename;
+}
+function generate_sales_sheet_record(string $sheetId,array $user): array {
+    $row=sales_sheet_row($sheetId);$sheet=map_sales_sheet($row,true);$company=json_decode((string)($row['company_snapshot']??''),true);if(!is_array($company))$company=[];require_once __DIR__.'/src/sales_sheet_pdf.php';$rendered=generate_sales_sheet_pdf($sheet,$company,$row['signature_path']??null,$company['stampPath']??null);$generatedAt=gmdate('Y-m-d H:i:s',strtotime((string)$rendered['generatedAt']));
+    db()->prepare('UPDATE sales_sheets SET file_path=?,file_sha256=?,generated_at=?,updated_at=?,updated_by=? WHERE id=?')->execute([$rendered['filePath'],$rendered['sha256'],$generatedAt,now_utc(),uuid_bin($user['id']),uuid_bin($sheetId)]);return get_sales_sheet($sheetId);
 }
 function validated_company_payload(array $body): array {
     $legalName=company_detail_text($body['legalName']??null,'Denumirea juridică',160,true);$taxId=company_detail_text($body['taxId']??null,'CUI / CIF',24);$tradeRegister=company_detail_text($body['tradeRegisterNumber']??null,'Numărul Registrului Comerțului',40);
@@ -1540,10 +1625,11 @@ try {
     if ($method === 'POST' && $path === '/companies') {
         $user=require_permission('settings.manage');if($user['role']!=='ADMIN')fail('Doar administratorul poate adăuga firme.',403);$body=json_body();$propertyId=validated_uuid((string)($body['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);property_record($propertyId);ensure_property_companies_table(db());$values=validated_company_payload($body);$id=uuid_v4();$now=now_utc();$pdo=db();$count=$pdo->prepare('SELECT COUNT(*) FROM property_companies WHERE property_id=? AND is_active=1');$count->execute([uuid_bin($propertyId)]);$isDefault=(int)$count->fetchColumn()===0||!empty($body['isDefault']);
         $columns=['id','property_id','is_default','legal_name','tax_id','trade_register_number','vat_payer','address','city','county','postal_code','country','phone','email','website','bank_name','iban','representative_name','representative_role','is_active','created_at','updated_at','created_by','updated_by'];$args=[uuid_bin($id),uuid_bin($propertyId),$isDefault?1:0,...$values,1,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])];$pdo->beginTransaction();try{if($isDefault)$pdo->prepare('UPDATE property_companies SET is_default=0 WHERE property_id=?')->execute([uuid_bin($propertyId)]);$pdo->prepare('INSERT INTO property_companies ('.implode(',',$columns).') VALUES ('.implode(',',array_fill(0,count($args),'?')).')')->execute($args);$pdo->commit();}catch(Throwable$error){if($pdo->inTransaction())$pdo->rollBack();throw$error;}
-        $after=company_details_by_id($id,$propertyId);audit_log('COMPANY_CREATED','settings','Firmă adăugată: '.$after['legalName'],'Company',$id,$propertyId,null,company_details_snapshot($after),$user);respond($after,201);
+        if($isDefault){$pdo->prepare('INSERT INTO property_company_selections (property_id,company_id,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE company_id=VALUES(company_id),updated_at=VALUES(updated_at),updated_by=VALUES(updated_by)')->execute([uuid_bin($propertyId),uuid_bin($id),$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);}
+        $after=company_details_by_id($id,$propertyId);$after['isDefault']=$isDefault;audit_log('COMPANY_CREATED','settings','Firmă adăugată: '.$after['legalName'],'Company',$id,$propertyId,null,company_details_snapshot($after),$user);respond($after,201);
     }
     if ($method === 'PUT' && path_match('/companies/{id}/default',$path,$params)) {
-        $user=require_permission('settings.manage');if($user['role']!=='ADMIN')fail('Doar administratorul poate selecta firma activă.',403);$id=validated_uuid($params['id'],'Firma');$before=company_details_by_id($id);ensure_property($before['propertyId'],$user);$pdo=db();$pdo->beginTransaction();try{$pdo->prepare('UPDATE property_companies SET is_default=0 WHERE property_id=? AND is_active=1')->execute([uuid_bin($before['propertyId'])]);$pdo->prepare('UPDATE property_companies SET is_default=1,updated_at=?,updated_by=? WHERE id=?')->execute([now_utc(),uuid_bin($user['id']),uuid_bin($id)]);$pdo->commit();}catch(Throwable$error){if($pdo->inTransaction())$pdo->rollBack();throw$error;}$after=company_details_by_id($id,$before['propertyId']);audit_log('DEFAULT_COMPANY_CHANGED','settings','Firma activă este acum '.$after['legalName'],'Company',$id,$after['propertyId'],['isDefault'=>$before['isDefault']],['isDefault'=>true],$user);respond($after);
+        $user=require_permission('settings.manage');if($user['role']!=='ADMIN')fail('Doar administratorul poate selecta firma activă.',403);$id=validated_uuid($params['id'],'Firma');$before=company_details_by_id($id);ensure_property($before['propertyId'],$user);$body=json_body();$propertyId=validated_uuid((string)($body['propertyId']??$before['propertyId']),'Proprietatea');ensure_property($propertyId,$user);ensure_property_companies_table(db());$now=now_utc();db()->prepare('INSERT INTO property_company_selections (property_id,company_id,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE company_id=VALUES(company_id),updated_at=VALUES(updated_at),updated_by=VALUES(updated_by)')->execute([uuid_bin($propertyId),uuid_bin($id),$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);$after=company_details_by_id($id);$after['isDefault']=true;audit_log('DEFAULT_COMPANY_CHANGED','settings','Firma activă este acum '.$after['legalName'],'Company',$id,$propertyId,['isDefault'=>false],['isDefault'=>true],$user);respond($after);
     }
     if ($method === 'PUT' && path_match('/companies/{id}',$path,$params)) {
         $user=require_permission('settings.manage');if($user['role']!=='ADMIN')fail('Doar administratorul poate modifica firmele.',403);$id=validated_uuid($params['id'],'Firma');$before=company_details_by_id($id);ensure_property($before['propertyId'],$user);$values=validated_company_payload(json_body());$now=now_utc();$sets=['legal_name','tax_id','trade_register_number','vat_payer','address','city','county','postal_code','country','phone','email','website','bank_name','iban','representative_name','representative_role'];$assignments=array_map(fn($column)=>$column.'=?',$sets);db()->prepare('UPDATE property_companies SET '.implode(',',$assignments).',updated_at=?,updated_by=? WHERE id=?')->execute([...$values,$now,uuid_bin($user['id']),uuid_bin($id)]);$after=company_details_by_id($id,$before['propertyId']);audit_log('COMPANY_UPDATED','settings','Firmă actualizată: '.$after['legalName'],'Company',$id,$after['propertyId'],company_details_snapshot($before),company_details_snapshot($after),$user);respond($after);
@@ -1973,6 +2059,32 @@ try {
         $user=require_permission('service_sheets.view');$propertyId=validated_uuid((string)($_GET['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);ensure_service_documents_table(db());
         $sql='SELECT '.uuid_sql('s.id').' service_sheet_id,s.number service_sheet_number,'.uuid_sql('c.id').' client_id,TRIM(CONCAT(c.first_name,\' \',c.last_name)) client_name,s.equipment,s.brand,s.model,s.status,s.received_at,MAX(CASE WHEN d.type=\'INTAKE\' THEN d.number END) intake_number,MAX(CASE WHEN d.type=\'INTAKE\' THEN d.document_at END) intake_at,MAX(CASE WHEN d.type=\'FINAL_ESTIMATE\' THEN d.number END) final_estimate_number,MAX(CASE WHEN d.type=\'FINAL_ESTIMATE\' THEN d.document_at END) final_estimate_at,MAX(CASE WHEN d.type=\'EXIT\' THEN d.number END) exit_number,MAX(CASE WHEN d.type=\'EXIT\' THEN d.document_at END) exit_at,MAX(CASE WHEN d.type=\'WARRANTY\' THEN d.number END) warranty_number,MAX(CASE WHEN d.type=\'WARRANTY\' THEN d.document_at END) warranty_at FROM service_sheets s JOIN clients c ON c.id=s.client_id AND c.is_active=1 LEFT JOIN service_documents d ON d.service_sheet_id=s.id AND d.is_active=1 AND d.status=\'PUBLISHED\' WHERE s.property_id=? AND s.is_active=1 GROUP BY s.id,s.number,c.id,c.first_name,c.last_name,s.equipment,s.brand,s.model,s.status,s.received_at ORDER BY s.received_at DESC,s.number DESC LIMIT 5000';$stmt=db()->prepare($sql);$stmt->execute([uuid_bin($propertyId)]);$rows=[];foreach($stmt->fetchAll()as$row)$rows[]=camel_row($row);respond($rows);
     }
+    if($method==='GET'&&$path==='/sales-sheets'){
+        $user=require_permission('sales_sheets.view');$propertyId=validated_uuid((string)($_GET['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);ensure_sales_sheets_table(db());$stmt=db()->prepare(sales_sheet_select().' WHERE ss.property_id=? AND ss.is_active=1 ORDER BY ss.document_at DESC,ss.created_at DESC LIMIT 250');$stmt->execute([uuid_bin($propertyId)]);$data=array_map('map_sales_sheet',$stmt->fetchAll());respond(['data'=>$data,'page'=>1,'pageSize'=>250,'total'=>count($data),'totalPages'=>1]);
+    }
+    if($method==='GET'&&path_match('/sales-sheets/{id}',$path,$params)){$user=require_permission('sales_sheets.view');$sheet=get_sales_sheet($params['id']);ensure_property($sheet['propertyId'],$user);respond($sheet);}
+    if($method==='POST'&&$path==='/sales-sheets'){
+        $user=require_permission('sales_sheets.create');$body=json_body();$propertyId=validated_uuid((string)($body['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);$property=property_record($propertyId);if(($property['type']??'')!=='SHOP')fail('Fișele de vânzări pot fi create numai în modulul Shop.',422);ensure_sales_sheets_table(db());$values=validated_sales_sheet_payload($body);
+        $company=company_details_record($propertyId);if(empty($company['id'])||trim((string)($company['legalName']??''))==='')fail('Configurează și selectează firma folosită în Shop înainte de emiterea fișei.',409);$companyFull=company_details_by_id((string)$company['id'],null,true);$companySnapshot=company_sheet_snapshot($companyFull);$id=uuid_v4();$now=now_utc();$signaturePath=null;$signedAt=null;
+        if(!empty($body['signature'])){$signaturePath=save_sales_signature_file($id,(string)$body['signature']);$signedAt=$now;}
+        $pdo=db();$pdo->beginTransaction();try{$seqStmt=$pdo->prepare("SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(number,'-',-1) AS UNSIGNED)),0)+1 FROM sales_sheets WHERE property_id=? AND YEAR(document_at)=YEAR(?)");$seqStmt->execute([uuid_bin($propertyId),$values['documentAt']]);$seq=(int)$seqStmt->fetchColumn();$number='FV-'.gmdate('Y',strtotime($values['documentAt'])).'-'.str_pad((string)$seq,5,'0',STR_PAD_LEFT);
+            $columns=['id','property_id','company_id','company_snapshot','number','document_at','customer_name','customer_phone','customer_email','delivery_address','customer_notes','product_name','product_code','serial_number','quantity','warranty','payment_method','delivery_mode','product_unit_price','product_price','delivery_price','total_price','advance_paid','remaining_due','due_at','currency_code','notes','signature_path','signed_at','status','is_active','created_at','updated_at','created_by','updated_by'];
+            $args=[uuid_bin($id),uuid_bin($propertyId),uuid_bin((string)$companyFull['id']),json_encode($companySnapshot,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),$number,$values['documentAt'],$values['customerName'],$values['customerPhone'],$values['customerEmail'],$values['deliveryAddress'],$values['customerNotes'],$values['productName'],$values['productCode'],$values['serialNumber'],$values['quantity'],$values['warranty'],$values['paymentMethod'],$values['deliveryMode'],$values['productUnitPrice'],$values['productPrice'],$values['deliveryPrice'],$values['totalPrice'],$values['advancePaid'],$values['remainingDue'],$values['dueAt'],$values['currencyCode'],$values['notes'],$signaturePath,$signedAt,'PUBLISHED',1,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])];
+            $pdo->prepare('INSERT INTO sales_sheets ('.implode(',',$columns).') VALUES ('.implode(',',array_fill(0,count($args),'?')).')')->execute($args);$pdo->commit();
+        }catch(Throwable$error){if($pdo->inTransaction())$pdo->rollBack();if($signaturePath&&is_file(__DIR__.'/'.$signaturePath))@unlink(__DIR__.'/'.$signaturePath);throw$error;}
+        try{$after=generate_sales_sheet_record($id,$user);}catch(Throwable$error){db()->prepare('DELETE FROM sales_sheets WHERE id=?')->execute([uuid_bin($id)]);if($signaturePath&&is_file(__DIR__.'/'.$signaturePath))@unlink(__DIR__.'/'.$signaturePath);throw$error;}
+        audit_log('SALES_SHEET_CREATED','sales_sheets','Fișă de vânzare emisă: '.$after['number'],'SalesSheet',$id,$propertyId,null,$after,$user);respond($after,201);
+    }
+    if($method==='PUT'&&path_match('/sales-sheets/{id}',$path,$params)){
+        $user=require_permission('sales_sheets.update');$before=get_sales_sheet($params['id']);ensure_property($before['propertyId'],$user);$values=validated_sales_sheet_payload(json_body());$columns=['document_at','customer_name','customer_phone','customer_email','delivery_address','customer_notes','product_name','product_code','serial_number','quantity','warranty','payment_method','delivery_mode','product_unit_price','product_price','delivery_price','total_price','advance_paid','remaining_due','due_at','currency_code','notes'];$args=array_values($values);$assignments=array_map(fn($column)=>$column.'=?',$columns);$args[] = now_utc();$args[]=uuid_bin($user['id']);$args[]=uuid_bin($before['id']);db()->prepare('UPDATE sales_sheets SET '.implode(',',$assignments).',updated_at=?,updated_by=? WHERE id=?')->execute($args);$after=generate_sales_sheet_record($before['id'],$user);audit_log('SALES_SHEET_UPDATED','sales_sheets','Fișă de vânzare actualizată: '.$after['number'],'SalesSheet',$after['id'],$after['propertyId'],$before,$after,$user);respond($after);
+    }
+    if($method==='POST'&&path_match('/sales-sheets/{id}/signature',$path,$params)){
+        $user=require_permission('sales_sheets.update');$before=get_sales_sheet($params['id']);ensure_property($before['propertyId'],$user);$pathValue=save_sales_signature_file($before['id'],(string)(json_body()['signature']??''));$now=now_utc();db()->prepare('UPDATE sales_sheets SET signature_path=?,signed_at=?,updated_at=?,updated_by=? WHERE id=?')->execute([$pathValue,$now,$now,uuid_bin($user['id']),uuid_bin($before['id'])]);$after=generate_sales_sheet_record($before['id'],$user);audit_log('SALES_SHEET_SIGNED','sales_sheets','Semnătură client actualizată pe '.$after['number'],'SalesSheet',$after['id'],$after['propertyId'],['signedAt'=>$before['signedAt']??null],['signedAt'=>$after['signedAt']??null],$user);respond($after);
+    }
+    if($method==='DELETE'&&path_match('/sales-sheets/{id}',$path,$params)){
+        $user=require_permission('sales_sheets.delete');$row=sales_sheet_row($params['id']);$before=map_sales_sheet($row);ensure_property($before['propertyId'],$user);db()->prepare('UPDATE sales_sheets SET is_active=0,updated_at=?,updated_by=? WHERE id=?')->execute([now_utc(),uuid_bin($user['id']),uuid_bin($before['id'])]);foreach([$row['file_path']??null,$row['signature_path']??null]as$relative){if(!$relative)continue;$candidate=realpath(__DIR__.'/'.ltrim((string)$relative,'/'));$root=realpath(__DIR__.'/uploads');if($candidate&&$root&&str_starts_with($candidate,$root)&&is_file($candidate))@unlink($candidate);}audit_log('SALES_SHEET_DELETED','sales_sheets','Fișă de vânzare ștearsă: '.$before['number'],'SalesSheet',$before['id'],$before['propertyId'],$before,['deleted'=>true],$user);respond(['deleted'=>true]);
+    }
+
     if ($method==='GET'&&$path==='/service-sheets') { $user=require_permission('service_sheets.view');$propertyId=(string)($_GET['propertyId']??'');ensure_property($propertyId,$user);$stmt=db()->prepare(sheet_select().' WHERE s.property_id=? AND s.is_active=1 ORDER BY s.received_at DESC,s.created_at DESC LIMIT 100');$stmt->execute([uuid_bin($propertyId)]);$data=array_map(fn($row)=>sheet_for_user(map_sheet($row),$user),$stmt->fetchAll());respond(['data'=>$data,'page'=>1,'pageSize'=>100,'total'=>count($data),'totalPages'=>1]); }
     if ($method==='GET'&&path_match('/service-sheets/{id}',$path,$params)) { $user=require_permission('service_sheets.view');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);respond(sheet_for_user($sheet,$user)); }
     if ($method==='GET'&&path_match('/service-sheets/{id}/documents',$path,$params)) { $user=require_permission('service_sheets.view');$sheet=get_sheet($params['id']);ensure_property($sheet['propertyId'],$user);respond(service_document_slots($sheet['id'])); }
@@ -1989,7 +2101,7 @@ try {
         $technicianId=!empty($body['technicianId'])?validated_uuid((string)$body['technicianId'],'Tehnicianul'):null;$selectedTechnician=$technicianId!==null?technician_for_property($technicianId,$propertyId):null;
         $technicianName=trim((string)($body['technicianName']??($selectedTechnician['name']??'')));$technicianName=$technicianName===''?null:validated_person_name($technicianName,'Numele tehnicianului');
         if(!empty($client['collaboratorId']))collaborator_for_property((string)$client['collaboratorId'],$propertyId);
-        $activeCompany=company_details_record($propertyId);$activeCompanyId=!empty($activeCompany['id'])?(string)$activeCompany['id']:null;$activeCompanySnapshot=$activeCompanyId?company_sheet_snapshot(company_details_by_id($activeCompanyId,$propertyId,true)):null;
+        $activeCompany=company_details_record($propertyId);$activeCompanyId=!empty($activeCompany['id'])?(string)$activeCompany['id']:null;$activeCompanySnapshot=$activeCompanyId?company_sheet_snapshot(company_details_by_id($activeCompanyId,null,true)):null;
         // Pregătește toate structurile folosite de get_sheet() înainte de tranzacție.
         // MySQL face COMMIT implicit la DDL, inclusiv la CREATE TABLE IF NOT EXISTS.
         ensure_service_warranty_fields(db());ensure_technicians_table(db());

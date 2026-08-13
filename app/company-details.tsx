@@ -129,7 +129,7 @@ export default function CompanyDetailsScreen() {
     if (company.isDefault || activatingId) return;
     setActivatingId(company.id);
     try {
-      await companyDetailsRepository.setDefault(company.id);
+      await companyDetailsRepository.setDefault(company.id, propertyId);
       await state.reload(true);
       showToast(`${company.legalName} este acum firma folosită pentru documentele noi.`, 'success');
     } catch (error) {
@@ -139,26 +139,29 @@ export default function CompanyDetailsScreen() {
 
   const stampUri = stampData ?? (!stampRemoved ? selectedCompany?.stampUrl : null);
 
-  return <Screen header={<AppHeader title="Datele firmei" back onBack={() => router.replace('/service/more')} />} refreshing={state.refreshing} onRefresh={() => void state.reload(true)}>
+  const moduleLabel = activeProperty.type === 'SHOP' ? 'Vânzări' : 'Service';
+  const backRoute = activeProperty.type === 'SHOP' ? '/shop/more' : '/service/more';
+
+  return <Screen header={<AppHeader title="Datele firmei" back onBack={() => router.replace(backRoute)} />} refreshing={state.refreshing} onRefresh={() => void state.reload(true)}>
     <View style={styles.stack}>
       <LinearGradient colors={isDark ? ['#102A69', '#075CFF'] : ['#123EA9', '#0878FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
         <View pointerEvents="none" style={styles.heroOrb} />
         <View style={styles.heroIcon}><Ionicons name="business" size={28} color="#FFFFFF" /></View>
-        <View style={styles.heroCopy}><AppText variant="title" style={styles.heroTitle}>Firmele tale</AppText><AppText style={styles.heroSubtitle}>Alege firma activă, iar datele ei vor fi folosite automat în toate fișele și PDF-urile create de acum înainte.</AppText></View>
+        <View style={styles.heroCopy}><AppText variant="title" style={styles.heroTitle}>Firmele tale</AppText><AppText style={styles.heroSubtitle}>Lista este comună pentru Service și Shop. Firma activă pentru {moduleLabel} se alege separat și va fi folosită numai în documentele noi ale acestui modul.</AppText></View>
         <View style={styles.heroBadge}><Ionicons name="shield-checkmark" size={15} color="#FFFFFF" /><AppText variant="caption" style={styles.heroBadgeText}>DOAR ADMIN</AppText></View>
       </LinearGradient>
 
       {state.loading ? <LoadingState rows={5} /> : state.error ? <ErrorState message={state.error.message} onRetry={() => void state.reload()} /> : <>
         <Card style={styles.companies} elevated>
           <View style={[styles.companiesHeader, compact && styles.companiesHeaderCompact]}>
-            <View style={styles.sectionCopy}><AppText variant="heading">Firme configurate</AppText><AppText variant="caption" muted>Firma activă este aplicată automat documentelor noi. Fișele existente își păstrează datele inițiale.</AppText></View>
+            <View style={styles.sectionCopy}><AppText variant="heading">Firme configurate</AppText><AppText variant="caption" muted>Firma marcată activă este folosită în {moduleLabel}. Documentele deja emise își păstrează datele inițiale.</AppText></View>
             <Button compact label="Adaugă firmă" icon="add-circle-outline" onPress={startCreating} />
           </View>
           {state.data?.length ? <View style={styles.companyList}>{state.data.map((company) => {
             const selected = !creating && selectedId === company.id;
             return <Pressable key={company.id} accessibilityRole="button" accessibilityState={{ selected }} onPress={() => selectCompany(company)} style={({ pressed }) => [styles.companyCard, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.primarySoft : colors.surfaceMuted, opacity: pressed ? 0.76 : 1 }]}>
               <View style={[styles.companyIcon, { backgroundColor: company.isDefault ? colors.primary : colors.surface }]}><Ionicons name="business-outline" size={21} color={company.isDefault ? '#FFFFFF' : colors.primary} /></View>
-              <View style={styles.companyCopy}><View style={styles.companyNameRow}><AppText variant="label" numberOfLines={1} style={styles.companyName}>{company.legalName}</AppText>{company.isDefault ? <View style={[styles.activeBadge, { backgroundColor: palette.success }]}><AppText variant="caption" style={styles.activeBadgeText}>ACTIVĂ</AppText></View> : null}</View><AppText variant="caption" muted numberOfLines={1}>{company.taxId || 'CUI necompletat'}{company.city ? ` · ${company.city}` : ''}</AppText></View>
+              <View style={styles.companyCopy}><View style={styles.companyNameRow}><AppText variant="label" numberOfLines={1} style={styles.companyName}>{company.legalName}</AppText>{company.isDefault ? <View style={[styles.activeBadge, { backgroundColor: palette.success }]}><AppText variant="caption" style={styles.activeBadgeText}>ACTIVĂ ÎN {moduleLabel.toLocaleUpperCase('ro-RO')}</AppText></View> : null}</View><AppText variant="caption" muted numberOfLines={1}>{company.taxId || 'CUI necompletat'}{company.city ? ` · ${company.city}` : ''}</AppText></View>
               {company.isDefault ? <Ionicons name="checkmark-circle" size={23} color={palette.success} /> : <Button compact variant="outline" label={activatingId === company.id ? 'Se activează…' : 'Folosește'} disabled={Boolean(activatingId)} onPress={() => void setDefault(company)} />}
             </Pressable>;
           })}</View> : <View style={[styles.emptyCompanies, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="business-outline" size={26} color={colors.primary} /><AppText variant="label">Nu ai încă nicio firmă configurată.</AppText></View>}
@@ -199,7 +202,7 @@ export default function CompanyDetailsScreen() {
           <View style={[styles.stampActions, compact && styles.stampActionsCompact]}><Button variant="outline" compact label={stampUri ? 'Înlocuiește imaginea' : 'Selectează imaginea'} icon="image-outline" onPress={() => void pickStamp()} style={styles.flexButton} />{stampUri ? <Button variant="danger" compact label="Elimină ștampila" icon="trash-outline" onPress={() => { setStampData(null); setStampRemoved(true); }} style={styles.flexButton} /> : null}</View>
         </Card>
 
-        <View style={[styles.saveBar, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}><View style={styles.saveInfo}><Ionicons name="information-circle-outline" size={20} color={colors.primary} /><AppText variant="caption" muted style={styles.saveCopy}>Firma activă va fi salvată automat în următoarea fișă de service și în documentele generate pentru aceasta.</AppText></View><Button label={creating ? 'Adaugă firma' : 'Salvează firma'} icon="checkmark-circle-outline" loading={saving} onPress={() => void save()} style={styles.saveButton} /></View>
+        <View style={[styles.saveBar, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}><View style={styles.saveInfo}><Ionicons name="information-circle-outline" size={20} color={colors.primary} /><AppText variant="caption" muted style={styles.saveCopy}>Firma activă va fi salvată automat în următoarele documente din modulul {moduleLabel}. Selecția celuilalt modul nu se modifică.</AppText></View><Button label={creating ? 'Adaugă firma' : 'Salvează firma'} icon="checkmark-circle-outline" loading={saving} onPress={() => void save()} style={styles.saveButton} /></View>
       </>}
     </View>
   </Screen>;
