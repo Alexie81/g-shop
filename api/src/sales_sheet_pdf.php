@@ -125,24 +125,24 @@ function generate_sales_sheet_pdf(array $sheet, array $company, ?string $signatu
 
     gshop_sales_pdf_shrink_text($pdf, 398, 61, $sheet['number'] ?? '', 48, 6.4, 4.2);
     gshop_sales_pdf_shrink_text($pdf, 518, 61, gshop_sales_pdf_local_date($sheet['documentAt'] ?? ''), 38, 5.8, 3.8);
-    gshop_sales_pdf_shrink_text($pdf, 110, 110, $company['legalName'] ?? '', 96, 6.2, 4.8);
-    gshop_sales_pdf_shrink_text($pdf, 245, 110, $company['taxId'] ?? '', 137, 6.5, 4.8);
-    gshop_sales_pdf_shrink_text($pdf, 482, 110, $company['tradeRegisterNumber'] ?? '', 72, 6.0, 4.0);
-    gshop_sales_pdf_text($pdf, 56, 129, gshop_pdf_full_address($company), 228, 6.1);
-    gshop_sales_pdf_text($pdf, 326, 129, $company['phone'] ?? '', 100, 6.2);
-    gshop_sales_pdf_text($pdf, 460, 129, $company['email'] ?? '', 100, 6.0);
+    gshop_sales_pdf_shrink_text($pdf, 110, 106, $company['legalName'] ?? '', 96, 6.2, 4.8);
+    gshop_sales_pdf_shrink_text($pdf, 245, 106, $company['taxId'] ?? '', 137, 6.5, 4.8);
+    gshop_sales_pdf_shrink_text($pdf, 482, 106, $company['tradeRegisterNumber'] ?? '', 72, 6.0, 4.0);
+    gshop_sales_pdf_shrink_text($pdf, 56, 125, gshop_pdf_full_address($company), 228, 6.1, 4.5, '');
+    gshop_sales_pdf_shrink_text($pdf, 326, 125, $company['phone'] ?? '', 100, 6.2, 4.8, '');
+    gshop_sales_pdf_shrink_text($pdf, 460, 125, $company['email'] ?? '', 100, 6.0, 4.3, '');
 
-    gshop_sales_pdf_text($pdf, 121, 204, $sheet['customerName'] ?? '', 219, 7.2, 'B');
-    gshop_sales_pdf_text($pdf, 404, 204, $sheet['customerPhone'] ?? '', 158, 7.2);
-    gshop_sales_pdf_text($pdf, 76, 227, $sheet['customerEmail'] ?? '', 180, 6.8);
-    gshop_sales_pdf_text($pdf, 361, 227, $sheet['deliveryAddress'] ?? '', 200, 6.6);
-    gshop_sales_pdf_text($pdf, 120, 248, $sheet['customerNotes'] ?? '', 440, 6.6);
+    gshop_sales_pdf_text($pdf, 121, 200, $sheet['customerName'] ?? '', 219, 7.2, 'B');
+    gshop_sales_pdf_text($pdf, 404, 200, $sheet['customerPhone'] ?? '', 158, 7.2);
+    gshop_sales_pdf_text($pdf, 76, 223, $sheet['customerEmail'] ?? '', 180, 6.8);
+    gshop_sales_pdf_text($pdf, 361, 223, $sheet['deliveryAddress'] ?? '', 200, 6.6);
+    gshop_sales_pdf_text($pdf, 120, 244, $sheet['customerNotes'] ?? '', 440, 6.6);
 
-    gshop_sales_pdf_text($pdf, 128, 319, $sheet['productName'] ?? '', 243, 7.3, 'B');
-    gshop_sales_pdf_text($pdf, 450, 319, $sheet['productCode'] ?? '', 110, 6.8);
-    gshop_sales_pdf_text($pdf, 150, 343, $sheet['serialNumber'] ?? '', 132, 6.6);
-    gshop_sales_pdf_text($pdf, 350, 343, rtrim(rtrim(number_format((float)($sheet['quantity'] ?? 1), 2, ',', ''), '0'), ','), 54, 7.2, 'B');
-    gshop_sales_pdf_text($pdf, 471, 343, $sheet['warranty'] ?? '', 90, 6.8);
+    gshop_sales_pdf_text($pdf, 128, 315, $sheet['productName'] ?? '', 243, 7.3, 'B');
+    gshop_sales_pdf_text($pdf, 450, 315, $sheet['productCode'] ?? '', 110, 6.8);
+    gshop_sales_pdf_text($pdf, 150, 339, $sheet['serialNumber'] ?? '', 132, 6.6);
+    gshop_sales_pdf_text($pdf, 350, 339, rtrim(rtrim(number_format((float)($sheet['quantity'] ?? 1), 2, ',', ''), '0'), ','), 54, 7.2, 'B');
+    gshop_sales_pdf_text($pdf, 471, 339, $sheet['warranty'] ?? '', 90, 6.8);
 
     $payment = (string)($sheet['paymentMethod'] ?? 'CASH');
     gshop_sales_pdf_check($pdf, $payment === 'BANK_TRANSFER' ? 135 : ($payment === 'CARD' ? 255 : 43), 429);
@@ -151,7 +151,9 @@ function generate_sales_sheet_pdf(array $sheet, array $company, ?string $signatu
     gshop_sales_pdf_financial_summary($pdf,$sheet,$currency);
     gshop_sales_pdf_multiline($pdf, 36, 646, 523, $sheet['notes'] ?? '', 3);
 
-    gshop_sales_pdf_image($pdf, $stampPath, 36, 716, 110, 42, false);
+    $pdf->SetFillColor(255,255,255);$pdf->SetDrawColor(255,255,255);$pdf->Rect(31,697,255,78,'F');
+    gshop_sales_pdf_text($pdf, 36, 710, 'ȘTAMPILĂ', 110, 5.8, 'B');
+    gshop_sales_pdf_image($pdf, $stampPath, 36, 716, 118, 58, false);
     gshop_sales_pdf_image($pdf, $signaturePath, 310, 716, 130, 42, true);
 
     $pdf->Output('F', $temporary);
