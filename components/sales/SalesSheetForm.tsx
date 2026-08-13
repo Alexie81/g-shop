@@ -1,5 +1,6 @@
 import { AppHeader } from '@/components/layout/AppHeader';
 import { QuickSignatureModal } from '@/components/service-sheets/ScanServiceSheetModal';
+import { SalesPaymentStatusControl } from '@/components/sales/SalesPaymentStatusControl';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -12,7 +13,7 @@ import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { salesSheetRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
-import { SalesDeliveryMode, SalesPaymentMethod } from '@/types';
+import { SalesDeliveryMode, SalesPaymentMethod, SalesPaymentStatus } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
@@ -47,6 +48,7 @@ export function SalesSheetForm() {
   const [quantity, setQuantity] = useState('1');
   const [warranty, setWarranty] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<SalesPaymentMethod>('CASH');
+  const [paymentStatus, setPaymentStatus] = useState<SalesPaymentStatus>('UNPAID');
   const [deliveryMode, setDeliveryMode] = useState<SalesDeliveryMode>('PICKUP');
   const [productUnitPrice, setProductUnitPrice] = useState('');
   const [deliveryPrice, setDeliveryPrice] = useState('');
@@ -61,10 +63,10 @@ export function SalesSheetForm() {
     const product = numberValue(quantity) * numberValue(productUnitPrice);
     const delivery = deliveryMode === 'DELIVERY' ? numberValue(deliveryPrice) : 0;
     const total = product + delivery;
-    const collected = Math.min(total, numberValue(advancePaid));
+    const collected = paymentStatus === 'PAID' ? total : Math.min(total, numberValue(advancePaid));
     const expenseTotal = expenses.reduce((sum, expense) => sum + numberValue(expense.amount), 0);
     return { product, delivery, total, collected, expenseTotal, gshopNet: collected - expenseTotal, remaining: Math.max(0, total - collected) };
-  }, [advancePaid, deliveryMode, deliveryPrice, expenses, productUnitPrice, quantity]);
+  }, [advancePaid, deliveryMode, deliveryPrice, expenses, paymentStatus, productUnitPrice, quantity]);
 
   const submit = async () => {
     if (!activeProperty) return;
@@ -72,7 +74,7 @@ export function SalesSheetForm() {
     if (customerPhone.trim().length < 3) return showToast('Completează telefonul clientului.', 'error');
     if (productName.trim().length < 2) return showToast('Completează produsul sau modelul vândut.', 'error');
     if (numberValue(quantity) <= 0) return showToast('Cantitatea trebuie să fie mai mare decât zero.', 'error');
-    if (numberValue(advancePaid) > totals.total) return showToast('Avansul nu poate depăși totalul fișei.', 'error');
+    if (numberValue(advancePaid) > totals.total) return showToast('Banii încasați nu pot depăși totalul fișei.', 'error');
     if (canManageFinancials && expenses.some((expense) => (expense.name.trim() && numberValue(expense.amount) <= 0) || (!expense.name.trim() && numberValue(expense.amount) > 0))) return showToast('Completează denumirea și valoarea fiecărei cheltuieli.', 'error');
     setSaving(true);
     try {
@@ -80,7 +82,7 @@ export function SalesSheetForm() {
         propertyId: activeProperty.id, documentAt, customerName: customerName.trim(), customerPhone: customerPhone.trim(), customerEmail: customerEmail.trim(),
         deliveryAddress: deliveryAddress.trim(), customerNotes: customerNotes.trim(), productName: productName.trim(), productCode: productCode.trim(), serialNumber: serialNumber.trim(),
         quantity: numberValue(quantity), warranty: warranty.trim(), paymentMethod, deliveryMode, productUnitPrice: numberValue(productUnitPrice), deliveryPrice: totals.delivery,
-        advancePaid: numberValue(advancePaid), dueAt, currencyCode: currencyCode.trim().toUpperCase() || 'RON', notes: notes.trim(), expenses: canManageFinancials ? expenses.filter((expense) => expense.name.trim() && numberValue(expense.amount) > 0).map((expense) => ({ name: expense.name.trim(), amount: numberValue(expense.amount) })) : [], ...(signature ? { signature } : {}),
+        advancePaid: numberValue(advancePaid), paymentStatus, dueAt, currencyCode: currencyCode.trim().toUpperCase() || 'RON', notes: notes.trim(), expenses: canManageFinancials ? expenses.filter((expense) => expense.name.trim() && numberValue(expense.amount) > 0).map((expense) => ({ name: expense.name.trim(), amount: numberValue(expense.amount) })) : [], ...(signature ? { signature } : {}),
       });
       showToast('Fișa de vânzare și PDF-ul au fost emise.', 'success');
       router.replace(`/shop/sales-sheets/${created.id}` as never);
@@ -129,10 +131,14 @@ export function SalesSheetForm() {
         </StepCard>
 
         <StepCard number={4} title="Valori și scadență" subtitle="Totalurile se calculează automat" icon="calculator-outline">
+          <View style={styles.paymentHeading}>
+            <View style={styles.copy}><AppText variant="label">Statusul plății</AppText><AppText variant="caption" muted>La „Achitat”, totalul fișei este considerat încasat automat.</AppText></View>
+            <SalesPaymentStatusControl value={paymentStatus} compact={compact} onChange={setPaymentStatus} />
+          </View>
           <View style={[styles.fields, compact && styles.fieldsCompact]}>
             <Field compact={compact}><Input label="Preț produs / unitate *" icon="cash-outline" value={productUnitPrice} onChangeText={setProductUnitPrice} keyboardType="decimal-pad" placeholder="0,00" /></Field>
             <Field compact={compact}><Input label="Preț livrare" icon="car-outline" value={deliveryPrice} onChangeText={setDeliveryPrice} keyboardType="decimal-pad" editable={deliveryMode === 'DELIVERY'} placeholder={deliveryMode === 'DELIVERY' ? '0,00' : 'Fără livrare'} /></Field>
-            <Field compact={compact}><Input label="Avans" icon="wallet-outline" value={advancePaid} onChangeText={setAdvancePaid} keyboardType="decimal-pad" placeholder="0,00" /></Field>
+            <Field compact={compact}><Input label="Bani încasați" icon="wallet-outline" value={paymentStatus === 'PAID' ? String(totals.total).replace('.', ',') : advancePaid} onChangeText={setAdvancePaid} keyboardType="decimal-pad" editable={paymentStatus === 'UNPAID'} placeholder="0,00" /></Field>
             <Field compact={compact}><Input label="Monedă" icon="pricetag-outline" value={currencyCode} onChangeText={setCurrencyCode} maxLength={3} autoCapitalize="characters" /></Field>
             <View style={styles.wide}><DateTimeField label="Data scadenței" value={dueAt} onChange={setDueAt} allowClear showNow /></View>
           </View>
@@ -140,6 +146,7 @@ export function SalesSheetForm() {
             <Summary label="Produse" value={money(totals.product, currencyCode)} color={colors.primary} />
             <Summary label="Livrare" value={money(totals.delivery, currencyCode)} color={palette.cyan} />
             <Summary label="Total" value={money(totals.total, currencyCode)} color={palette.purple} />
+            <Summary label="Bani încasați" value={money(totals.collected, currencyCode)} color={palette.success} />
             <Summary label="Rest de plată" value={money(totals.remaining, currencyCode)} color={totals.remaining > 0 ? palette.warning : palette.success} />
           </View>
         </StepCard>
@@ -198,6 +205,7 @@ const styles = StyleSheet.create({
   step: { gap: spacing.lg }, stepHeading: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, number: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }, numberText: { color: '#FFFFFF', fontWeight: '900' }, stepIcon: { width: 42, height: 42, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   fields: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }, fieldsCompact: { flexDirection: 'column', flexWrap: 'nowrap' }, field: { minWidth: 240, flexGrow: 1, flexBasis: '46%' }, fieldCompact: { minWidth: 0, flexBasis: 'auto', width: '100%' }, wide: { width: '100%' },
   choiceGroup: { gap: spacing.sm }, choices: { flexDirection: 'row', gap: spacing.sm }, choicesCompact: { flexDirection: 'column' }, choice: { minHeight: 58, flex: 1, padding: spacing.sm, borderWidth: 1.5, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, choiceIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  paymentHeading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.md },
   summary: { padding: spacing.md, borderWidth: 1, borderRadius: radius.lg, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }, summaryItem: { minWidth: 130, flex: 1, gap: 3 }, textArea: { minHeight: 78, textAlignVertical: 'top' },
   expenseHeading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.md }, expenseList: { gap: spacing.sm }, expenseRow: { padding: spacing.sm, borderWidth: 1, borderRadius: radius.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, expenseNumber: { width: 34, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }, expenseFields: { minWidth: 210, flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, expenseName: { minWidth: 190, flex: 2 }, expenseAmount: { minWidth: 130, flex: 1 }, expenseDelete: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }, expenseEmpty: { minHeight: 76, padding: spacing.md, borderWidth: 1, borderStyle: 'dashed', borderRadius: radius.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.md }, expenseSummary: { padding: spacing.md, borderWidth: 1, borderRadius: radius.lg, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   signature: { padding: spacing.md, borderWidth: 1.5, borderRadius: radius.lg, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.md }, signatureIcon: { width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },

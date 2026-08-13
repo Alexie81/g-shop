@@ -38,9 +38,9 @@ export default function SalesSheetsScreen() {
   }, [query, state.data?.data]);
   const total = (state.data?.data ?? []).reduce((sum, item) => sum + item.totalPrice, 0);
   const remaining = (state.data?.data ?? []).reduce((sum, item) => sum + item.remainingDue, 0);
-  const collected = (state.data?.data ?? []).reduce((sum, item) => sum + item.advancePaid, 0);
+  const collected = (state.data?.data ?? []).reduce((sum, item) => sum + item.receivedAmount, 0);
   const expenses = (state.data?.data ?? []).reduce((sum, item) => sum + (item.expenseTotal ?? 0), 0);
-  const gshopNet = (state.data?.data ?? []).reduce((sum, item) => sum + (item.gshopNet ?? item.advancePaid), 0);
+  const gshopNet = (state.data?.data ?? []).reduce((sum, item) => sum + (item.gshopNet ?? item.receivedAmount), 0);
   const canViewFinancials = hasPermission('financials.view');
 
   if (!hasPermission('sales_sheets.view')) return <Redirect href="/shop/home" />;
@@ -61,7 +61,7 @@ export default function SalesSheetsScreen() {
       {state.loading ? <LoadingState rows={5} /> : state.error ? <ErrorState message={state.error.message} onRetry={() => void state.reload()} /> : sheets.length ? <View style={styles.list}>{sheets.map((sheet) => <Pressable key={sheet.id} accessibilityRole="button" onPress={() => router.push(`/shop/sales-sheets/${sheet.id}` as never)} style={({ pressed }) => [styles.sheetCard, { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.76 : 1 }]}>
         <View style={[styles.sheetIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="document-text-outline" size={24} color={colors.primary} /></View>
         <View style={styles.sheetCopy}>
-          <View style={styles.sheetTop}><AppText variant="heading" numberOfLines={1}>{sheet.number}</AppText><View style={[styles.emitted, { backgroundColor: `${palette.success}16` }]}><Ionicons name="checkmark-circle" size={14} color={palette.success} /><AppText variant="caption" style={{ color: palette.success, fontWeight: '900' }}>DOCUMENT EMIS</AppText></View></View>
+          <View style={styles.sheetTop}><AppText variant="heading" numberOfLines={1}>{sheet.number}</AppText><View style={[styles.emitted, { backgroundColor: `${palette.success}16` }]}><Ionicons name="checkmark-circle" size={14} color={palette.success} /><AppText variant="caption" style={{ color: palette.success, fontWeight: '900' }}>DOCUMENT EMIS</AppText></View><View style={[styles.emitted, { backgroundColor: `${sheet.paymentStatus === 'PAID' ? palette.success : palette.warning}16` }]}><Ionicons name={sheet.paymentStatus === 'PAID' ? 'checkmark-circle' : 'time'} size={14} color={sheet.paymentStatus === 'PAID' ? palette.success : palette.warning} /><AppText variant="caption" style={{ color: sheet.paymentStatus === 'PAID' ? palette.success : palette.warning, fontWeight: '900' }}>{sheet.paymentStatus === 'PAID' ? 'ACHITAT' : 'NEACHITAT'}</AppText></View></View>
           <AppText variant="label" numberOfLines={1}>{sheet.customerName} · {sheet.productName}</AppText>
           <View style={styles.meta}><AppText variant="caption" muted>{formatDate(sheet.documentAt, true)}</AppText><AppText variant="caption" style={{ color: colors.primary, fontWeight: '900' }}>{money(sheet.totalPrice, sheet.currencyCode)}</AppText></View>
         </View>
