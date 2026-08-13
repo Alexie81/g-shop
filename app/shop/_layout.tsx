@@ -5,5 +5,29 @@ import { useAppTheme } from '@/contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-const icons: Record<string, keyof typeof Ionicons.glyphMap> = { home: 'home-outline', products: 'cube-outline', orders: 'cart-outline', stocks: 'layers-outline', more: 'grid-outline' };
-export default function ShopLayout() { const { user, ready } = useAuth(); const { activeProperty, loading } = useProperty(); const { colors } = useAppTheme(); const insets = useSafeAreaInsets(); const tabBarBottomPadding = Math.max(insets.bottom, 8); if (!ready || loading) return <RouteLoader />; if (!user) return <Redirect href="/(auth)/login" />; if (!activeProperty) return <Redirect href="/select-property" />; if (activeProperty.type !== 'SHOP') return <Redirect href="/service/dashboard" />; return <Tabs screenOptions={({ route }) => ({ headerShown: false, tabBarActiveTintColor: colors.primary, tabBarInactiveTintColor: colors.textMuted, tabBarStyle: { backgroundColor: colors.tabBar, borderTopColor: colors.border, height: 62 + tabBarBottomPadding, paddingTop: 6, paddingBottom: tabBarBottomPadding }, tabBarLabelStyle: { fontSize: 10.5, fontWeight: '700' }, tabBarIcon: ({ color, size }) => <Ionicons name={icons[route.name]} size={size} color={color} /> })}><Tabs.Screen name="home" options={{ title: 'Acasă' }} /><Tabs.Screen name="products" options={{ title: 'Produse' }} /><Tabs.Screen name="orders" options={{ title: 'Comenzi' }} /><Tabs.Screen name="stocks" options={{ title: 'Stocuri' }} /><Tabs.Screen name="more" options={{ title: 'Mai mult' }} /></Tabs>; }
+
+const icons: Record<string, keyof typeof Ionicons.glyphMap> = { home: 'home-outline', products: 'cube-outline', orders: 'cart-outline', stocks: 'layers-outline', 'sales-sheets': 'receipt-outline', more: 'grid-outline' };
+
+export default function ShopLayout() {
+  const { user, ready, hasPermission } = useAuth();
+  const { activeProperty, loading } = useProperty();
+  const { colors } = useAppTheme();
+  const insets = useSafeAreaInsets();
+  const tabBarBottomPadding = Math.max(insets.bottom, 8);
+  if (!ready || loading) return <RouteLoader />;
+  if (!user) return <Redirect href="/(auth)/login" />;
+  if (!activeProperty) return <Redirect href="/select-property" />;
+  if (activeProperty.type !== 'SHOP') return <Redirect href="/service/dashboard" />;
+  return <Tabs screenOptions={({ route }) => ({
+    headerShown: false, tabBarActiveTintColor: colors.primary, tabBarInactiveTintColor: colors.textMuted,
+    tabBarStyle: { backgroundColor: colors.tabBar, borderTopColor: colors.border, height: 62 + tabBarBottomPadding, paddingTop: 6, paddingBottom: tabBarBottomPadding },
+    tabBarLabelStyle: { fontSize: 10.5, fontWeight: '700' }, tabBarIcon: ({ color, size }) => <Ionicons name={icons[route.name] ?? 'ellipse-outline'} size={size} color={color} />,
+  })}>
+    <Tabs.Screen name="home" options={{ title: 'Acasă' }} />
+    <Tabs.Screen name="products" options={{ title: 'Produse' }} />
+    <Tabs.Screen name="orders" options={{ title: 'Comenzi' }} />
+    <Tabs.Screen name="sales-sheets" options={{ title: 'Fișe vânzări', href: hasPermission('sales_sheets.view') ? undefined : null }} />
+    <Tabs.Screen name="stocks" options={{ href: null }} />
+    <Tabs.Screen name="more" options={{ title: 'Mai mult' }} />
+  </Tabs>;
+}
