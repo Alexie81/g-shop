@@ -55,9 +55,16 @@ function gshop_sales_pdf_check(Fpdi $pdf, float $x, float $y): void {
     $pdf->Text($x, $y, '✓');
 }
 
-function gshop_sales_pdf_card(GshopServiceDocumentPdf $pdf, float $x, float $y, float $width, float $height, array $fill, array $stroke, string $label, string $value, array $valueColor): void {
+function gshop_sales_pdf_status_badge(GshopServiceDocumentPdf $pdf, float $x, float $y, string $status): void {
+    $paid=$status==='ACHITAT';$width=$paid?39.0:47.0;$pdf->SetFillColor($paid?225:255,$paid?248:235,$paid?231:238);$pdf->SetDrawColor($paid?225:255,$paid?248:235,$paid?231:238);$pdf->RoundedRect($x,$y,$width,11,5.5,'DF');
+    $pdf->SetTextColor($paid?16:205,$paid?145:46,$paid?55:68);$pdf->SetFont('DejaVu','B',4.5);$pdf->Text($x+($width-$pdf->GetStringWidth($status))/2,$y+7.2,$status);
+}
+
+function gshop_sales_pdf_card(GshopServiceDocumentPdf $pdf, float $x, float $y, float $width, float $height, array $fill, array $stroke, string $label, string $value, array $valueColor, ?string $status = null): void {
     $pdf->SetFillColor($fill[0], $fill[1], $fill[2]);$pdf->SetDrawColor($stroke[0], $stroke[1], $stroke[2]);$pdf->SetLineWidth(0.7);$pdf->RoundedRect($x,$y,$width,$height,7,'DF');
     $pdf->SetTextColor($valueColor[0],$valueColor[1],$valueColor[2]);$pdf->SetFont('DejaVu','B',5.2);$pdf->Text($x+8,$y+12,$label);
+    if($status!==null){$statusWidth=$status==='ACHITAT'?39.0:47.0;gshop_sales_pdf_status_badge($pdf,$x+$width-$statusWidth-7,$y+5,$status);}
+    $pdf->SetTextColor($valueColor[0],$valueColor[1],$valueColor[2]);
     $pdf->SetFont('DejaVu','B',9.2);$display=gshop_pdf_fit($pdf,$value,$width-16);$pdf->Text($x+8,$y+29,$display);
 }
 
@@ -68,10 +75,11 @@ function gshop_sales_pdf_mini_card(GshopServiceDocumentPdf $pdf, float $x, float
 }
 
 function gshop_sales_pdf_financial_summary(GshopServiceDocumentPdf $pdf, array $sheet, string $currency): void {
+    $total=max(0,(float)($sheet['totalPrice']??0));$paymentStatus=strtoupper(trim((string)($sheet['paymentStatus']??'UNPAID')));$received=max(0,(float)($sheet['receivedAmount']??($paymentStatus==='PAID'?$total:($sheet['advancePaid']??0))));$received=min($received,$total);$remaining=max(0,(float)($sheet['remainingDue']??($total-$received)));$totalPaid=$paymentStatus==='PAID'||$remaining<=.009||($total>0&&$received>=$total-.009);$totalStatus=$totalPaid?'ACHITAT':'NEACHITAT';$restStatus=$received>.009?($remaining<=.009?'ACHITAT':'NEACHITAT'):null;
     $pdf->SetFillColor(255,255,255);$pdf->SetDrawColor(228,234,243);$pdf->SetLineWidth(0.7);$pdf->RoundedRect(22,488,551,80,9,'DF');
-    gshop_sales_pdf_card($pdf,29,493,170,38,[7,92,255],[7,92,255],'TOTAL DE PLATĂ',gshop_pdf_money($sheet['totalPrice']??0,$currency),[255,255,255]);
-    gshop_sales_pdf_card($pdf,204,493,170,38,[255,255,255],[20,168,59],'AVANS / ACHITAT',gshop_pdf_money($sheet['advancePaid']??0,$currency),[20,168,59]);
-    gshop_sales_pdf_card($pdf,379,493,185,38,[255,255,255],[255,159,10],'REST DE PLATĂ',gshop_pdf_money($sheet['remainingDue']??0,$currency),[224,117,20]);
+    gshop_sales_pdf_card($pdf,29,493,170,38,[7,92,255],[7,92,255],'TOTAL DE PLATĂ',gshop_pdf_money($total,$currency),[255,255,255],$totalStatus);
+    gshop_sales_pdf_card($pdf,204,493,170,38,[255,255,255],[20,168,59],'BANI ÎNCASAȚI',gshop_pdf_money($received,$currency),[20,168,59]);
+    gshop_sales_pdf_card($pdf,379,493,185,38,[255,255,255],[255,159,10],'REST DE PLATĂ',gshop_pdf_money($remaining,$currency),[224,117,20],$restStatus);
     gshop_sales_pdf_mini_card($pdf,29,537,130,'PREȚ PRODUS',gshop_pdf_money($sheet['productPrice']??0,$currency));
     gshop_sales_pdf_mini_card($pdf,164,537,120,'LIVRARE',gshop_pdf_money($sheet['deliveryPrice']??0,$currency));
     gshop_sales_pdf_mini_card($pdf,289,537,80,'MONEDĂ',$currency);
