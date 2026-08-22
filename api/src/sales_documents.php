@@ -143,7 +143,7 @@ function sales_document_summary(array $sheet, array $parts, array $labor): array
     $partsTotal = round(array_sum(array_map(fn(array $item)=>(float)($item['totalPrice'] ?? 0), $parts)), 2);
     $laborTotal = round(array_sum(array_map(fn(array $item)=>(float)($item['totalPrice'] ?? 0), $labor)), 2);
     $total = round($partsTotal + $laborTotal, 2);
-    $internal = round(array_sum(array_map(fn(array $item)=>(float)($item['directCost'] ?? 0), $parts)), 2);
+    $internal = round(max(0, (float)($sheet['expenseTotal'] ?? 0)), 2);
     $received = round(min(max(0, (float)($sheet['receivedAmount'] ?? 0)), $total), 2);
     $remaining = round(max(0, $total - $received), 2);
     foreach ([$partsTotal,$laborTotal,$total,$internal,$received,$remaining] as $amount) if (!is_finite($amount) || abs($amount) > 9999999999.99) fail('Totalurile documentului depășesc limita permisă.', 422);
@@ -192,7 +192,9 @@ function generate_sales_document_record(string $sheetId, string $type, array $bo
         $partsSource = array_key_exists('parts', $body) ? $body['parts'] : ($existingSnapshot['parts'] ?? null);
         $laborSource = array_key_exists('labor', $body) ? $body['labor'] : ($existingSnapshot['labor'] ?? null);
     }
-    $parts = service_document_items($partsSource, (string)($sheet['productName'] ?? 'Produs'), (float)($sheet['productPrice'] ?? 0), (float)($sheet['expenseTotal'] ?? 0));
+    $parts = service_document_items($partsSource, (string)($sheet['productName'] ?? 'Produs'), (float)($sheet['productPrice'] ?? 0), 0);
+    foreach ($parts as &$part) $part['directCost'] = 0.0;
+    unset($part);
     $laborFallback = (float)($sheet['deliveryPrice'] ?? 0) > 0 ? ((string)($sheet['deliveryMode'] ?? '') === 'DELIVERY' ? 'Livrare și servicii asociate' : 'Servicii asociate') : '';
     $labor = service_document_items($laborSource, $laborFallback, (float)($sheet['deliveryPrice'] ?? 0), 0);
     $summary = $type === 'WARRANTY' && is_array($estimate['snapshot']['summary'] ?? null) ? $estimate['snapshot']['summary'] : sales_document_summary($sheet, $parts, $labor);
