@@ -74,14 +74,14 @@ export default function SalesSheetsScreen() {
 
       <Input label="Caută rapid" icon="search-outline" value={query} onChangeText={setQuery} placeholder="Număr, client, telefon sau produs" />
 
-      {state.loading ? <LoadingState rows={5} /> : state.error ? <ErrorState message={state.error.message} onRetry={() => void state.reload()} /> : sheets.length ? <View style={styles.list}>{sheets.map((sheet) => <Pressable key={sheet.id} accessibilityRole="button" onPress={() => router.push(`/shop/sales-sheets/${sheet.id}` as never)} style={({ pressed }) => [styles.sheetCard, { backgroundColor: colors.surface, borderColor: colors.border, shadowColor: colors.shadow, shadowOpacity: isDark ? 0.14 : 0.07, opacity: pressed ? 0.76 : 1 }]}>
-        <View style={[styles.sheetAccent, { backgroundColor: sheet.paymentStatus === 'PAID' ? palette.success : palette.warning }]} />
-        <View style={[styles.sheetIcon, { backgroundColor: colors.primarySoft, borderColor: `${colors.primary}28` }]}><Ionicons name="document-text-outline" size={22} color={colors.primary} /></View>
-        <View style={styles.sheetCopy}>
-          <View style={styles.sheetTop}>
-            <AppText variant="heading" numberOfLines={1} style={styles.sheetNumber}>{sheet.number}</AppText>
-            <View style={styles.amountRow}><AppText variant="label" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={{ color: colors.primary }}>{money(sheet.totalPrice, sheet.currencyCode)}</AppText><View style={[styles.chevron, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="chevron-forward" size={16} color={colors.textMuted} /></View></View>
-          </View>
+      {state.loading ? <LoadingState rows={5} /> : state.error ? <ErrorState message={state.error.message} onRetry={() => void state.reload()} /> : sheets.length ? <View style={styles.list}>{sheets.map((sheet) => <Pressable key={sheet.id} accessibilityRole="button" android_ripple={{ color: colors.primarySoft }} onPress={() => router.push(`/shop/sales-sheets/${sheet.id}` as never)} style={({ pressed }) => [styles.sheetCard, { backgroundColor: colors.surface, borderColor: colors.border, shadowColor: colors.shadow, shadowOpacity: isDark ? 0.12 : 0.06, opacity: pressed ? 0.82 : 1 }]}>
+        <View style={[styles.sheetHeader, { backgroundColor: colors.surfaceMuted }]}>
+          <View style={[styles.sheetIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="document-text-outline" size={21} color={colors.primary} /></View>
+          <AppText variant="heading" numberOfLines={1} style={styles.sheetNumber}>{sheet.number}</AppText>
+          <View style={[styles.amountChip, { backgroundColor: colors.primarySoft }]}><AppText variant="label" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={{ color: colors.primary }}>{money(sheet.totalPrice, sheet.currencyCode)}</AppText></View>
+          <View style={styles.chevron}><Ionicons name="chevron-forward" size={18} color={colors.textMuted} /></View>
+        </View>
+        <View style={styles.sheetBody}>
           <AppText variant="label" numberOfLines={1}>{sheet.customerName}</AppText>
           <AppText variant="caption" muted numberOfLines={1}>{sheet.productName}</AppText>
           <View style={styles.sheetBottom}>
@@ -132,15 +132,14 @@ const styles = StyleSheet.create({
   metricIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   metricCopy: { minWidth: 0, flex: 1 },
   list: { gap: spacing.sm },
-  sheetCard: { position: 'relative', minHeight: 112, padding: spacing.md, borderWidth: 1, borderRadius: radius.lg, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, overflow: 'hidden', shadowOffset: { width: 0, height: 6 }, shadowRadius: 16, elevation: 2 },
-  sheetAccent: { position: 'absolute', left: 0, top: 14, bottom: 14, width: 3, borderTopRightRadius: 3, borderBottomRightRadius: 3 },
-  sheetIcon: { width: 46, height: 46, borderWidth: 1, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  sheetCopy: { minWidth: 0, flex: 1, gap: 3 },
-  sheetTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  sheetCard: { minHeight: 120, padding: 0, borderWidth: 1, borderRadius: radius.lg, overflow: 'hidden', shadowOffset: { width: 0, height: 5 }, shadowRadius: 14, elevation: 2 },
+  sheetHeader: { minHeight: 58, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  sheetIcon: { width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   sheetNumber: { minWidth: 0, flex: 1 },
-  amountRow: { maxWidth: '48%', flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  chevron: { width: 28, height: 28, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  sheetBottom: { marginTop: spacing.xs, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  amountChip: { maxWidth: '42%', minHeight: 32, paddingHorizontal: spacing.sm, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  chevron: { width: 24, height: 32, alignItems: 'center', justifyContent: 'center' },
+  sheetBody: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.md, gap: 3 },
+  sheetBottom: { marginTop: spacing.sm, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   emitted: { minHeight: 22, paddingHorizontal: spacing.sm, borderRadius: radius.pill, flexDirection: 'row', alignItems: 'center', gap: 3 },
