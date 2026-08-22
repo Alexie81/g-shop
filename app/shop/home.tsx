@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useProperty } from '@/contexts/PropertyContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
+import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { salesSheetRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { Paginated, SalesSheet } from '@/types';
@@ -36,11 +37,12 @@ export default function ShopHomeScreen() {
       : Promise.resolve({ data: [], page: 1, pageSize: 0, total: 0, totalPages: 1 }),
     [activeProperty?.id, canView],
   );
+  useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);
   const sheets = state.data?.data ?? [];
   const salesTotal = sheets.reduce((sum, item) => sum + item.totalPrice, 0);
   const collected = sheets.reduce((sum, item) => sum + item.receivedAmount, 0);
   const remaining = sheets.reduce((sum, item) => sum + item.remainingDue, 0);
-  const totalReceivables = collected + remaining;
+  const totalReceivables = salesTotal;
   const expenses = sheets.reduce((sum, item) => sum + (item.expenseTotal ?? 0), 0);
   const gshopNet = sheets.reduce(
     (sum, item) => sum + (item.gshopNet ?? item.totalPrice - (item.expenseTotal ?? 0)),

@@ -1,6 +1,5 @@
 import { apiRequest, shopApiRequest } from '@/services/api';
 import { AppUpdateRepository, AuthRepository, AuditRepository, ClientRepository, CollaboratorRepository, CompanyDetailsRepository, DashboardRepository, PropertyRepository, SalesSheetRepository, ServiceSheetRepository, TechnicianRepository, UserRepository, WhatsAppMessageRepository } from '@/repositories/interfaces';
-import { CompanyDetails } from '@/types';
 
 export const authRepository: AuthRepository = {
   login: (username, password, device, remember) => apiRequest('/auth/login', { method: 'POST', authenticated: false, body: JSON.stringify({ username, password, device, remember }) }),
@@ -17,43 +16,19 @@ export const propertyRepository: PropertyRepository = {
 export const companyDetailsRepository: CompanyDetailsRepository = {
   list: (propertyId) => apiRequest(`/companies?propertyId=${propertyId}`),
   create: (propertyId, input) => apiRequest('/companies', { method: 'POST', body: JSON.stringify({ propertyId, ...input }) }),
-  update: (companyId, input) => apiRequest(`/companies/${companyId}`, { method: 'PUT', body: JSON.stringify(input) }),
+  update: (companyId, propertyId, input) => apiRequest(`/companies/${companyId}`, { method: 'PUT', body: JSON.stringify({ propertyId, ...input }) }),
   setDefault: (companyId, propertyId) => apiRequest(`/companies/${companyId}/default`, { method: 'PUT', body: JSON.stringify({ propertyId }) }),
-  saveStamp: async (companyId, stamp) => {
-    const [company] = await Promise.all([
-      apiRequest<CompanyDetails>(`/companies/${companyId}/stamp`, { method: 'POST', body: JSON.stringify({ stamp }) }),
-      shopApiRequest<CompanyDetails>(`/companies/${companyId}/stamp`, { method: 'POST', body: JSON.stringify({ stamp }) }),
-    ]);
-    return company;
-  },
-  removeStamp: async (companyId) => {
-    const [company] = await Promise.all([
-      apiRequest<CompanyDetails>(`/companies/${companyId}/stamp`, { method: 'DELETE' }),
-      shopApiRequest<CompanyDetails>(`/companies/${companyId}/stamp`, { method: 'DELETE' }),
-    ]);
-    return company;
-  },
+  saveStamp: (companyId, propertyId, stamp) => apiRequest(`/companies/${companyId}/stamp`, { method: 'POST', body: JSON.stringify({ propertyId, stamp }) }),
+  removeStamp: (companyId, propertyId) => apiRequest(`/companies/${companyId}/stamp?propertyId=${encodeURIComponent(propertyId)}`, { method: 'DELETE' }),
 };
 
 export const shopCompanyDetailsRepository: CompanyDetailsRepository = {
   list: (propertyId) => shopApiRequest(`/companies?propertyId=${propertyId}`),
   create: (propertyId, input) => shopApiRequest('/companies', { method: 'POST', body: JSON.stringify({ propertyId, ...input }) }),
-  update: (companyId, input) => shopApiRequest(`/companies/${companyId}`, { method: 'PUT', body: JSON.stringify(input) }),
+  update: (companyId, propertyId, input) => shopApiRequest(`/companies/${companyId}`, { method: 'PUT', body: JSON.stringify({ propertyId, ...input }) }),
   setDefault: (companyId, propertyId) => shopApiRequest(`/companies/${companyId}/default`, { method: 'PUT', body: JSON.stringify({ propertyId }) }),
-  saveStamp: async (companyId, stamp) => {
-    const [company] = await Promise.all([
-      shopApiRequest<CompanyDetails>(`/companies/${companyId}/stamp`, { method: 'POST', body: JSON.stringify({ stamp }) }),
-      apiRequest<CompanyDetails>(`/companies/${companyId}/stamp`, { method: 'POST', body: JSON.stringify({ stamp }) }),
-    ]);
-    return company;
-  },
-  removeStamp: async (companyId) => {
-    const [company] = await Promise.all([
-      shopApiRequest<CompanyDetails>(`/companies/${companyId}/stamp`, { method: 'DELETE' }),
-      apiRequest<CompanyDetails>(`/companies/${companyId}/stamp`, { method: 'DELETE' }),
-    ]);
-    return company;
-  },
+  saveStamp: (companyId, propertyId, stamp) => shopApiRequest(`/companies/${companyId}/stamp`, { method: 'POST', body: JSON.stringify({ propertyId, stamp }) }),
+  removeStamp: (companyId, propertyId) => shopApiRequest(`/companies/${companyId}/stamp?propertyId=${encodeURIComponent(propertyId)}`, { method: 'DELETE' }),
 };
 
 export const salesSheetRepository: SalesSheetRepository = {

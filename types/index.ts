@@ -144,6 +144,7 @@ export interface SalesDocument {
   agreementAt?: ISODate;
   agreementStatus?: 'ACCEPTED' | 'REFUSED';
   generatedAt?: ISODate;
+  customerRequest?: string;
   technicalAssessment?: string;
   finalNotes?: string;
   warrantyPeriod?: string;
@@ -167,6 +168,7 @@ export interface GenerateSalesDocumentInput {
   documentAt?: ISODate;
   agreementAt?: ISODate;
   agreementStatus?: 'ACCEPTED' | 'REFUSED';
+  customerRequest?: string;
   technicalAssessment?: string;
   finalNotes?: string;
   warrantyPeriod?: string;

@@ -43,6 +43,7 @@ export function SalesDocumentEditorModal({ visible, type, sheet, document, onGen
   const [documentAt, setDocumentAt] = useState(nowIso());
   const [agreementAt, setAgreementAt] = useState(nowIso());
   const [agreementStatus, setAgreementStatus] = useState<'ACCEPTED' | 'REFUSED'>('ACCEPTED');
+  const [customerRequest, setCustomerRequest] = useState('');
   const [technicalAssessment, setTechnicalAssessment] = useState('');
   const [finalNotes, setFinalNotes] = useState('');
   const [parts, setParts] = useState<DraftItem[]>([]);
@@ -58,7 +59,8 @@ export function SalesDocumentEditorModal({ visible, type, sheet, document, onGen
     setDocumentAt(baseDate);
     setAgreementAt(document?.agreementAt || baseDate);
     setAgreementStatus(document?.agreementStatus || 'ACCEPTED');
-    setTechnicalAssessment(document?.technicalAssessment || sheet.customerNotes || sheet.notes || 'Produs verificat conform specificațiilor și configurației agreate.');
+    setCustomerRequest(document?.customerRequest ?? sheet.customerNotes ?? 'Produsele și configurația solicitate de client, conform fișei de vânzare.');
+    setTechnicalAssessment(document?.technicalAssessment || 'Configurația a fost verificată integral înainte de livrare.');
     setFinalNotes(document?.finalNotes || sheet.notes || 'Valorile și operațiunile sunt cele prezentate în desfășurătorul de mai jos.');
     setParts(toDraftItems(hasPersistedDocument ? document.parts : defaultParts(sheet)));
     setLabor(toDraftItems(hasPersistedDocument ? document.labor : defaultLabor()));
@@ -76,7 +78,7 @@ export function SalesDocumentEditorModal({ visible, type, sheet, document, onGen
     internal: roundMoney(sheet.expenseTotal ?? 0),
   }), [labor, parts, sheet.expenseTotal]);
   const total = roundMoney(totals.parts + totals.labor);
-  const received = Math.min(sheet.receivedAmount, total);
+  const received = roundMoney(Math.max(0, sheet.receivedAmount));
   const remaining = Math.max(0, roundMoney(total - received));
   const gshopNet = roundMoney(total - totals.internal);
 
@@ -102,6 +104,7 @@ export function SalesDocumentEditorModal({ visible, type, sheet, document, onGen
         documentAt,
         agreementAt,
         agreementStatus,
+        customerRequest: customerRequest.trim(),
         technicalAssessment: technicalAssessment.trim(),
         finalNotes: finalNotes.trim(),
         parts: cleanItems(parts),
@@ -126,7 +129,7 @@ export function SalesDocumentEditorModal({ visible, type, sheet, document, onGen
           <View style={styles.header}>
             <View style={[styles.headerIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name={definition.icon} size={23} color={colors.primary} /></View>
             <View style={styles.headerCopy}><AppText variant="caption" style={[styles.step, { color: colors.primary }]}>{definition.step}</AppText><AppText variant="title">{definition.title}</AppText><AppText variant="caption" muted>{definition.description}</AppText></View>
-            <InfoTooltip title={definition.title} description={type === 'FINAL_ESTIMATE' ? 'Devizul are propriul desfășurător. Fișa emisă rămâne neschimbată, iar situația plății se preia automat din ea.' : 'Certificatul folosește automat clientul, produsul, seria, devizul final, semnătura și ștampila firmei.'} />
+            <InfoTooltip title={definition.title} description={type === 'FINAL_ESTIMATE' ? 'Poți modifica solicitarea, configurația și pozițiile. Un deviz acceptat actualizează direct prețurile și statisticile fișei.' : 'Certificatul folosește automat clientul, produsul, cantitatea, devizul final, semnătura și ștampila firmei.'} />
             <Pressable accessibilityRole="button" accessibilityLabel="Închide" disabled={saving} onPress={close} style={[styles.close, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={21} color={colors.text} /></Pressable>
           </View>
 
@@ -134,15 +137,16 @@ export function SalesDocumentEditorModal({ visible, type, sheet, document, onGen
             <View style={[styles.autoNotice, { backgroundColor: colors.primarySoft, borderColor: `${colors.primary}30` }]}><Ionicons name="sparkles-outline" size={19} color={colors.primary} /><AppText variant="caption" style={styles.noticeCopy}>Firma, clientul, produsul, numerele documentelor, plățile, semnătura și ștampila se completează automat.</AppText></View>
 
             {type === 'FINAL_ESTIMATE' ? <>
-              <View style={styles.titleWithInfo}><AppText variant="heading">Datele devizului</AppText><InfoTooltip title="Document independent" description="Poți detalia sau grupa pozițiile fără să modifici fișa de vânzare deja emisă. Totalul devizului se calculează exclusiv din rândurile de mai jos." /></View>
-              <Input label="Constatare / descriere" value={technicalAssessment} onChangeText={setTechnicalAssessment} maxLength={2000} multiline numberOfLines={3} textAlignVertical="top" style={styles.textArea} placeholder="Ce s-a verificat și ce se livrează clientului" />
+              <View style={styles.titleWithInfo}><AppText variant="heading">Datele devizului</AppText><InfoTooltip title="Sincronizare cu fișa" description="Totalul devizului se calculează exclusiv din pozițiile de mai jos. Dacă acordul este Acceptat, prețurile și statisticile fișei de vânzare se actualizează direct; dacă este Refuzat, valorile fișei rămân neschimbate." /></View>
+              <Input label="Solicitarea clientului" value={customerRequest} onChangeText={setCustomerRequest} maxLength={1000} multiline numberOfLines={3} textAlignVertical="top" style={styles.textArea} placeholder="Ce produse, servicii sau configurație a solicitat clientul" />
+              <Input label="Configurație și verificare" value={technicalAssessment} onChangeText={setTechnicalAssessment} maxLength={1200} multiline numberOfLines={3} textAlignVertical="top" style={styles.textArea} placeholder="Configurația livrată și verificările efectuate" />
               <DateTimeField label="Data acordului final" value={agreementAt} onChange={setAgreementAt} allowClear showNow />
-              <View style={styles.agreementChoice}><View style={styles.titleWithInfo}><AppText variant="label">Acordul clientului</AppText><InfoTooltip title="Acord final" description="Alegerea apare clar în PDF lângă data acordului. Semnătura salvată în fișa de vânzare este preluată automat." /></View><View accessibilityRole="radiogroup" style={styles.segments}><Segment label="Acceptat" icon="checkmark-circle-outline" selected={agreementStatus === 'ACCEPTED'} onPress={() => setAgreementStatus('ACCEPTED')} /><Segment label="Refuzat" icon="close-circle-outline" selected={agreementStatus === 'REFUSED'} onPress={() => setAgreementStatus('REFUSED')} /></View></View>
+              <View style={styles.agreementChoice}><View style={styles.titleWithInfo}><AppText variant="label">Acordul clientului</AppText><InfoTooltip title="Efectul acordului" description="Acceptat sincronizează totalul devizului cu prețurile și statisticile fișei. Refuzat emite documentul fără să modifice valorile fișei. Alegerea, data acordului și semnătura salvată apar în PDF." /></View><View accessibilityRole="radiogroup" style={styles.segments}><Segment label="Acceptat" icon="checkmark-circle-outline" selected={agreementStatus === 'ACCEPTED'} onPress={() => setAgreementStatus('ACCEPTED')} /><Segment label="Refuzat" icon="close-circle-outline" selected={agreementStatus === 'REFUSED'} onPress={() => setAgreementStatus('REFUSED')} /></View></View>
               <Input label="Observații finale" value={finalNotes} onChangeText={setFinalNotes} maxLength={2000} multiline numberOfLines={3} textAlignVertical="top" style={styles.textArea} placeholder="Mențiuni care trebuie să apară clientului" />
               <DocumentItemsEditor title="Piese / produse" items={parts} onChange={setParts} currencyCode={sheet.currencyCode} importExpenses={sheet.expenses ?? []} />
               <DocumentItemsEditor title="Manoperă / servicii" description="Servicii, instalare, configurare sau livrare." items={labor} onChange={setLabor} currencyCode={sheet.currencyCode} />
               <View style={[styles.summary, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
-                <View style={styles.titleWithInfo}><View style={styles.summaryTitle}><View style={[styles.summaryIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="wallet-outline" size={18} color={colors.primary} /></View><View><AppText variant="heading">Rezumat financiar</AppText><AppText variant="caption" muted>Devizul și calculele interne, separate clar</AppText></View></View><InfoTooltip title="Calcul automat" description="Piesele și manopera formează totalul devizului. Cheltuielile interne vin din fișa de vânzare, iar Rămâne G-Shop este totalul devizului minus aceste cheltuieli." /></View>
+                <View style={styles.titleWithInfo}><View style={styles.summaryTitle}><View style={[styles.summaryIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="wallet-outline" size={18} color={colors.primary} /></View><View><AppText variant="heading">Rezumat financiar</AppText><AppText variant="caption" muted>Devizul și calculele interne, separate clar</AppText></View></View><InfoTooltip title="Calcul automat" description="Piesele și manopera formează totalul devizului. Cheltuielile interne vin din fișa de vânzare, iar Rămâne G-Shop este totalul minus aceste cheltuieli. Valorile interne sunt vizibile doar aici și nu sunt introduse în PDF." /></View>
                 <View style={styles.summaryGrid}><SummaryValue label="Piese" value={formatFinanceMoney(totals.parts, sheet.currencyCode)} color={colors.primary} /><SummaryValue label="Manoperă" value={formatFinanceMoney(totals.labor, sheet.currencyCode)} color={palette.purple} /><SummaryValue label="Cheltuieli interne" value={formatFinanceMoney(totals.internal, sheet.currencyCode)} color={palette.warning} /><SummaryValue label="Total deviz" value={formatFinanceMoney(total, sheet.currencyCode)} color={colors.primary} accent /></View>
                 <View style={styles.paymentGrid}><PaymentValue label="Încasat" value={received} currency={sheet.currencyCode} color={palette.success} /><PaymentValue label="De încasat" value={remaining} currency={sheet.currencyCode} color={remaining > 0 ? palette.warning : palette.success} /><PaymentValue label="Rămâne G-Shop" value={gshopNet} currency={sheet.currencyCode} color={gshopNet >= 0 ? colors.primary : palette.danger} /></View>
               </View>

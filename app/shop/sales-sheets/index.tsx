@@ -39,7 +39,7 @@ export default function SalesSheetsScreen() {
   const total = (state.data?.data ?? []).reduce((sum, item) => sum + item.totalPrice, 0);
   const remaining = (state.data?.data ?? []).reduce((sum, item) => sum + item.remainingDue, 0);
   const collected = (state.data?.data ?? []).reduce((sum, item) => sum + item.receivedAmount, 0);
-  const totalReceivables = collected + remaining;
+  const totalReceivables = total;
   const expenses = (state.data?.data ?? []).reduce((sum, item) => sum + (item.expenseTotal ?? 0), 0);
   const gshopNet = (state.data?.data ?? []).reduce((sum, item) => sum + (item.gshopNet ?? item.totalPrice - (item.expenseTotal ?? 0)), 0);
   const canViewFinancials = hasPermission('financials.view');

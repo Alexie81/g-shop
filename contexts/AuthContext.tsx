@@ -153,6 +153,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return next.user;
   }, []);
 
+  const completePropertySelection = useCallback(() => {
+    setRequiresPropertySelection(false);
+  }, []);
+
   const value = useMemo<AuthContextValue>(() => ({
     session,
     user: session?.user ?? null,
@@ -163,9 +167,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
     logout,
     changePassword: authRepository.changePassword,
     updateProfile,
-    completePropertySelection: () => setRequiresPropertySelection(false),
+    completePropertySelection,
     hasPermission: (permission) => session?.user.isPrimaryAdmin === true || session?.user.permissions.includes(permission) === true,
-  }), [login, logout, ready, requiresPropertySelection, savedUsername, session, updateProfile]);
+  }), [completePropertySelection, login, logout, ready, requiresPropertySelection, savedUsername, session, updateProfile]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

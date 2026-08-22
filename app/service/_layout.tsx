@@ -45,7 +45,9 @@ export default function ServiceLayout() {
   const segments = useSegments();
   const insets = useSafeAreaInsets();
   const tabBarBottomPadding = Math.max(insets.bottom, 8);
-  if (!ready || loading) return <RouteLoader />; if (!user) return <Redirect href="/(auth)/login" />; if (!activeProperty) return <Redirect href="/select-property" />; if (activeProperty.type !== 'SERVICE') return <Redirect href="/shop/home" />;
+  // Preserve the mounted navigator during background access/property refreshes;
+  // replacing Tabs with a loader would reset the current route to the home tab.
+  if (!ready || (loading && !activeProperty)) return <RouteLoader />; if (!user) return <Redirect href="/(auth)/login" />; if (!activeProperty) return <Redirect href="/select-property" />; if (activeProperty.type !== 'SERVICE') return <Redirect href="/shop/home" />;
   const permission = requiredPermission(segments);
   if (permission && !hasPermission(permission)) return <Redirect href="/service/more" />;
   return <Tabs

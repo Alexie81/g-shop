@@ -15,10 +15,10 @@ export interface PropertyRepository {
 export interface CompanyDetailsRepository {
   list(propertyId: UUID): Promise<CompanyDetails[]>;
   create(propertyId: UUID, input: Omit<CompanyDetails, 'id' | 'propertyId' | 'isDefault' | 'stampUrl' | 'createdAt' | 'updatedAt'>): Promise<CompanyDetails>;
-  update(companyId: UUID, input: Omit<CompanyDetails, 'id' | 'propertyId' | 'isDefault' | 'stampUrl' | 'createdAt' | 'updatedAt'>): Promise<CompanyDetails>;
+  update(companyId: UUID, propertyId: UUID, input: Omit<CompanyDetails, 'id' | 'propertyId' | 'isDefault' | 'stampUrl' | 'createdAt' | 'updatedAt'>): Promise<CompanyDetails>;
   setDefault(companyId: UUID, propertyId: UUID): Promise<CompanyDetails>;
-  saveStamp(companyId: UUID, stamp: string): Promise<CompanyDetails>;
-  removeStamp(companyId: UUID): Promise<CompanyDetails>;
+  saveStamp(companyId: UUID, propertyId: UUID, stamp: string): Promise<CompanyDetails>;
+  removeStamp(companyId: UUID, propertyId: UUID): Promise<CompanyDetails>;
 }
 export interface SalesSheetRepository {
   list(propertyId: UUID): Promise<Paginated<SalesSheet>>;

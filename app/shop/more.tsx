@@ -24,7 +24,7 @@ export default function ShopMoreScreen() {
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
   const allItems: Item[] = [
-    { label: 'Datele firmei', description: 'Aceleași firme ca în Service, cu selecție separată pentru vânzări', icon: 'business-outline', color: palette.warning, route: '/company-details', permission: 'settings.manage', adminOnly: true },
+    { label: 'Datele firmei', description: 'Date și ștampilă separate pentru documentele de vânzare', icon: 'business-outline', color: palette.warning, route: '/company-details', permission: 'settings.manage', adminOnly: true },
     { label: 'Produse', description: 'Catalogul de produse și categorii', icon: 'cube-outline', color: colors.primary, route: '/shop/products' },
     { label: 'Stocuri', description: 'Produse și disponibilitate', icon: 'layers-outline', color: palette.cyan, route: '/shop/stocks' },
     { label: 'Actualizare aplicație', description: 'Verifică versiunea instalată', icon: 'cloud-download-outline', color: palette.cyan, route: '/app-update' },
@@ -47,7 +47,7 @@ export default function ShopMoreScreen() {
         <View style={styles.grid}>{items.map((item) => <Pressable key={item.label} accessibilityRole="button" onPress={() => item.action ? item.action() : item.route && router.push(item.route as never)} style={({ pressed }) => [styles.card, { backgroundColor: colors.surface, borderColor: item.label === 'Datele firmei' ? `${item.color}70` : colors.border, shadowColor: colors.shadow, shadowOpacity: isDark ? 0.12 : 0.07, opacity: pressed ? 0.76 : 1 }]}>
         <View style={[styles.icon, { backgroundColor: `${item.color}18` }]}><Ionicons name={item.icon} size={25} color={item.color} /></View><View style={styles.copy}><AppText variant="heading">{item.label}</AppText><AppText variant="caption" muted>{item.description}</AppText></View><View style={[styles.arrow, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="chevron-forward" size={18} color={colors.textMuted} /></View>
         </Pressable>)}</View>
-        <View style={[styles.note, { backgroundColor: colors.primarySoft, borderColor: `${colors.primary}30` }]}><Ionicons name="information-circle-outline" size={21} color={colors.primary} /><AppText variant="caption" style={styles.copy}>Firmele sunt partajate între module. Alegerea firmei active în Shop nu schimbă firma activă folosită în fișele de service.</AppText></View>
+        <View style={[styles.note, { backgroundColor: colors.primarySoft, borderColor: `${colors.primary}30` }]}><Ionicons name="information-circle-outline" size={21} color={colors.primary} /><AppText variant="caption" style={styles.copy}>Datele firmei și ștampila din Vânzări sunt independente. Modificările nu afectează documentele din Service.</AppText></View>
       </View>
     </Screen>
 

@@ -14,7 +14,9 @@ export default function ShopLayout() {
   const { colors } = useAppTheme();
   const insets = useSafeAreaInsets();
   const tabBarBottomPadding = Math.max(insets.bottom, 8);
-  if (!ready || loading) return <RouteLoader />;
+  // Background access/property refreshes must not unmount Tabs: remounting the
+  // navigator selects its initial (home) tab and loses the current nested route.
+  if (!ready || (loading && !activeProperty)) return <RouteLoader />;
   if (!user) return <Redirect href="/(auth)/login" />;
   if (!activeProperty) return <Redirect href="/select-property" />;
   if (activeProperty.type !== 'SHOP') return <Redirect href="/service/dashboard" />;

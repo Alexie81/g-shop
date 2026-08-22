@@ -23,35 +23,43 @@ export function PropertyProvider({ children }: PropsWithChildren) {
   const [error, setError] = useState<string | null>(null);
   const requiresPropertySelectionRef = useRef(requiresPropertySelection);
   requiresPropertySelectionRef.current = requiresPropertySelection;
+  // Token renewal replaces the session (and therefore the User object) even
+  // when access to properties did not change. Keep reload dependencies tied to
+  // the actual access data so a routine token refresh does not tear down the
+  // active tab navigator and send the user back to its initial route.
+  const userId = user?.id ?? '';
+  const userRole = user?.role ?? null;
+  const propertyIdsKey = user ? [...user.propertyIds].sort().join('\u0000') : '';
 
   const reload = useCallback(async () => {
-    if (!user) { setProperties([]); setActiveProperty(null); return; }
+    if (!userId) { setProperties([]); setActiveProperty(null); return; }
     setLoading(true);
     setError(null);
     try {
-      const result = (await propertyRepository.list()).filter((property) => user.role === 'ADMIN' || user.propertyIds.includes(property.id));
+      const allowedPropertyIds = propertyIdsKey ? propertyIdsKey.split('\u0000') : [];
+      const result = (await propertyRepository.list()).filter((property) => userRole === 'ADMIN' || allowedPropertyIds.includes(property.id));
       setProperties(result);
-      const storedId = await preferenceStorage.get(`property.${user.id}`);
+      const storedId = await preferenceStorage.get(`property.${userId}`);
       const stored = result.find((property) => property.id === storedId);
       setActiveProperty((current) => {
         const currentAllowed = result.find((property) => property.id === current?.id);
-        if (user.role === 'ADMIN' && requiresPropertySelectionRef.current) return null;
+        if (userRole === 'ADMIN' && requiresPropertySelectionRef.current) return null;
         const selected = currentAllowed ?? stored ?? result[0] ?? null;
-        if (selected && selected.id !== storedId) void preferenceStorage.set(`property.${user.id}`, selected.id);
+        if (selected && selected.id !== storedId) void preferenceStorage.set(`property.${userId}`, selected.id);
         return selected;
       });
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Proprietățile nu au putut fi încărcate.');
     } finally { setLoading(false); }
-  }, [user]);
+  }, [propertyIdsKey, userId, userRole]);
 
   useEffect(() => { void reload(); }, [reload]);
 
   const selectProperty = useCallback(async (property: Property) => {
     setActiveProperty(property);
     completePropertySelection();
-    if (user) await preferenceStorage.set(`property.${user.id}`, property.id);
-  }, [completePropertySelection, user]);
+    if (userId) await preferenceStorage.set(`property.${userId}`, property.id);
+  }, [completePropertySelection, userId]);
 
   const value = useMemo(() => ({ properties, activeProperty, loading, error, selectProperty, reload }), [activeProperty, error, loading, properties, reload, selectProperty]);
   return <PropertyContext.Provider value={value}>{children}</PropertyContext.Provider>;

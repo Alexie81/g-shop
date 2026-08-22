@@ -109,16 +109,17 @@ export default function CompanyDetailsScreen() {
       const payload = { ...form, legalName: form.legalName.trim(), iban: form.iban.replace(/\s/g, '').toUpperCase() };
       let result = creating
         ? await companyRepository.create(propertyId, payload)
-        : await companyRepository.update(selectedCompany!.id, payload);
-      if (stampRemoved && result.stampUrl) result = await companyRepository.removeStamp(result.id);
-      if (stampData) result = await companyRepository.saveStamp(result.id, stampData);
+        : await companyRepository.update(selectedCompany!.id, propertyId, payload);
+      if (stampRemoved && result.stampUrl) result = await companyRepository.removeStamp(result.id, propertyId);
+      if (stampData) result = await companyRepository.saveStamp(result.id, propertyId, stampData);
       setCreating(false);
       setSelectedId(result.id);
       setForm(formFromCompany(result));
       setStampData(null);
       setStampRemoved(false);
       state.setData((current) => {
-        const others = (current ?? []).filter((company) => company.id !== result.id).map((company) => result.isDefault ? { ...company, isDefault: false } : company);
+        const replacedId = creating ? null : selectedCompany?.id;
+        const others = (current ?? []).filter((company) => company.id !== result.id && company.id !== replacedId).map((company) => result.isDefault ? { ...company, isDefault: false } : company);
         return [result, ...others].sort((left, right) => Number(right.isDefault) - Number(left.isDefault) || left.legalName.localeCompare(right.legalName, 'ro'));
       });
       showToast(creating ? 'Firma a fost adăugată.' : 'Datele firmei au fost salvate.', 'success');
@@ -149,14 +150,14 @@ export default function CompanyDetailsScreen() {
       <LinearGradient colors={isDark ? ['#102A69', '#075CFF'] : ['#123EA9', '#0878FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
         <View pointerEvents="none" style={styles.heroOrb} />
         <View style={styles.heroIcon}><Ionicons name="business" size={28} color="#FFFFFF" /></View>
-        <View style={styles.heroCopy}><AppText variant="title" style={styles.heroTitle}>Firmele tale</AppText><AppText style={styles.heroSubtitle}>Lista este comună pentru Service și Shop. Firma activă pentru {moduleLabel} se alege separat și va fi folosită numai în documentele noi ale acestui modul.</AppText></View>
+        <View style={styles.heroCopy}><AppText variant="title" style={styles.heroTitle}>Firma din {moduleLabel}</AppText><AppText style={styles.heroSubtitle}>{isShop ? 'Datele și ștampila sunt separate de Service. La salvare se actualizează și PDF-urile Shop existente, fără să fie schimbate produsele, sumele sau semnătura.' : 'Datele și ștampila sunt păstrate separat pentru Service. Modificările de aici nu schimbă firma din Vânzări.'}</AppText></View>
         <View style={styles.heroBadge}><Ionicons name="shield-checkmark" size={15} color="#FFFFFF" /><AppText variant="caption" style={styles.heroBadgeText}>DOAR ADMIN</AppText></View>
       </LinearGradient>
 
       {state.loading ? <LoadingState rows={5} /> : state.error ? <ErrorState message={state.error.message} onRetry={() => void state.reload()} /> : <>
         <Card style={styles.companies} elevated>
           <View style={[styles.companiesHeader, compact && styles.companiesHeaderCompact]}>
-            <View style={styles.sectionCopy}><AppText variant="heading">Firme configurate</AppText><AppText variant="caption" muted>Firma marcată activă este folosită în {moduleLabel}. Documentele deja emise își păstrează datele inițiale.</AppText></View>
+            <View style={styles.sectionCopy}><AppText variant="heading">Firme configurate</AppText><AppText variant="caption" muted>{isShop ? 'Firma activă este folosită în Vânzări. Datele firmei și ștampila se sincronizează în fișele Shop asociate.' : 'Firma marcată activă este folosită în Service. Documentele deja emise își păstrează datele inițiale.'}</AppText></View>
             <Button compact label="Adaugă firmă" icon="add-circle-outline" onPress={startCreating} />
           </View>
           {state.data?.length ? <View style={styles.companyList}>{state.data.map((company) => {
@@ -169,7 +170,7 @@ export default function CompanyDetailsScreen() {
           })}</View> : <View style={[styles.emptyCompanies, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="business-outline" size={26} color={colors.primary} /><AppText variant="label">Nu ai încă nicio firmă configurată.</AppText></View>}
         </Card>
 
-        <View style={styles.editorHeading}><View style={[styles.editorIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name={creating ? 'add-outline' : 'create-outline'} size={22} color={colors.primary} /></View><View style={styles.sectionCopy}><AppText variant="heading">{creating ? 'Firmă nouă' : `Editează ${selectedCompany?.legalName ?? 'firma'}`}</AppText><AppText variant="caption" muted>{creating ? 'Completează denumirea, apoi salvează firma.' : selectedCompany?.isDefault ? 'Aceasta este firma folosită în documentele noi.' : 'Poți edita firma sau o poți selecta ca activă din lista de mai sus.'}</AppText></View></View>
+        <View style={styles.editorHeading}><View style={[styles.editorIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name={creating ? 'add-outline' : 'create-outline'} size={22} color={colors.primary} /></View><View style={styles.sectionCopy}><AppText variant="heading">{creating ? 'Firmă nouă' : `Editează ${selectedCompany?.legalName ?? 'firma'}`}</AppText><AppText variant="caption" muted>{creating ? 'Completează denumirea, apoi salvează firma.' : selectedCompany?.isDefault ? (isShop ? 'Aceasta este firma folosită în Shop și în PDF-urile asociate.' : 'Aceasta este firma folosită în documentele noi.') : 'Poți edita firma sau o poți selecta ca activă din lista de mai sus.'}</AppText></View></View>
 
         <FormSection icon="document-text-outline" color={colors.primary} background={colors.primarySoft} title="Date juridice" subtitle="Informațiile de identificare fiscală." compact={compact}>
           <Field><Input label="Denumire juridică" icon="business-outline" value={form.legalName} onChangeText={(value) => update('legalName', value)} placeholder="Ex: G-Shop Service SRL" maxLength={160} /></Field>
@@ -204,7 +205,7 @@ export default function CompanyDetailsScreen() {
           <View style={[styles.stampActions, compact && styles.stampActionsCompact]}><Button variant="outline" compact label={stampUri ? 'Înlocuiește imaginea' : 'Selectează imaginea'} icon="image-outline" onPress={() => void pickStamp()} style={styles.flexButton} />{stampUri ? <Button variant="danger" compact label="Elimină ștampila" icon="trash-outline" onPress={() => { setStampData(null); setStampRemoved(true); }} style={styles.flexButton} /> : null}</View>
         </Card>
 
-        <View style={[styles.saveBar, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}><View style={styles.saveInfo}><Ionicons name="information-circle-outline" size={20} color={colors.primary} /><AppText variant="caption" muted style={styles.saveCopy}>Firma activă va fi salvată automat în următoarele documente din modulul {moduleLabel}. Selecția celuilalt modul nu se modifică.</AppText></View><Button label={creating ? 'Adaugă firma' : 'Salvează firma'} icon="checkmark-circle-outline" loading={saving} onPress={() => void save()} style={styles.saveButton} /></View>
+        <View style={[styles.saveBar, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}><View style={styles.saveInfo}><Ionicons name="information-circle-outline" size={20} color={colors.primary} /><AppText variant="caption" muted style={styles.saveCopy}>{isShop ? 'Salvarea actualizează firma și ștampila în fișele și documentele Shop asociate. Service rămâne neschimbat.' : 'Firma activă va fi salvată în documentele din Service. Datele și ștampila din Vânzări rămân neschimbate.'}</AppText></View><Button label={creating ? 'Adaugă firma' : 'Salvează firma'} icon="checkmark-circle-outline" loading={saving} onPress={() => void save()} style={styles.saveButton} /></View>
       </>}
     </View>
   </Screen>;

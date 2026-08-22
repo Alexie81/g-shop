@@ -66,18 +66,18 @@ export function SalesSheetForm({ initialSheet }: { initialSheet?: SalesSheet }) 
 
   const totals = useMemo(() => {
     const product = numberValue(quantity) * numberValue(productUnitPrice);
-    const delivery = deliveryMode === 'DELIVERY' ? numberValue(deliveryPrice) : 0;
+    const delivery = numberValue(deliveryPrice);
     const total = product + delivery;
-    const collected = paymentStatus === 'PAID' ? total : Math.min(total, numberValue(advancePaid));
+    const collected = paymentStatus === 'PAID' ? Math.max(total, numberValue(advancePaid)) : Math.min(total, numberValue(advancePaid));
     const expenseTotal = expenses.reduce((sum, expense) => sum + numberValue(expense.quantity) * numberValue(expense.amount), 0);
     return { product, delivery, total, collected, expenseTotal, gshopNet: total - expenseTotal, remaining: Math.max(0, total - collected) };
-  }, [advancePaid, deliveryMode, deliveryPrice, expenses, paymentStatus, productUnitPrice, quantity]);
+  }, [advancePaid, deliveryPrice, expenses, paymentStatus, productUnitPrice, quantity]);
 
   const submit = async () => {
     if (!activeProperty && !initialSheet) return;
     if (customerName.trim().length < 2) return showToast('Completează numele clientului.', 'error');
     if (customerPhone.trim().length < 3) return showToast('Completează telefonul clientului.', 'error');
-    if (numberValue(advancePaid) > totals.total) return showToast('Banii încasați nu pot depăși totalul fișei.', 'error');
+    if (paymentStatus === 'UNPAID' && numberValue(advancePaid) > totals.total) return showToast('Banii încasați nu pot depăși totalul fișei.', 'error');
     if (canManageFinancials && expenses.some((expense) => (expense.name.trim() || expense.amount.trim()) && (!expense.name.trim() || numberValue(expense.quantity) <= 0 || numberValue(expense.amount) <= 0))) return showToast('Completează denumirea, cantitatea și valoarea unitară a fiecărei cheltuieli.', 'error');
     setSaving(true);
     try {
@@ -107,7 +107,7 @@ export function SalesSheetForm({ initialSheet }: { initialSheet?: SalesSheet }) 
 
         <StepCard number={1} title="Client" subtitle="Date de identificare și livrare" icon="person-outline">
           <View style={[styles.fields, compact && styles.fieldsCompact]}>
-            <Field compact={compact}><Input label="Nume și prenume *" icon="person-outline" value={customerName} onChangeText={setCustomerName} placeholder="Ex: Andrei Popescu" autoCapitalize="words" /></Field>
+            <Field compact={compact}><Input label="Nume și prenume / Firmă *" icon="person-outline" value={customerName} onChangeText={setCustomerName} placeholder="Ex: Andrei Popescu sau Exemplu SRL" autoCapitalize="words" /></Field>
             <Field compact={compact}><Input label="Telefon *" icon="call-outline" value={customerPhone} onChangeText={setCustomerPhone} keyboardType="phone-pad" placeholder="07..." /></Field>
             <Field compact={compact}><Input label="E-mail" icon="mail-outline" value={customerEmail} onChangeText={setCustomerEmail} keyboardType="email-address" autoCapitalize="none" /></Field>
             <Field compact={compact}><Input label="Adresă de livrare" icon="location-outline" value={deliveryAddress} onChangeText={setDeliveryAddress} /></Field>
@@ -133,7 +133,7 @@ export function SalesSheetForm({ initialSheet }: { initialSheet?: SalesSheet }) 
           </ChoiceGroup>
           <ChoiceGroup label="Livrare" compact={compact}>
             <Choice selected={deliveryMode === 'DELIVERY'} icon="car-outline" label="Cu livrare" onPress={() => setDeliveryMode('DELIVERY')} />
-            <Choice selected={deliveryMode === 'PICKUP'} icon="storefront-outline" label="Fără livrare" onPress={() => { setDeliveryMode('PICKUP'); setDeliveryPrice(''); }} />
+            <Choice selected={deliveryMode === 'PICKUP'} icon="storefront-outline" label="Fără livrare" onPress={() => setDeliveryMode('PICKUP')} />
           </ChoiceGroup>
         </StepCard>
 
@@ -144,14 +144,14 @@ export function SalesSheetForm({ initialSheet }: { initialSheet?: SalesSheet }) 
           </View>
           <View style={[styles.fields, compact && styles.fieldsCompact]}>
             <Field compact={compact}><Input label="Preț produs / unitate" icon="cash-outline" value={productUnitPrice} onChangeText={setProductUnitPrice} keyboardType="decimal-pad" placeholder="0,00" /></Field>
-            <Field compact={compact}><Input label="Preț livrare" icon="car-outline" value={deliveryPrice} onChangeText={setDeliveryPrice} keyboardType="decimal-pad" editable={deliveryMode === 'DELIVERY'} placeholder={deliveryMode === 'DELIVERY' ? '0,00' : 'Fără livrare'} /></Field>
-            <Field compact={compact}><Input label="Bani încasați" icon="wallet-outline" value={paymentStatus === 'PAID' ? String(totals.total).replace('.', ',') : advancePaid} onChangeText={setAdvancePaid} keyboardType="decimal-pad" editable={paymentStatus === 'UNPAID'} placeholder="0,00" /></Field>
+            <Field compact={compact}><Input label="Manoperă / servicii" icon="construct-outline" value={deliveryPrice} onChangeText={setDeliveryPrice} keyboardType="decimal-pad" placeholder="0,00" /></Field>
+            <Field compact={compact}><Input label="Bani încasați" icon="wallet-outline" value={paymentStatus === 'PAID' ? String(Math.max(totals.total, numberValue(advancePaid))).replace('.', ',') : advancePaid} onChangeText={setAdvancePaid} keyboardType="decimal-pad" editable={paymentStatus === 'UNPAID'} placeholder="0,00" /></Field>
             <Field compact={compact}><Input label="Monedă" icon="pricetag-outline" value={currencyCode} onChangeText={setCurrencyCode} maxLength={3} autoCapitalize="characters" /></Field>
             <View style={styles.wide}><DateTimeField label="Data scadenței" value={dueAt} onChange={setDueAt} allowClear showNow /></View>
           </View>
           <View style={[styles.summary, { backgroundColor: colors.primarySoft, borderColor: `${colors.primary}35` }]}>
             <Summary label="Produse" value={money(totals.product, currencyCode)} color={colors.primary} />
-            <Summary label="Livrare" value={money(totals.delivery, currencyCode)} color={palette.cyan} />
+            <Summary label="Manoperă / servicii" value={money(totals.delivery, currencyCode)} color={palette.cyan} />
             <Summary label="Total" value={money(totals.total, currencyCode)} color={palette.purple} />
             <Summary label="Bani încasați" value={money(totals.collected, currencyCode)} color={palette.success} />
             <Summary label="Rest de plată" value={money(totals.remaining, currencyCode)} color={totals.remaining > 0 ? palette.warning : palette.success} />
