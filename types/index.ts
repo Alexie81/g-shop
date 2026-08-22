@@ -129,6 +129,46 @@ export interface SalesSheet extends BaseEntity {
   status: 'PUBLISHED';
 }
 
+export type SalesDocumentType = 'FINAL_ESTIMATE' | 'WARRANTY';
+export type SalesDocumentStatus = 'MISSING' | 'PUBLISHED';
+
+export interface SalesDocument {
+  id?: UUID;
+  salesSheetId: UUID;
+  type: SalesDocumentType;
+  label: string;
+  status: SalesDocumentStatus;
+  available: boolean;
+  number?: string;
+  documentAt?: ISODate;
+  agreementAt?: ISODate;
+  agreementStatus?: 'ACCEPTED' | 'REFUSED';
+  generatedAt?: ISODate;
+  technicalAssessment?: string;
+  finalNotes?: string;
+  warrantyPeriod?: string;
+  warrantyStartAt?: ISODate;
+  warrantyEndAt?: ISODate;
+  warrantyRemediation?: string;
+  parts: ServiceDocumentItem[];
+  labor: ServiceDocumentItem[];
+  url?: string;
+}
+
+export interface GenerateSalesDocumentInput {
+  documentAt?: ISODate;
+  agreementAt?: ISODate;
+  agreementStatus?: 'ACCEPTED' | 'REFUSED';
+  technicalAssessment?: string;
+  finalNotes?: string;
+  warrantyPeriod?: string;
+  warrantyStartAt?: ISODate;
+  warrantyEndAt?: ISODate;
+  warrantyRemediation?: string;
+  parts?: ServiceDocumentItem[];
+  labor?: ServiceDocumentItem[];
+}
+
 export type CreateSalesSheetPayload = Pick<SalesSheet,
   'propertyId' | 'documentAt' | 'customerName' | 'customerPhone' | 'customerEmail' |
   'deliveryAddress' | 'customerNotes' | 'productName' | 'productCode' | 'serialNumber' |

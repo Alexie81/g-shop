@@ -138,6 +138,7 @@ CREATE TABLE IF NOT EXISTS sales_sheets (
   total_price DECIMAL(12,2) NOT NULL DEFAULT 0,
   advance_paid DECIMAL(12,2) NOT NULL DEFAULT 0,
   remaining_due DECIMAL(12,2) NOT NULL DEFAULT 0,
+  payment_status ENUM('UNPAID','PAID') NOT NULL DEFAULT 'UNPAID',
   due_at DATETIME NULL,
   currency_code CHAR(3) NOT NULL DEFAULT 'RON',
   notes TEXT NULL,
@@ -159,6 +160,40 @@ CREATE TABLE IF NOT EXISTS sales_sheets (
   INDEX idx_sales_sheets_list (property_id, is_active, document_at),
   CONSTRAINT fk_sales_sheet_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE,
   CONSTRAINT fk_sales_sheet_company FOREIGN KEY (company_id) REFERENCES property_companies(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS sales_sheet_documents (
+  id BINARY(16) PRIMARY KEY,
+  sales_sheet_id BINARY(16) NOT NULL,
+  property_id BINARY(16) NOT NULL,
+  type ENUM('FINAL_ESTIMATE','WARRANTY') NOT NULL,
+  number VARCHAR(50) NOT NULL,
+  status ENUM('PUBLISHED') NOT NULL DEFAULT 'PUBLISHED',
+  document_at DATETIME NOT NULL,
+  agreement_at DATETIME NULL,
+  agreement_status ENUM('ACCEPTED','REFUSED') NULL,
+  technical_assessment TEXT NULL,
+  final_notes TEXT NULL,
+  warranty_period VARCHAR(120) NULL,
+  warranty_start_at DATETIME NULL,
+  warranty_end_at DATETIME NULL,
+  warranty_remediation VARCHAR(160) NULL,
+  parts_json LONGTEXT NULL,
+  labor_json LONGTEXT NULL,
+  snapshot_json LONGTEXT NOT NULL,
+  signature_path VARCHAR(255) NULL,
+  file_path VARCHAR(255) NULL,
+  file_sha256 CHAR(64) NULL,
+  generated_at DATETIME NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL,
+  created_by BINARY(16) NOT NULL,
+  updated_by BINARY(16) NOT NULL,
+  UNIQUE KEY uq_sales_document_type (sales_sheet_id, type),
+  INDEX idx_sales_documents_property (property_id, status, is_active),
+  CONSTRAINT fk_sales_document_sheet FOREIGN KEY (sales_sheet_id) REFERENCES sales_sheets(id) ON DELETE CASCADE,
+  CONSTRAINT fk_sales_document_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS refresh_sessions (

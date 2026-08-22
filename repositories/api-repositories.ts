@@ -65,6 +65,9 @@ export const salesSheetRepository: SalesSheetRepository = {
   saveExpenses: (id, expenses) => shopApiRequest(`/sales-sheets/${id}/expenses`, { method: 'PUT', body: JSON.stringify({ expenses: expenses ?? [] }) }),
   saveSignature: (id, signature) => shopApiRequest(`/sales-sheets/${id}/signature`, { method: 'POST', body: JSON.stringify({ signature }) }),
   generatePdf: (id) => shopApiRequest(`/sales-sheets/${id}/pdf`, { method: 'POST' }),
+  listDocuments: (id) => shopApiRequest(`/sales-sheets/${id}/documents`),
+  generateDocument: (id, type, input = {}) => shopApiRequest(`/sales-sheets/${id}/documents/${type}`, { method: 'POST', body: JSON.stringify(input) }),
+  removeDocument: (id, type) => shopApiRequest(`/sales-sheets/${id}/documents/${type}`, { method: 'DELETE' }),
   remove: (id) => shopApiRequest(`/sales-sheets/${id}`, { method: 'DELETE' }),
 };
 export const appUpdateRepository: AppUpdateRepository = { get: () => apiRequest('/app-update', { authenticated: false }) };
