@@ -39,6 +39,7 @@ export default function SalesSheetsScreen() {
   const total = (state.data?.data ?? []).reduce((sum, item) => sum + item.totalPrice, 0);
   const remaining = (state.data?.data ?? []).reduce((sum, item) => sum + item.remainingDue, 0);
   const collected = (state.data?.data ?? []).reduce((sum, item) => sum + item.receivedAmount, 0);
+  const totalReceivables = collected + remaining;
   const expenses = (state.data?.data ?? []).reduce((sum, item) => sum + (item.expenseTotal ?? 0), 0);
   const gshopNet = (state.data?.data ?? []).reduce((sum, item) => sum + (item.gshopNet ?? item.totalPrice - (item.expenseTotal ?? 0)), 0);
   const canViewFinancials = hasPermission('financials.view');
@@ -47,13 +48,28 @@ export default function SalesSheetsScreen() {
   return <Screen header={<AppHeader title="Fișe de vânzări" />} refreshing={state.refreshing} onRefresh={() => void state.reload(true)}>
     <View style={styles.stack}>
       <LinearGradient colors={isDark ? ['#0E2A60', '#075CFF'] : ['#1246B8', '#087BFF']} style={[styles.hero, compact && styles.heroCompact]}>
-        <View style={styles.heroIcon}><Ionicons name="receipt-outline" size={31} color="#FFFFFF" /></View>
-        <View style={styles.heroCopy}><AppText variant="title" style={styles.white}>Fișe de vânzări</AppText><AppText style={styles.heroText}>Emiți documentul, îl semnează clientul și deschizi PDF-ul dintr-un singur loc.</AppText></View>
-        {hasPermission('sales_sheets.create') ? <Button label="Fișă nouă" icon="add-circle-outline" onPress={() => router.push('/shop/sales-sheets/new' as never)} style={compact ? styles.fullButton : undefined} /> : null}
+        <View style={styles.heroContent}>
+          <View style={[styles.heroIcon, compact && styles.heroIconCompact]}><Ionicons name="receipt-outline" size={compact ? 25 : 29} color="#FFFFFF" /></View>
+          <View style={styles.heroCopy}>
+            <AppText variant={compact ? 'heading' : 'title'} style={styles.white}>Fișe de vânzări</AppText>
+            <AppText variant={compact ? 'caption' : 'body'} style={styles.heroText}>Emiți documentul, îl semnează clientul și deschizi PDF-ul dintr-un singur loc.</AppText>
+          </View>
+        </View>
+        {hasPermission('sales_sheets.create') ? <Button compact={compact} label="Fișă nouă" icon="add-circle-outline" onPress={() => router.push('/shop/sales-sheets/new' as never)} style={compact ? styles.fullButton : undefined} /> : null}
       </LinearGradient>
 
       <View style={[styles.metrics, compact && styles.metricsCompact]}>
-        {canViewFinancials ? <><Metric icon="cash-outline" label="Bani încasați" value={money(collected, 'RON')} color={palette.success} /><Metric icon="receipt-outline" label="Cheltuieli" value={money(expenses, 'RON')} color={palette.warning} /><Metric icon="wallet-outline" label="Rămâne G-Shop" value={money(gshopNet, 'RON')} color={gshopNet >= 0 ? colors.primary : palette.danger} /></> : <><Metric icon="documents-outline" label="Fișe emise" value={String(state.data?.total ?? 0)} color={colors.primary} /><Metric icon="cash-outline" label="Total vânzări" value={money(total, 'RON')} color={palette.success} /><Metric icon="time-outline" label="Rest de încasat" value={money(remaining, 'RON')} color={remaining > 0 ? palette.warning : palette.success} /></>}
+        {canViewFinancials ? <>
+          <Metric compact={compact} icon="trending-up-outline" label="Total încasări" value={money(totalReceivables, 'RON')} color={colors.primary} />
+          <Metric compact={compact} icon="cash-outline" label="Bani încasați" value={money(collected, 'RON')} color={palette.success} />
+          <Metric compact={compact} icon="time-outline" label="Bani de încasat" value={money(remaining, 'RON')} color={remaining > 0 ? palette.warning : palette.success} />
+          <Metric compact={compact} icon="receipt-outline" label="Cheltuieli" value={money(expenses, 'RON')} color={palette.danger} />
+          <Metric compact={compact} wideOnCompact icon="wallet-outline" label="Rămâne G-Shop" value={money(gshopNet, 'RON')} color={gshopNet >= 0 ? colors.primary : palette.danger} />
+        </> : <>
+          <Metric compact={compact} icon="documents-outline" label="Fișe emise" value={String(state.data?.total ?? 0)} color={colors.primary} />
+          <Metric compact={compact} icon="cash-outline" label="Total vânzări" value={money(total, 'RON')} color={palette.success} />
+          <Metric compact={compact} wideOnCompact icon="time-outline" label="Rest de încasat" value={money(remaining, 'RON')} color={remaining > 0 ? palette.warning : palette.success} />
+        </>}
       </View>
 
       <Input label="Caută rapid" icon="search-outline" value={query} onChangeText={setQuery} placeholder="Număr, client, telefon sau produs" />
@@ -71,11 +87,44 @@ export default function SalesSheetsScreen() {
   </Screen>;
 }
 
-function Metric({ icon, label, value, color }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string; color: string }) { const { colors } = useAppTheme(); return <Card style={styles.metric}><View style={[styles.metricIcon, { backgroundColor: `${color}16` }]}><Ionicons name={icon} size={21} color={color} /></View><AppText variant="heading" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.68} style={{ color: colors.text }}>{value}</AppText><AppText variant="caption" muted>{label}</AppText></Card>; }
+function Metric({ compact, wideOnCompact = false, icon, label, value, color }: {
+  compact: boolean;
+  wideOnCompact?: boolean;
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+  color: string;
+}) {
+  const { colors } = useAppTheme();
+  return <Card style={[
+    styles.metric,
+    compact && styles.metricCompact,
+    compact && wideOnCompact && styles.metricCompactWide,
+  ]}>
+    <View style={[styles.metricIcon, { backgroundColor: `${color}16` }]}><Ionicons name={icon} size={19} color={color} /></View>
+    <View style={styles.metricCopy}>
+      <AppText variant="heading" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.68} style={{ color: colors.text }}>{value}</AppText>
+      <AppText variant="caption" muted>{label}</AppText>
+    </View>
+  </Card>;
+}
 
 const styles = StyleSheet.create({
-  stack: { width: '100%', maxWidth: 980, alignSelf: 'center', gap: spacing.lg }, hero: { padding: spacing.xl, minHeight: 132, borderRadius: radius.xl, flexDirection: 'row', alignItems: 'center', gap: spacing.lg, overflow: 'hidden' }, heroCompact: { flexDirection: 'column', alignItems: 'stretch' }, heroIcon: { width: 58, height: 58, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' }, heroCopy: { minWidth: 0, flex: 1, gap: spacing.xs }, white: { color: '#FFFFFF' }, heroText: { color: '#DDE9FF' }, fullButton: { width: '100%' },
-  metrics: { flexDirection: 'row', gap: spacing.md }, metricsCompact: { flexDirection: 'column' }, metric: { minWidth: 180, flex: 1, gap: spacing.xs }, metricIcon: { width: 42, height: 42, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.xs }, list: { gap: spacing.sm },
+  stack: { width: '100%', maxWidth: 980, alignSelf: 'center', gap: spacing.md },
+  hero: { padding: spacing.lg, minHeight: 124, borderRadius: radius.xl, flexDirection: 'row', alignItems: 'center', gap: spacing.lg, overflow: 'hidden' },
+  heroCompact: { minHeight: 0, flexDirection: 'column', alignItems: 'stretch', gap: spacing.md },
+  heroContent: { minWidth: 0, flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  heroIcon: { width: 52, height: 52, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+  heroIconCompact: { width: 44, height: 44, borderRadius: radius.md },
+  heroCopy: { minWidth: 0, flex: 1, gap: spacing.xs }, white: { color: '#FFFFFF' }, heroText: { color: '#DDE9FF' }, fullButton: { width: '100%' },
+  metrics: { flexDirection: 'row', gap: spacing.sm },
+  metricsCompact: { flexWrap: 'wrap' },
+  metric: { minWidth: 160, flex: 1, gap: spacing.sm, padding: spacing.md },
+  metricCompact: { minWidth: 0, flex: 0, flexGrow: 1, flexBasis: '46%', minHeight: 106, justifyContent: 'space-between' },
+  metricCompactWide: { flexBasis: '100%', minHeight: 70, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start' },
+  metricIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  metricCopy: { minWidth: 0, flex: 1 },
+  list: { gap: spacing.sm },
   sheetCard: { minHeight: 96, padding: spacing.md, borderWidth: 1, borderRadius: radius.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.md }, sheetIcon: { width: 50, height: 50, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' }, sheetCopy: { minWidth: 0, flex: 1, gap: 4 }, sheetTop: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm }, emitted: { minHeight: 25, paddingHorizontal: spacing.sm, borderRadius: radius.pill, flexDirection: 'row', alignItems: 'center', gap: 4 }, meta: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
   empty: { minHeight: 260, alignItems: 'center', justifyContent: 'center', gap: spacing.md }, emptyIcon: { width: 66, height: 66, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }, center: { textAlign: 'center', maxWidth: 440 },
 });
