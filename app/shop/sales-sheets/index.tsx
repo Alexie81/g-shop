@@ -74,14 +74,21 @@ export default function SalesSheetsScreen() {
 
       <Input label="Caută rapid" icon="search-outline" value={query} onChangeText={setQuery} placeholder="Număr, client, telefon sau produs" />
 
-      {state.loading ? <LoadingState rows={5} /> : state.error ? <ErrorState message={state.error.message} onRetry={() => void state.reload()} /> : sheets.length ? <View style={styles.list}>{sheets.map((sheet) => <Pressable key={sheet.id} accessibilityRole="button" onPress={() => router.push(`/shop/sales-sheets/${sheet.id}` as never)} style={({ pressed }) => [styles.sheetCard, { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.76 : 1 }]}>
-        <View style={[styles.sheetIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="document-text-outline" size={24} color={colors.primary} /></View>
+      {state.loading ? <LoadingState rows={5} /> : state.error ? <ErrorState message={state.error.message} onRetry={() => void state.reload()} /> : sheets.length ? <View style={styles.list}>{sheets.map((sheet) => <Pressable key={sheet.id} accessibilityRole="button" onPress={() => router.push(`/shop/sales-sheets/${sheet.id}` as never)} style={({ pressed }) => [styles.sheetCard, { backgroundColor: colors.surface, borderColor: colors.border, shadowColor: colors.shadow, shadowOpacity: isDark ? 0.14 : 0.07, opacity: pressed ? 0.76 : 1 }]}>
+        <View style={[styles.sheetAccent, { backgroundColor: sheet.paymentStatus === 'PAID' ? palette.success : palette.warning }]} />
+        <View style={[styles.sheetIcon, { backgroundColor: colors.primarySoft, borderColor: `${colors.primary}28` }]}><Ionicons name="document-text-outline" size={22} color={colors.primary} /></View>
         <View style={styles.sheetCopy}>
-          <View style={styles.sheetTop}><AppText variant="heading" numberOfLines={1}>{sheet.number}</AppText><View style={[styles.emitted, { backgroundColor: `${palette.success}16` }]}><Ionicons name="checkmark-circle" size={14} color={palette.success} /><AppText variant="caption" style={{ color: palette.success, fontWeight: '900' }}>DOCUMENT EMIS</AppText></View><View style={[styles.emitted, { backgroundColor: `${sheet.paymentStatus === 'PAID' ? palette.success : palette.warning}16` }]}><Ionicons name={sheet.paymentStatus === 'PAID' ? 'checkmark-circle' : 'time'} size={14} color={sheet.paymentStatus === 'PAID' ? palette.success : palette.warning} /><AppText variant="caption" style={{ color: sheet.paymentStatus === 'PAID' ? palette.success : palette.warning, fontWeight: '900' }}>{sheet.paymentStatus === 'PAID' ? 'ACHITAT' : 'NEACHITAT'}</AppText></View></View>
-          <AppText variant="label" numberOfLines={1}>{sheet.customerName} · {sheet.productName}</AppText>
-          <View style={styles.meta}><AppText variant="caption" muted>{formatDate(sheet.documentAt, true)}</AppText><AppText variant="caption" style={{ color: colors.primary, fontWeight: '900' }}>{money(sheet.totalPrice, sheet.currencyCode)}</AppText></View>
+          <View style={styles.sheetTop}>
+            <AppText variant="heading" numberOfLines={1} style={styles.sheetNumber}>{sheet.number}</AppText>
+            <View style={styles.amountRow}><AppText variant="label" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72} style={{ color: colors.primary }}>{money(sheet.totalPrice, sheet.currencyCode)}</AppText><View style={[styles.chevron, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="chevron-forward" size={16} color={colors.textMuted} /></View></View>
+          </View>
+          <AppText variant="label" numberOfLines={1}>{sheet.customerName}</AppText>
+          <AppText variant="caption" muted numberOfLines={1}>{sheet.productName}</AppText>
+          <View style={styles.sheetBottom}>
+            <View style={styles.dateRow}><Ionicons name="calendar-outline" size={13} color={colors.textMuted} /><AppText variant="caption" muted>{formatDate(sheet.documentAt, true)}</AppText></View>
+            <View style={styles.statusRow}><View style={[styles.emitted, { backgroundColor: `${palette.success}16` }]}><Ionicons name="checkmark-circle" size={13} color={palette.success} /><AppText variant="caption" style={{ color: palette.success, fontWeight: '900' }}>EMIS</AppText></View><View style={[styles.emitted, { backgroundColor: `${sheet.paymentStatus === 'PAID' ? palette.success : palette.warning}16` }]}><Ionicons name={sheet.paymentStatus === 'PAID' ? 'checkmark-circle' : 'time'} size={13} color={sheet.paymentStatus === 'PAID' ? palette.success : palette.warning} /><AppText variant="caption" style={{ color: sheet.paymentStatus === 'PAID' ? palette.success : palette.warning, fontWeight: '900' }}>{sheet.paymentStatus === 'PAID' ? 'ACHITAT' : 'NEACHITAT'}</AppText></View></View>
+          </View>
         </View>
-        <Ionicons name="chevron-forward" size={21} color={colors.textMuted} />
       </Pressable>)}</View> : <Card style={styles.empty}><View style={[styles.emptyIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="receipt-outline" size={30} color={colors.primary} /></View><AppText variant="heading">Nu există fișe de vânzări</AppText><AppText muted style={styles.center}>Prima fișă se completează în câțiva pași și este emisă imediat în format PDF.</AppText>{hasPermission('sales_sheets.create') ? <Button label="Creează prima fișă" icon="add-circle-outline" onPress={() => router.push('/shop/sales-sheets/new' as never)} /> : null}</Card>}
     </View>
   </Screen>;
@@ -125,6 +132,17 @@ const styles = StyleSheet.create({
   metricIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   metricCopy: { minWidth: 0, flex: 1 },
   list: { gap: spacing.sm },
-  sheetCard: { minHeight: 96, padding: spacing.md, borderWidth: 1, borderRadius: radius.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.md }, sheetIcon: { width: 50, height: 50, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' }, sheetCopy: { minWidth: 0, flex: 1, gap: 4 }, sheetTop: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm }, emitted: { minHeight: 25, paddingHorizontal: spacing.sm, borderRadius: radius.pill, flexDirection: 'row', alignItems: 'center', gap: 4 }, meta: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
+  sheetCard: { position: 'relative', minHeight: 112, padding: spacing.md, borderWidth: 1, borderRadius: radius.lg, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, overflow: 'hidden', shadowOffset: { width: 0, height: 6 }, shadowRadius: 16, elevation: 2 },
+  sheetAccent: { position: 'absolute', left: 0, top: 14, bottom: 14, width: 3, borderTopRightRadius: 3, borderBottomRightRadius: 3 },
+  sheetIcon: { width: 46, height: 46, borderWidth: 1, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  sheetCopy: { minWidth: 0, flex: 1, gap: 3 },
+  sheetTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  sheetNumber: { minWidth: 0, flex: 1 },
+  amountRow: { maxWidth: '48%', flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  chevron: { width: 28, height: 28, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  sheetBottom: { marginTop: spacing.xs, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  dateRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  emitted: { minHeight: 22, paddingHorizontal: spacing.sm, borderRadius: radius.pill, flexDirection: 'row', alignItems: 'center', gap: 3 },
   empty: { minHeight: 260, alignItems: 'center', justifyContent: 'center', gap: spacing.md }, emptyIcon: { width: 66, height: 66, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }, center: { textAlign: 'center', maxWidth: 440 },
 });
