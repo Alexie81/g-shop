@@ -1,7 +1,6 @@
 import { AppHeader } from '@/components/layout/AppHeader';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
 import { Screen } from '@/components/ui/Screen';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProperty } from '@/contexts/PropertyContext';
@@ -27,6 +26,8 @@ export default function ShopHomeScreen() {
   const { colors, isDark } = useAppTheme();
   const { width } = useWindowDimensions();
   const compact = width < 650;
+  const overviewCompact = width < 900;
+  const actionsStacked = width < 360;
   const canView = hasPermission('sales_sheets.view');
   const canViewFinancials = hasPermission('financials.view');
   const state = useAsyncData<Paginated<SalesSheet>>(
@@ -73,33 +74,40 @@ export default function ShopHomeScreen() {
       </LinearGradient>
 
       {canView ? <View style={styles.section}>
-        <View>
-          <AppText variant="heading">Overview financiar</AppText>
-          <AppText variant="caption" muted>Situația banilor din fișele de vânzare</AppText>
-        </View>
-        <View style={[styles.metrics, compact && styles.metricsCompact]}>
+        <SectionHeading
+          icon="analytics-outline"
+          title="Overview financiar"
+          subtitle="Situația banilor din fișele de vânzare"
+          color={colors.primary}
+        />
+        <View style={[styles.overviewSurface, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={styles.metrics}>
           {canViewFinancials ? <>
-            <Metric compact={compact} icon="trending-up-outline" label="Total încasări" value={money(totalReceivables)} color={colors.primary} />
-            <Metric compact={compact} icon="cash-outline" label="Bani încasați" value={money(collected)} color={palette.success} />
-            <Metric compact={compact} icon="time-outline" label="Bani de încasat" value={money(remaining)} color={palette.warning} />
-            <Metric compact={compact} icon="receipt-outline" label="Cheltuieli" value={money(expenses)} color={palette.danger} />
-            <Metric compact={compact} wideOnCompact icon="wallet-outline" label="Rămâne G-Shop" value={money(gshopNet)} color={gshopNet >= 0 ? colors.primary : palette.danger} />
+            <Metric compact={overviewCompact} icon="trending-up-outline" label="Total încasări" value={money(totalReceivables)} color={colors.primary} />
+            <Metric compact={overviewCompact} icon="cash-outline" label="Bani încasați" value={money(collected)} color={palette.success} />
+            <Metric compact={overviewCompact} icon="time-outline" label="Bani de încasat" value={money(remaining)} color={palette.warning} />
+            <Metric compact={overviewCompact} icon="receipt-outline" label="Cheltuieli" value={money(expenses)} color={palette.danger} />
+            <Metric compact={overviewCompact} wideOnCompact icon="wallet-outline" label="Rămâne G-Shop" value={money(gshopNet)} color={gshopNet >= 0 ? colors.primary : palette.danger} />
           </> : <>
-            <Metric compact={compact} icon="receipt-outline" label="Fișe emise" value={String(state.data?.total ?? 0)} color={colors.primary} />
-            <Metric compact={compact} icon="cash-outline" label="Total vânzări" value={money(salesTotal)} color={palette.success} />
-            <Metric compact={compact} wideOnCompact icon="time-outline" label="De încasat" value={money(remaining)} color={palette.warning} />
+            <Metric compact={overviewCompact} icon="receipt-outline" label="Fișe emise" value={String(state.data?.total ?? 0)} color={colors.primary} />
+            <Metric compact={overviewCompact} icon="cash-outline" label="Total vânzări" value={money(salesTotal)} color={palette.success} />
+            <Metric compact={overviewCompact} wideOnCompact icon="time-outline" label="De încasat" value={money(remaining)} color={palette.warning} />
           </>}
+          </View>
         </View>
       </View> : null}
 
       {canView ? <View style={styles.section}>
-        <View>
-          <AppText variant="heading">Acțiuni rapide</AppText>
-          <AppText variant="caption" muted>Tot ce ai nevoie pentru documentele de vânzare</AppText>
-        </View>
-        <View style={[styles.quickGrid, compact && styles.quickGridCompact]}>
+        <SectionHeading
+          icon="flash-outline"
+          title="Acțiuni rapide"
+          subtitle="Tot ce ai nevoie pentru documentele de vânzare"
+          color={palette.purple}
+        />
+        <View style={[styles.quickGrid, actionsStacked && styles.quickGridStacked]}>
           {hasPermission('sales_sheets.create') ? <QuickAction
             compact={compact}
+            stacked={actionsStacked}
             title="Fișă de vânzare nouă"
             description="Completează, semnează și emite PDF-ul"
             icon="add-circle-outline"
@@ -108,6 +116,7 @@ export default function ShopHomeScreen() {
           /> : null}
           <QuickAction
             compact={compact}
+            stacked={actionsStacked}
             title="Fișe de vânzări"
             description="Vezi documentele emise și restul de încasat"
             icon="documents-outline"
@@ -120,6 +129,24 @@ export default function ShopHomeScreen() {
   </Screen>;
 }
 
+function SectionHeading({ icon, title, subtitle, color }: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  subtitle: string;
+  color: string;
+}) {
+  const { isDark } = useAppTheme();
+  return <View style={styles.sectionHeading}>
+    <View style={[styles.sectionHeadingIcon, { backgroundColor: `${color}${isDark ? '24' : '12'}` }]}>
+      <Ionicons name={icon} size={19} color={color} />
+    </View>
+    <View style={styles.copy}>
+      <AppText variant="heading">{title}</AppText>
+      <AppText variant="caption" muted>{subtitle}</AppText>
+    </View>
+  </View>;
+}
+
 function Metric({ compact, wideOnCompact = false, icon, label, value, color }: {
   compact: boolean;
   wideOnCompact?: boolean;
@@ -128,23 +155,36 @@ function Metric({ compact, wideOnCompact = false, icon, label, value, color }: {
   value: string;
   color: string;
 }) {
-  return <Card style={[
+  const { isDark } = useAppTheme();
+  const horizontal = compact && wideOnCompact;
+  return <View style={[
     styles.metric,
     compact && styles.metricCompact,
-    compact && wideOnCompact && styles.metricCompactWide,
+    horizontal && styles.metricCompactWide,
+    {
+      backgroundColor: `${color}${isDark ? '12' : '0A'}`,
+      borderColor: `${color}${isDark ? '26' : '1C'}`,
+    },
   ]}>
-    <View style={[styles.metricIcon, { backgroundColor: `${color}16` }]}>
-      <Ionicons name={icon} size={19} color={color} />
+    <View style={[styles.metricTop, horizontal && styles.metricTopHorizontal]}>
+      <View style={[styles.metricIcon, { backgroundColor: `${color}${isDark ? '24' : '14'}` }]}>
+        <Ionicons name={icon} size={17} color={color} />
+      </View>
+      <AppText variant="caption" muted numberOfLines={1} style={styles.metricLabel}>{label}</AppText>
     </View>
-    <View style={styles.metricCopy}>
-      <AppText variant="heading" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.68}>{value}</AppText>
-      <AppText variant="caption" muted>{label}</AppText>
-    </View>
-  </Card>;
+    <AppText
+      variant="heading"
+      numberOfLines={1}
+      adjustsFontSizeToFit
+      minimumFontScale={0.7}
+      style={[styles.metricValue, horizontal && styles.metricValueHorizontal]}
+    >{value}</AppText>
+  </View>;
 }
 
-function QuickAction({ compact, title, description, icon, color, onPress }: {
+function QuickAction({ compact, stacked, title, description, icon, color, onPress }: {
   compact: boolean;
+  stacked: boolean;
   title: string;
   description: string;
   icon: keyof typeof Ionicons.glyphMap;
@@ -154,28 +194,36 @@ function QuickAction({ compact, title, description, icon, color, onPress }: {
   const { colors, isDark } = useAppTheme();
   return <Pressable
     accessibilityRole="button"
+    accessibilityLabel={title}
+    accessibilityHint={description}
     onPress={onPress}
     style={({ pressed }) => [
       styles.quickCard,
-      compact && styles.quickCardCompact,
+      compact && !stacked && styles.quickCardTile,
+      stacked && styles.quickCardStacked,
       {
-        backgroundColor: colors.surface,
-        borderColor: `${color}55`,
-        shadowColor: colors.shadow,
-        shadowOpacity: isDark ? 0.12 : 0.08,
-        opacity: pressed ? 0.78 : 1,
+        backgroundColor: isDark
+          ? `${color}${pressed ? '22' : '12'}`
+          : (pressed ? `${color}12` : colors.surface),
+        borderColor: `${color}${pressed ? '55' : (isDark ? '2C' : '20')}`,
+        opacity: pressed ? 0.86 : 1,
+        transform: [{ scale: pressed ? 0.985 : 1 }],
       },
     ]}
   >
-    <View style={[styles.quickIcon, { backgroundColor: `${color}18` }]}>
-      <Ionicons name={icon} size={22} color={color} />
+    <View style={[styles.quickIcon, compact && styles.quickIconCompact, { backgroundColor: `${color}${isDark ? '26' : '14'}` }]}>
+      <Ionicons name={icon} size={compact ? 20 : 22} color={color} />
     </View>
     <View style={styles.copy}>
-      <AppText variant="label">{title}</AppText>
-      <AppText variant="caption" muted numberOfLines={1}>{description}</AppText>
+      <AppText variant="label" numberOfLines={compact && !stacked ? 2 : 1}>{title}</AppText>
+      <AppText variant="caption" muted numberOfLines={compact && !stacked ? 2 : 1}>{description}</AppText>
     </View>
-    <View style={[styles.quickArrow, { backgroundColor: colors.surfaceMuted }]}>
-      <Ionicons name="arrow-forward" size={17} color={color} />
+    <View style={[
+      styles.quickArrow,
+      compact && !stacked && styles.quickArrowTile,
+      { backgroundColor: isDark ? `${color}22` : colors.surfaceMuted },
+    ]}>
+      <Ionicons name="arrow-forward" size={16} color={color} />
     </View>
   </Pressable>;
 }
@@ -236,73 +284,121 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   section: {
+    gap: 10,
+  },
+  sectionHeading: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing.sm,
+  },
+  sectionHeadingIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  overviewSurface: {
+    padding: spacing.sm,
+    borderWidth: 1,
+    borderRadius: radius.xl,
   },
   metrics: {
     flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  metricsCompact: {
     flexWrap: 'wrap',
+    gap: spacing.sm,
   },
   metric: {
-    minWidth: 180,
-    flex: 1,
-    gap: spacing.sm,
+    minWidth: 150,
+    minHeight: 88,
+    flexGrow: 1,
+    flexBasis: 150,
+    justifyContent: 'space-between',
+    gap: spacing.xs,
     padding: spacing.md,
+    borderWidth: 1,
+    borderRadius: radius.md,
   },
   metricCompact: {
     minWidth: 0,
     flex: 0,
     flexGrow: 1,
     flexBasis: '46%',
-    minHeight: 106,
-    justifyContent: 'space-between',
+    minHeight: 88,
   },
   metricCompactWide: {
     flexBasis: '100%',
-    minHeight: 70,
+    minHeight: 62,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  metricTop: {
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  metricTopHorizontal: {
+    flex: 1,
   },
   metricIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  metricCopy: {
+  metricLabel: {
     minWidth: 0,
-    flex: 1,
+    flexShrink: 1,
+    fontWeight: '700',
+  },
+  metricValue: {
+    fontSize: 17,
+    lineHeight: 22,
+    letterSpacing: -0.25,
+  },
+  metricValueHorizontal: {
+    maxWidth: '58%',
+    textAlign: 'right',
   },
   quickGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
   },
-  quickGridCompact: {
+  quickGridStacked: {
     flexDirection: 'column',
   },
   quickCard: {
     minWidth: 260,
-    minHeight: 84,
-    flex: 1,
+    minHeight: 80,
+    flexGrow: 1,
+    flexBasis: 320,
     padding: spacing.md,
     borderWidth: 1,
     borderRadius: radius.lg,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 16,
-    elevation: 2,
   },
-  quickCardCompact: {
+  quickCardTile: {
+    minWidth: 0,
+    minHeight: 112,
+    flexBasis: '46%',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  quickCardStacked: {
     minWidth: 0,
     width: '100%',
-    minHeight: 72,
-    flex: 0,
+    minHeight: 68,
+    flexBasis: '100%',
     paddingVertical: spacing.sm,
   },
   quickIcon: {
@@ -312,11 +408,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  quickIconCompact: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+  },
   quickArrow: {
-    width: 32,
-    height: 32,
-    borderRadius: 11,
+    width: 30,
+    height: 30,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  quickArrowTile: {
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.md,
   },
 });
