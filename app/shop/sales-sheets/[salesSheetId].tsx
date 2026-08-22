@@ -1,5 +1,6 @@
 import { AppHeader } from '@/components/layout/AppHeader';
 import { SalesPaymentStatusControl } from '@/components/sales/SalesPaymentStatusControl';
+import { SalesDocumentsPanel } from '@/components/sales/SalesDocumentsPanel';
 import { QuickSignatureModal } from '@/components/service-sheets/ScanServiceSheetModal';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
@@ -195,6 +196,8 @@ export default function SalesSheetDetailsScreen() {
               <Button compact variant="outline" label="Conversație" icon="chatbubble-ellipses-outline" onPress={() => void openWhatsAppConversation()} style={[styles.heroAction, styles.whatsAppConversationAction]} />
             </View>
           </Card>
+
+          <SalesDocumentsPanel sheet={sheet} onGenerated={() => state.reload(true)} />
 
           <View style={[styles.metrics, compact && styles.metricsCompact]}>
             <Metric compact={compact} label="Total" value={money(sheet.totalPrice, sheet.currencyCode)} color={colors.primary} />
