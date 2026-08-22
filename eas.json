@@ -21,7 +21,8 @@
       "autoIncrement": true,
       "env": {
         "APP_ENV": "production",
-        "EXPO_PUBLIC_API_URL": "https://reparatiicalculatoare-bucuresti.ro/app-api"
+        "EXPO_PUBLIC_API_URL": "https://reparatiicalculatoare-bucuresti.ro/app-api",
+        "EXPO_PUBLIC_SHOP_API_URL": "https://calculatoareprofesionale.ro/app-api"
       },
       "android": {
         "buildType": "apk"

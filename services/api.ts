@@ -2,6 +2,7 @@ import { AuthSession } from '@/types';
 import { secureSessionStorage } from '@/services/storage';
 
 const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'https://reparatiicalculatoare-bucuresti.ro/app-api').replace(/\/$/, '');
+const SHOP_API_URL = (process.env.EXPO_PUBLIC_SHOP_API_URL ?? 'https://calculatoareprofesionale.ro/app-api').replace(/\/$/, '');
 let currentSession: AuthSession | null = null;
 let persistSession = false;
 let refreshing: Promise<AuthSession | null> | null = null;
@@ -47,7 +48,7 @@ async function refreshSession() {
   return refreshing;
 }
 
-export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+async function requestFrom<T>(baseUrl: string, path: string, options: RequestOptions = {}): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   const headers = new Headers(options.headers);
@@ -58,11 +59,11 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   try {
-    const response = await fetch(`${API_URL}${path}`, { ...options, headers, signal: controller.signal });
+    const response = await fetch(`${baseUrl}${path}`, { ...options, headers, signal: controller.signal });
     if (response.status === 401 && options.authenticated !== false) {
       if (options.retry !== false) {
         const refreshed = await refreshSession();
-        if (refreshed) return apiRequest<T>(path, { ...options, retry: false });
+        if (refreshed) return requestFrom<T>(baseUrl, path, { ...options, retry: false });
       }
       persistSession = false;
       sessionManager.set(null);
@@ -80,4 +81,12 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 }
 
-export { API_URL };
+export function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  return requestFrom<T>(API_URL, path, options);
+}
+
+export function shopApiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  return requestFrom<T>(SHOP_API_URL, path, options);
+}
+
+export { API_URL, SHOP_API_URL };

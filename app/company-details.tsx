@@ -12,7 +12,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { useBackToAdministration } from '@/hooks/useBackToAdministration';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
-import { companyDetailsRepository } from '@/repositories/api-repositories';
+import { companyDetailsRepository, shopCompanyDetailsRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { CompanyDetails } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
@@ -39,7 +39,9 @@ export default function CompanyDetailsScreen() {
   const { width } = useWindowDimensions();
   const compact = width < 680;
   const propertyId = activeProperty?.id ?? '';
-  const state = useAsyncData<CompanyDetails[]>(() => propertyId ? companyDetailsRepository.list(propertyId) : Promise.resolve([]), [propertyId]);
+  const isShop = activeProperty?.type === 'SHOP';
+  const companyRepository = isShop ? shopCompanyDetailsRepository : companyDetailsRepository;
+  const state = useAsyncData<CompanyDetails[]>(() => propertyId ? companyRepository.list(propertyId) : Promise.resolve([]), [companyRepository, propertyId]);
   useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -106,10 +108,10 @@ export default function CompanyDetailsScreen() {
     try {
       const payload = { ...form, legalName: form.legalName.trim(), iban: form.iban.replace(/\s/g, '').toUpperCase() };
       let result = creating
-        ? await companyDetailsRepository.create(propertyId, payload)
-        : await companyDetailsRepository.update(selectedCompany!.id, payload);
-      if (stampRemoved && result.stampUrl) result = await companyDetailsRepository.removeStamp(result.id);
-      if (stampData) result = await companyDetailsRepository.saveStamp(result.id, stampData);
+        ? await companyRepository.create(propertyId, payload)
+        : await companyRepository.update(selectedCompany!.id, payload);
+      if (stampRemoved && result.stampUrl) result = await companyRepository.removeStamp(result.id);
+      if (stampData) result = await companyRepository.saveStamp(result.id, stampData);
       setCreating(false);
       setSelectedId(result.id);
       setForm(formFromCompany(result));
@@ -129,7 +131,7 @@ export default function CompanyDetailsScreen() {
     if (company.isDefault || activatingId) return;
     setActivatingId(company.id);
     try {
-      await companyDetailsRepository.setDefault(company.id, propertyId);
+      await companyRepository.setDefault(company.id, propertyId);
       await state.reload(true);
       showToast(`${company.legalName} este acum firma folosită pentru documentele noi.`, 'success');
     } catch (error) {
