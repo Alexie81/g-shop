@@ -67,6 +67,7 @@ export const salesSheetRepository: SalesSheetRepository = {
   generatePdf: (id) => shopApiRequest(`/sales-sheets/${id}/pdf`, { method: 'POST' }),
   listDocuments: (id) => shopApiRequest(`/sales-sheets/${id}/documents`),
   generateDocument: (id, type, input = {}) => shopApiRequest(`/sales-sheets/${id}/documents/${type}`, { method: 'POST', body: JSON.stringify(input) }),
+  generateDossier: (id) => shopApiRequest(`/sales-sheets/${id}/dossier`, { method: 'POST' }),
   removeDocument: (id, type) => shopApiRequest(`/sales-sheets/${id}/documents/${type}`, { method: 'DELETE' }),
   remove: (id) => shopApiRequest(`/sales-sheets/${id}`, { method: 'DELETE' }),
 };

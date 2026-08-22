@@ -2086,6 +2086,9 @@ try {
     if($method==='GET'&&path_match('/sales-sheets/{id}/documents',$path,$params)){
         $user=require_permission('sales_sheets.view');$sheet=get_sales_sheet($params['id']);ensure_property($sheet['propertyId'],$user);respond(sales_document_slots($sheet['id'],$user));
     }
+    if($method==='POST'&&path_match('/sales-sheets/{id}/dossier',$path,$params)){
+        $user=require_permission('sales_sheets.view');$sheet=get_sales_sheet($params['id']);ensure_property($sheet['propertyId'],$user);sales_document_slots($sheet['id'],$user);require_once __DIR__.'/src/sales_dossier_pdf.php';$dossier=generate_sales_dossier_pdf($sheet['id']);audit_log('SALES_DOSSIER_GENERATED','sales_documents','Dosar PDF generat pentru '.$sheet['number'],'SalesSheet',$sheet['id'],$sheet['propertyId'],null,['fileName'=>$dossier['fileName'],'sha256'=>$dossier['sha256'],'documentCount'=>$dossier['documentCount']],$user);respond($dossier,201);
+    }
     if($method==='POST'&&path_match('/sales-sheets/{id}/documents/{type}',$path,$params)){
         $user=require_permission('sales_sheets.update');require_permission('financials.view');$sheet=get_sales_sheet($params['id']);ensure_property($sheet['propertyId'],$user);$type=validated_sales_document_type($params['type']);$document=generate_sales_document_record($sheet['id'],$type,json_body(),$user);audit_log('SALES_DOCUMENT_GENERATED','sales_documents',$document['label'].' generat pentru '.$sheet['number'],'SalesDocument',$document['id']??null,$sheet['propertyId'],null,['type'=>$type,'number'=>$document['number']??null],$user);respond($document,201);
     }

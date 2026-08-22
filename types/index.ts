@@ -155,6 +155,14 @@ export interface SalesDocument {
   url?: string;
 }
 
+export interface SalesDossier {
+  url: string;
+  fileName: string;
+  generatedAt: ISODate;
+  sha256: string;
+  documentCount: number;
+}
+
 export interface GenerateSalesDocumentInput {
   documentAt?: ISODate;
   agreementAt?: ISODate;

@@ -1,4 +1,4 @@
-import { AppUpdateInfo, AuditLog, AuthSession, Client, ClientExpense, ClientExpenseDeleteResult, ClientFinancialOverview, ClientParticipant, Collaborator, CompanyDetails, CreateClientExpensePayload, CreateSalesSheetPayload, DashboardMetrics, GenerateSalesDocumentInput, GenerateServiceDocumentInput, Paginated, Permission, Property, SalesDocument, SalesDocumentType, SalesPaymentStatus, SalesSheet, ServiceDocument, ServiceDocumentRegisterRow, ServiceDocumentType, ServiceSheet, ServiceSheetPdf, Technician, UpdateClientExpensePayload, UpdateClientFinancialsPayload, User, UUID, WhatsAppMessage } from '@/types';
+import { AppUpdateInfo, AuditLog, AuthSession, Client, ClientExpense, ClientExpenseDeleteResult, ClientFinancialOverview, ClientParticipant, Collaborator, CompanyDetails, CreateClientExpensePayload, CreateSalesSheetPayload, DashboardMetrics, GenerateSalesDocumentInput, GenerateServiceDocumentInput, Paginated, Permission, Property, SalesDocument, SalesDocumentType, SalesDossier, SalesPaymentStatus, SalesSheet, ServiceDocument, ServiceDocumentRegisterRow, ServiceDocumentType, ServiceSheet, ServiceSheetPdf, Technician, UpdateClientExpensePayload, UpdateClientFinancialsPayload, User, UUID, WhatsAppMessage } from '@/types';
 
 export interface AuthRepository {
   login(username: string, password: string, device: string, remember: boolean): Promise<AuthSession>;
@@ -31,6 +31,7 @@ export interface SalesSheetRepository {
   generatePdf(id: UUID): Promise<SalesSheet>;
   listDocuments(id: UUID): Promise<SalesDocument[]>;
   generateDocument(id: UUID, type: SalesDocumentType, input?: GenerateSalesDocumentInput): Promise<SalesDocument>;
+  generateDossier(id: UUID): Promise<SalesDossier>;
   removeDocument(id: UUID, type: SalesDocumentType): Promise<void>;
   remove(id: UUID): Promise<void>;
 }
