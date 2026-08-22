@@ -13,7 +13,7 @@ import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { salesSheetRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
-import { SalesDeliveryMode, SalesPaymentMethod, SalesPaymentStatus } from '@/types';
+import { SalesDeliveryMode, SalesPaymentMethod, SalesPaymentStatus, SalesSheet } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
@@ -24,9 +24,9 @@ const numberValue = (value: string) => {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 };
 const money = (value: number, currency = 'RON') => new Intl.NumberFormat('ro-RO', { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
-type ExpenseDraft = { id: string; name: string; amount: string };
+type ExpenseDraft = { id: string; name: string; quantity: string; amount: string };
 
-export function SalesSheetForm() {
+export function SalesSheetForm({ initialSheet }: { initialSheet?: SalesSheet }) {
   const { activeProperty } = useProperty();
   const { hasPermission } = useAuth();
   const { colors } = useAppTheme();
@@ -36,27 +36,32 @@ export function SalesSheetForm() {
   const [saving, setSaving] = useState(false);
   const [signatureOpen, setSignatureOpen] = useState(false);
   const [signature, setSignature] = useState<string | null>(null);
-  const [documentAt, setDocumentAt] = useState(new Date().toISOString());
-  const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [customerEmail, setCustomerEmail] = useState('');
-  const [deliveryAddress, setDeliveryAddress] = useState('');
-  const [customerNotes, setCustomerNotes] = useState('');
-  const [productName, setProductName] = useState('');
-  const [productCode, setProductCode] = useState('');
-  const [serialNumber, setSerialNumber] = useState('');
-  const [quantity, setQuantity] = useState('1');
-  const [warranty, setWarranty] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<SalesPaymentMethod>('CASH');
-  const [paymentStatus, setPaymentStatus] = useState<SalesPaymentStatus>('UNPAID');
-  const [deliveryMode, setDeliveryMode] = useState<SalesDeliveryMode>('PICKUP');
-  const [productUnitPrice, setProductUnitPrice] = useState('');
-  const [deliveryPrice, setDeliveryPrice] = useState('');
-  const [advancePaid, setAdvancePaid] = useState('');
-  const [dueAt, setDueAt] = useState('');
-  const [currencyCode, setCurrencyCode] = useState('RON');
-  const [notes, setNotes] = useState('');
-  const [expenses, setExpenses] = useState<ExpenseDraft[]>([]);
+  const [documentAt, setDocumentAt] = useState(initialSheet?.documentAt ?? new Date().toISOString());
+  const [customerName, setCustomerName] = useState(initialSheet?.customerName ?? '');
+  const [customerPhone, setCustomerPhone] = useState(initialSheet?.customerPhone ?? '');
+  const [customerEmail, setCustomerEmail] = useState(initialSheet?.customerEmail ?? '');
+  const [deliveryAddress, setDeliveryAddress] = useState(initialSheet?.deliveryAddress ?? '');
+  const [customerNotes, setCustomerNotes] = useState(initialSheet?.customerNotes ?? '');
+  const [productName, setProductName] = useState(initialSheet?.productName ?? '');
+  const [productCode, setProductCode] = useState(initialSheet?.productCode ?? '');
+  const [serialNumber, setSerialNumber] = useState(initialSheet?.serialNumber ?? '');
+  const [quantity, setQuantity] = useState(initialSheet ? String(initialSheet.quantity).replace('.', ',') : '1');
+  const [warranty, setWarranty] = useState(initialSheet?.warranty ?? '');
+  const [paymentMethod, setPaymentMethod] = useState<SalesPaymentMethod>(initialSheet?.paymentMethod ?? 'CASH');
+  const [paymentStatus, setPaymentStatus] = useState<SalesPaymentStatus>(initialSheet?.paymentStatus ?? 'UNPAID');
+  const [deliveryMode, setDeliveryMode] = useState<SalesDeliveryMode>(initialSheet?.deliveryMode ?? 'PICKUP');
+  const [productUnitPrice, setProductUnitPrice] = useState(initialSheet ? String(initialSheet.productUnitPrice).replace('.', ',') : '');
+  const [deliveryPrice, setDeliveryPrice] = useState(initialSheet ? String(initialSheet.deliveryPrice).replace('.', ',') : '');
+  const [advancePaid, setAdvancePaid] = useState(initialSheet ? String(initialSheet.advancePaid).replace('.', ',') : '');
+  const [dueAt, setDueAt] = useState(initialSheet?.dueAt ?? '');
+  const [currencyCode, setCurrencyCode] = useState(initialSheet?.currencyCode ?? 'RON');
+  const [notes, setNotes] = useState(initialSheet?.notes ?? '');
+  const [expenses, setExpenses] = useState<ExpenseDraft[]>(() => (initialSheet?.expenses ?? []).map((expense, index) => ({
+    id: `${index}-${expense.name}`,
+    name: expense.name,
+    quantity: String(expense.quantity ?? 1).replace('.', ','),
+    amount: String(expense.amount).replace('.', ','),
+  })));
   const canManageFinancials = hasPermission('financials.view');
 
   const totals = useMemo(() => {
@@ -64,38 +69,40 @@ export function SalesSheetForm() {
     const delivery = deliveryMode === 'DELIVERY' ? numberValue(deliveryPrice) : 0;
     const total = product + delivery;
     const collected = paymentStatus === 'PAID' ? total : Math.min(total, numberValue(advancePaid));
-    const expenseTotal = expenses.reduce((sum, expense) => sum + numberValue(expense.amount), 0);
-    return { product, delivery, total, collected, expenseTotal, gshopNet: collected - expenseTotal, remaining: Math.max(0, total - collected) };
+    const expenseTotal = expenses.reduce((sum, expense) => sum + numberValue(expense.quantity) * numberValue(expense.amount), 0);
+    return { product, delivery, total, collected, expenseTotal, gshopNet: total - expenseTotal, remaining: Math.max(0, total - collected) };
   }, [advancePaid, deliveryMode, deliveryPrice, expenses, paymentStatus, productUnitPrice, quantity]);
 
   const submit = async () => {
-    if (!activeProperty) return;
+    if (!activeProperty && !initialSheet) return;
     if (customerName.trim().length < 2) return showToast('Completează numele clientului.', 'error');
     if (customerPhone.trim().length < 3) return showToast('Completează telefonul clientului.', 'error');
-    if (productName.trim().length < 2) return showToast('Completează produsul sau modelul vândut.', 'error');
-    if (numberValue(quantity) <= 0) return showToast('Cantitatea trebuie să fie mai mare decât zero.', 'error');
     if (numberValue(advancePaid) > totals.total) return showToast('Banii încasați nu pot depăși totalul fișei.', 'error');
-    if (canManageFinancials && expenses.some((expense) => (expense.name.trim() && numberValue(expense.amount) <= 0) || (!expense.name.trim() && numberValue(expense.amount) > 0))) return showToast('Completează denumirea și valoarea fiecărei cheltuieli.', 'error');
+    if (canManageFinancials && expenses.some((expense) => (expense.name.trim() || expense.amount.trim()) && (!expense.name.trim() || numberValue(expense.quantity) <= 0 || numberValue(expense.amount) <= 0))) return showToast('Completează denumirea, cantitatea și valoarea unitară a fiecărei cheltuieli.', 'error');
     setSaving(true);
     try {
-      const created = await salesSheetRepository.create({
-        propertyId: activeProperty.id, documentAt, customerName: customerName.trim(), customerPhone: customerPhone.trim(), customerEmail: customerEmail.trim(),
+      const payload = {
+        propertyId: initialSheet?.propertyId ?? activeProperty!.id, documentAt, customerName: customerName.trim(), customerPhone: customerPhone.trim(), customerEmail: customerEmail.trim(),
         deliveryAddress: deliveryAddress.trim(), customerNotes: customerNotes.trim(), productName: productName.trim(), productCode: productCode.trim(), serialNumber: serialNumber.trim(),
-        quantity: numberValue(quantity), warranty: warranty.trim(), paymentMethod, deliveryMode, productUnitPrice: numberValue(productUnitPrice), deliveryPrice: totals.delivery,
-        advancePaid: numberValue(advancePaid), paymentStatus, dueAt, currencyCode: currencyCode.trim().toUpperCase() || 'RON', notes: notes.trim(), expenses: canManageFinancials ? expenses.filter((expense) => expense.name.trim() && numberValue(expense.amount) > 0).map((expense) => ({ name: expense.name.trim(), amount: numberValue(expense.amount) })) : [], ...(signature ? { signature } : {}),
-      });
-      showToast('Fișa de vânzare și PDF-ul au fost emise.', 'success');
-      router.replace(`/shop/sales-sheets/${created.id}` as never);
-    } catch (error) { showToast(error instanceof Error ? error.message : 'Fișa de vânzare nu a putut fi emisă.', 'error'); }
+        quantity: numberValue(quantity) || 1, warranty: warranty.trim(), paymentMethod, deliveryMode, productUnitPrice: numberValue(productUnitPrice), deliveryPrice: totals.delivery,
+        advancePaid: numberValue(advancePaid), paymentStatus, dueAt, currencyCode: currencyCode.trim().toUpperCase() || 'RON', notes: notes.trim(), expenses: canManageFinancials ? expenses.filter((expense) => expense.name.trim() && numberValue(expense.quantity) > 0 && numberValue(expense.amount) > 0).map((expense) => ({ name: expense.name.trim(), quantity: numberValue(expense.quantity), amount: numberValue(expense.amount) })) : [], ...(signature ? { signature } : {}),
+      };
+      let saved = initialSheet
+        ? await salesSheetRepository.update(initialSheet.id, payload)
+        : await salesSheetRepository.create(payload);
+      if (initialSheet && signature) saved = await salesSheetRepository.saveSignature(initialSheet.id, signature);
+      showToast(initialSheet ? 'Fișa și PDF-ul au fost actualizate.' : 'Fișa de vânzare și PDF-ul au fost emise.', 'success');
+      router.replace(`/shop/sales-sheets/${saved.id}` as never);
+    } catch (error) { showToast(error instanceof Error ? error.message : initialSheet ? 'Fișa nu a putut fi actualizată.' : 'Fișa de vânzare nu a putut fi emisă.', 'error'); }
     finally { setSaving(false); }
   };
 
   return <>
-    <Screen header={<AppHeader title="Fișă de vânzare nouă" back onBack={() => router.replace('/shop/sales-sheets' as never)} />}>
+    <Screen header={<AppHeader title={initialSheet ? `Editare ${initialSheet.number}` : 'Fișă de vânzare nouă'} back onBack={() => router.replace(initialSheet ? `/shop/sales-sheets/${initialSheet.id}` as never : '/shop/sales-sheets' as never)} />}>
       <View style={styles.stack}>
         <View style={styles.intro}>
           <View style={[styles.introIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="receipt-outline" size={28} color={colors.primary} /></View>
-          <View style={styles.copy}><AppText variant="title">Emite fișa în câțiva pași</AppText><AppText muted>Completezi o singură dată. Firma activă din Shop, totalurile, restul de plată și PDF-ul se completează automat.</AppText></View>
+          <View style={styles.copy}><AppText variant="title">{initialSheet ? 'Editează toate datele fișei' : 'Emite fișa în câțiva pași'}</AppText><AppText muted>{initialSheet ? 'Modificările recalculează totalurile și regenerează automat PDF-ul existent.' : 'Completezi o singură dată. Firma activă din Shop, totalurile, restul de plată și PDF-ul se completează automat.'}</AppText></View>
         </View>
 
         <StepCard number={1} title="Client" subtitle="Date de identificare și livrare" icon="person-outline">
@@ -110,10 +117,10 @@ export function SalesSheetForm() {
 
         <StepCard number={2} title="Produs" subtitle="Identificare și garanție" icon="cube-outline">
           <View style={[styles.fields, compact && styles.fieldsCompact]}>
-            <View style={styles.wide}><Input label="Produs / model *" icon="laptop-outline" value={productName} onChangeText={setProductName} placeholder="Ex: Laptop Lenovo ThinkPad T14" /></View>
+            <View style={styles.wide}><Input label="Produs / model" icon="laptop-outline" value={productName} onChangeText={setProductName} placeholder="Ex: Laptop Lenovo ThinkPad T14" /></View>
             <Field compact={compact}><Input label="Cod produs" icon="barcode-outline" value={productCode} onChangeText={setProductCode} autoCapitalize="characters" /></Field>
             <Field compact={compact}><Input label="Serie / IMEI" icon="finger-print-outline" value={serialNumber} onChangeText={setSerialNumber} autoCapitalize="characters" /></Field>
-            <Field compact={compact}><Input label="Cantitate *" icon="layers-outline" value={quantity} onChangeText={setQuantity} keyboardType="decimal-pad" /></Field>
+            <Field compact={compact}><Input label="Cantitate" icon="layers-outline" value={quantity} onChangeText={setQuantity} keyboardType="decimal-pad" /></Field>
             <Field compact={compact}><Input label="Garanție" icon="shield-checkmark-outline" value={warranty} onChangeText={setWarranty} placeholder="Ex: 24 luni" /></Field>
           </View>
         </StepCard>
@@ -136,7 +143,7 @@ export function SalesSheetForm() {
             <SalesPaymentStatusControl value={paymentStatus} compact={compact} onChange={setPaymentStatus} />
           </View>
           <View style={[styles.fields, compact && styles.fieldsCompact]}>
-            <Field compact={compact}><Input label="Preț produs / unitate *" icon="cash-outline" value={productUnitPrice} onChangeText={setProductUnitPrice} keyboardType="decimal-pad" placeholder="0,00" /></Field>
+            <Field compact={compact}><Input label="Preț produs / unitate" icon="cash-outline" value={productUnitPrice} onChangeText={setProductUnitPrice} keyboardType="decimal-pad" placeholder="0,00" /></Field>
             <Field compact={compact}><Input label="Preț livrare" icon="car-outline" value={deliveryPrice} onChangeText={setDeliveryPrice} keyboardType="decimal-pad" editable={deliveryMode === 'DELIVERY'} placeholder={deliveryMode === 'DELIVERY' ? '0,00' : 'Fără livrare'} /></Field>
             <Field compact={compact}><Input label="Bani încasați" icon="wallet-outline" value={paymentStatus === 'PAID' ? String(totals.total).replace('.', ',') : advancePaid} onChangeText={setAdvancePaid} keyboardType="decimal-pad" editable={paymentStatus === 'UNPAID'} placeholder="0,00" /></Field>
             <Field compact={compact}><Input label="Monedă" icon="pricetag-outline" value={currencyCode} onChangeText={setCurrencyCode} maxLength={3} autoCapitalize="characters" /></Field>
@@ -154,13 +161,15 @@ export function SalesSheetForm() {
         {canManageFinancials ? <StepCard number={5} title="Cheltuieli interne" subtitle="Nu apar în PDF-ul clientului" icon="receipt-outline">
           <View style={styles.expenseHeading}>
             <View style={styles.copy}><AppText variant="label">Poziții de cheltuieli</AppText><AppText variant="caption" muted>Cost produs, transport, ambalare sau orice alt cost intern.</AppText></View>
-            <Button compact variant="outline" label="Adaugă" icon="add-outline" onPress={() => setExpenses((current) => [...current, { id: `${Date.now()}-${current.length}`, name: '', amount: '' }])} />
+            <Button compact variant="outline" label="Adaugă" icon="add-outline" onPress={() => setExpenses((current) => [...current, { id: `${Date.now()}-${current.length}`, name: '', quantity: '1', amount: '' }])} />
           </View>
           {expenses.length ? <View style={styles.expenseList}>{expenses.map((expense, index) => <View key={expense.id} style={[styles.expenseRow, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
             <View style={[styles.expenseNumber, { backgroundColor: colors.primarySoft }]}><AppText variant="label" style={{ color: colors.primary }}>{index + 1}</AppText></View>
             <View style={styles.expenseFields}>
               <View style={styles.expenseName}><Input label="Denumire" value={expense.name} onChangeText={(name) => setExpenses((current) => current.map((item) => item.id === expense.id ? { ...item, name } : item))} placeholder="Ex: Cost achiziție produs" /></View>
-              <View style={styles.expenseAmount}><Input label="Valoare" value={expense.amount} onChangeText={(amount) => setExpenses((current) => current.map((item) => item.id === expense.id ? { ...item, amount } : item))} keyboardType="decimal-pad" placeholder="0,00" /></View>
+              <View style={styles.expenseQuantity}><Input label="Cantitate" value={expense.quantity} onChangeText={(quantity) => setExpenses((current) => current.map((item) => item.id === expense.id ? { ...item, quantity } : item))} keyboardType="decimal-pad" placeholder="1" /></View>
+              <View style={styles.expenseAmount}><Input label="Valoare / unitate" value={expense.amount} onChangeText={(amount) => setExpenses((current) => current.map((item) => item.id === expense.id ? { ...item, amount } : item))} keyboardType="decimal-pad" placeholder="0,00" /></View>
+              <View style={styles.expenseLineTotal}><AppText variant="caption" muted>Total poziție</AppText><AppText variant="label">{money(numberValue(expense.quantity) * numberValue(expense.amount), currencyCode)}</AppText></View>
             </View>
             <Pressable accessibilityRole="button" accessibilityLabel={`Șterge cheltuiala ${index + 1}`} onPress={() => setExpenses((current) => current.filter((item) => item.id !== expense.id))} style={[styles.expenseDelete, { backgroundColor: `${palette.danger}14` }]}><Ionicons name="trash-outline" size={20} color={palette.danger} /></Pressable>
           </View>)}</View> : <View style={[styles.expenseEmpty, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}><Ionicons name="wallet-outline" size={25} color={colors.textMuted} /><View style={styles.copy}><AppText variant="label">Nicio cheltuială adăugată</AppText><AppText variant="caption" muted>Poți emite fișa și fără cheltuieli interne.</AppText></View></View>}
@@ -174,16 +183,16 @@ export function SalesSheetForm() {
         <StepCard number={canManageFinancials ? 6 : 5} title="Confirmare" subtitle="Data, observațiile și semnătura clientului" icon="checkmark-done-outline">
           <DateTimeField label="Data și ora fișei" value={documentAt} onChange={setDocumentAt} showNow />
           <Input label="Observații" icon="document-text-outline" value={notes} onChangeText={setNotes} multiline numberOfLines={3} style={styles.textArea} />
-          <View style={[styles.signature, { backgroundColor: colors.surfaceMuted, borderColor: signature ? palette.success : colors.border }]}>
-            <View style={[styles.signatureIcon, { backgroundColor: signature ? `${palette.success}18` : `${palette.purple}16` }]}><Ionicons name={signature ? 'checkmark-circle' : 'pencil-outline'} size={24} color={signature ? palette.success : palette.purple} /></View>
-            <View style={styles.copy}><AppText variant="label">{signature ? 'Semnătura clientului este pregătită' : 'Semnătură electronică client'}</AppText><AppText variant="caption" muted>{signature ? 'Va fi inclusă automat în PDF la emitere.' : 'Clientul poate semna acum, direct pe telefon sau tabletă.'}</AppText></View>
-            <Button compact variant={signature ? 'outline' : 'primary'} label={signature ? 'Resemnează' : 'Semnează'} icon="pencil-outline" onPress={() => setSignatureOpen(true)} />
+          <View style={[styles.signature, { backgroundColor: colors.surfaceMuted, borderColor: signature || initialSheet?.signatureUrl ? palette.success : colors.border }]}>
+            <View style={[styles.signatureIcon, { backgroundColor: signature || initialSheet?.signatureUrl ? `${palette.success}18` : `${palette.purple}16` }]}><Ionicons name={signature || initialSheet?.signatureUrl ? 'checkmark-circle' : 'pencil-outline'} size={24} color={signature || initialSheet?.signatureUrl ? palette.success : palette.purple} /></View>
+            <View style={styles.copy}><AppText variant="label">{signature ? 'Semnătura nouă este pregătită' : initialSheet?.signatureUrl ? 'Fișa are deja semnătura clientului' : 'Semnătură electronică client'}</AppText><AppText variant="caption" muted>{signature ? 'Va înlocui semnătura existentă când salvezi.' : initialSheet?.signatureUrl ? 'Rămâne neschimbată dacă nu alegi Resemnează.' : 'Clientul poate semna acum, direct pe telefon sau tabletă.'}</AppText></View>
+            <Button compact variant={signature || initialSheet?.signatureUrl ? 'outline' : 'primary'} label={signature || initialSheet?.signatureUrl ? 'Resemnează' : 'Semnează'} icon="pencil-outline" onPress={() => setSignatureOpen(true)} />
           </View>
         </StepCard>
 
         <View style={[styles.emitBar, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
-          <View style={styles.emitCopy}><Ionicons name="sparkles-outline" size={20} color={colors.primary} /><AppText variant="caption" muted style={styles.copy}>La salvare se alocă numărul FV, se fixează firma activă și se emite PDF-ul.</AppText></View>
-          <Button label="Emite fișa și PDF-ul" icon="document-text-outline" loading={saving} onPress={() => void submit()} style={styles.emitButton} />
+          <View style={styles.emitCopy}><Ionicons name="sparkles-outline" size={20} color={colors.primary} /><AppText variant="caption" muted style={styles.copy}>{initialSheet ? 'Toate câmpurile și totalurile sunt salvate, iar PDF-ul este regenerat.' : 'La salvare se alocă numărul FV, se fixează firma activă și se emite PDF-ul.'}</AppText></View>
+          <Button label={initialSheet ? 'Salvează și actualizează PDF-ul' : 'Emite fișa și PDF-ul'} icon="document-text-outline" loading={saving} onPress={() => void submit()} style={styles.emitButton} />
         </View>
       </View>
     </Screen>
@@ -207,7 +216,7 @@ const styles = StyleSheet.create({
   choiceGroup: { gap: spacing.sm }, choices: { flexDirection: 'row', gap: spacing.sm }, choicesCompact: { flexDirection: 'column' }, choice: { minHeight: 58, flex: 1, padding: spacing.sm, borderWidth: 1.5, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, choiceIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   paymentHeading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.md },
   summary: { padding: spacing.md, borderWidth: 1, borderRadius: radius.lg, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }, summaryItem: { minWidth: 130, flex: 1, gap: 3 }, textArea: { minHeight: 78, textAlignVertical: 'top' },
-  expenseHeading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.md }, expenseList: { gap: spacing.sm }, expenseRow: { padding: spacing.sm, borderWidth: 1, borderRadius: radius.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, expenseNumber: { width: 34, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }, expenseFields: { minWidth: 210, flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, expenseName: { minWidth: 190, flex: 2 }, expenseAmount: { minWidth: 130, flex: 1 }, expenseDelete: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }, expenseEmpty: { minHeight: 76, padding: spacing.md, borderWidth: 1, borderStyle: 'dashed', borderRadius: radius.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.md }, expenseSummary: { padding: spacing.md, borderWidth: 1, borderRadius: radius.lg, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  expenseHeading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.md }, expenseList: { gap: spacing.sm }, expenseRow: { padding: spacing.sm, borderWidth: 1, borderRadius: radius.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, expenseNumber: { width: 34, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }, expenseFields: { minWidth: 210, flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', gap: spacing.sm }, expenseName: { minWidth: 190, flex: 2 }, expenseQuantity: { minWidth: 105, flex: 0.65 }, expenseAmount: { minWidth: 145, flex: 1 }, expenseLineTotal: { minWidth: 125, minHeight: 52, justifyContent: 'center', gap: 3 }, expenseDelete: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }, expenseEmpty: { minHeight: 76, padding: spacing.md, borderWidth: 1, borderStyle: 'dashed', borderRadius: radius.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.md }, expenseSummary: { padding: spacing.md, borderWidth: 1, borderRadius: radius.lg, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   signature: { padding: spacing.md, borderWidth: 1.5, borderRadius: radius.lg, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.md }, signatureIcon: { width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   emitBar: { padding: spacing.md, borderWidth: 1, borderRadius: radius.lg, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.md }, emitCopy: { minWidth: 220, flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, emitButton: { minWidth: 250 },
 });

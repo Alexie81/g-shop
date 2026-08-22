@@ -31,7 +31,7 @@ export default function ShopHomeScreen() {
   const total = sheets.reduce((sum, item) => sum + item.totalPrice, 0);
   const collected = sheets.reduce((sum, item) => sum + item.receivedAmount, 0);
   const expenses = sheets.reduce((sum, item) => sum + (item.expenseTotal ?? 0), 0);
-  const gshopNet = sheets.reduce((sum, item) => sum + (item.gshopNet ?? item.receivedAmount), 0);
+  const gshopNet = sheets.reduce((sum, item) => sum + (item.gshopNet ?? item.totalPrice - (item.expenseTotal ?? 0)), 0);
 
   return <Screen header={<AppHeader title="Shop" />}>
     <View style={styles.stack}>

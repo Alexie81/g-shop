@@ -86,6 +86,7 @@ export type SalesDeliveryMode = 'DELIVERY' | 'PICKUP';
 export type SalesPaymentStatus = 'UNPAID' | 'PAID';
 export interface SalesExpenseLine {
   name: string;
+  quantity: number;
   amount: number;
 }
 
