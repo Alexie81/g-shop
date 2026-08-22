@@ -163,11 +163,14 @@ function sales_document_company(array $row, array $sheet): array {
     $company = json_decode((string)($row['company_snapshot'] ?? ''), true);
     if (!is_array($company)) $company = [];
     if (!empty($sheet['companyId'])) {
-        try {
-            $live = company_details_by_id((string)$sheet['companyId'], (string)$sheet['propertyId'], true);
+        $stmt = db()->prepare(company_select().' WHERE id=? AND is_active=1 LIMIT 1');
+        $stmt->execute([uuid_bin((string)$sheet['companyId'])]);
+        $liveRow = $stmt->fetch();
+        if ($liveRow) {
+            $live = map_company_details($liveRow, true);
             if (!empty($live['stampPath'])) $company['stampPath'] = $live['stampPath'];
             elseif (array_key_exists('stampPath', $live)) $company['stampPath'] = null;
-        } catch (Throwable) { /* Snapshotul rămâne sursa identității juridice. */ }
+        }
     }
     return $company;
 }
