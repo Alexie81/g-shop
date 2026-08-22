@@ -151,6 +151,12 @@ function generate_sales_sheet_pdf(array $sheet, array $company, ?string $signatu
     $pdf->AddPage($size['orientation'], [$size['width'], $size['height']]);
     $pdf->useTemplate($templateId);
 
+    $pdf->SetFillColor(255, 255, 255);
+    $pdf->Rect(96, 52, 206, 15, 'F');
+    $pdf->SetTextColor(7, 92, 255);
+    $pdf->SetFont('DejaVu', 'B', 7.2);
+    $pdf->Text(98, 61.5, 'Calculatoare Profesionale | G-Shop');
+
     gshop_sales_pdf_shrink_text($pdf, 398, 61, $sheet['number'] ?? '', 48, 6.4, 4.2);
     gshop_sales_pdf_shrink_text($pdf, 518, 61, gshop_sales_pdf_local_date($sheet['documentAt'] ?? ''), 38, 5.8, 3.8);
     gshop_sales_pdf_shrink_text($pdf, 110, 106, $company['legalName'] ?? '', 96, 6.2, 4.8);
