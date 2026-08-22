@@ -75,13 +75,13 @@ function gshop_sales_pdf_mini_card(GshopServiceDocumentPdf $pdf, float $x, float
 }
 
 function gshop_sales_pdf_financial_summary(GshopServiceDocumentPdf $pdf, array $sheet, string $currency): void {
-    $total=max(0,(float)($sheet['totalPrice']??0));$paymentStatus=strtoupper(trim((string)($sheet['paymentStatus']??'UNPAID')));$received=max(0,(float)($sheet['receivedAmount']??($paymentStatus==='PAID'?$total:($sheet['advancePaid']??0))));$received=min($received,$total);$remaining=max(0,(float)($sheet['remainingDue']??($total-$received)));$totalPaid=$paymentStatus==='PAID'||$remaining<=.009||($total>0&&$received>=$total-.009);$totalStatus=$totalPaid?'ACHITAT':'NEACHITAT';$restStatus=$remaining<=.009?'ACHITAT':'NEACHITAT';
+    $total=max(0,(float)($sheet['totalPrice']??0));$paymentStatus=strtoupper(trim((string)($sheet['paymentStatus']??'UNPAID')));$received=max(0,(float)($sheet['receivedAmount']??($paymentStatus==='PAID'?$total:($sheet['advancePaid']??0))));$remaining=max(0,(float)($sheet['remainingDue']??($total-$received)));$totalPaid=$paymentStatus==='PAID'||$remaining<=.009||($total>0&&$received>=$total-.009);$totalStatus=$totalPaid?'ACHITAT':'NEACHITAT';$restStatus=$remaining<=.009?'ACHITAT':'NEACHITAT';
     $pdf->SetFillColor(255,255,255);$pdf->SetDrawColor(228,234,243);$pdf->SetLineWidth(0.7);$pdf->RoundedRect(22,488,551,80,9,'DF');
     gshop_sales_pdf_card($pdf,29,493,170,38,[7,92,255],[7,92,255],'TOTAL DE PLATĂ',gshop_pdf_money($total,$currency),[255,255,255],$totalStatus);
     gshop_sales_pdf_card($pdf,204,493,170,38,[255,255,255],[20,168,59],'BANI ÎNCASAȚI',gshop_pdf_money($received,$currency),[20,168,59]);
     gshop_sales_pdf_card($pdf,379,493,185,38,[255,255,255],[255,159,10],'REST DE PLATĂ',$remaining<=.009?'ACHITAT':gshop_pdf_money($remaining,$currency),$remaining<=.009?[20,168,59]:[224,117,20],$restStatus);
-    gshop_sales_pdf_mini_card($pdf,29,537,130,'PREȚ PRODUS',gshop_pdf_money($sheet['productPrice']??0,$currency));
-    gshop_sales_pdf_mini_card($pdf,164,537,120,'LIVRARE',gshop_pdf_money($sheet['deliveryPrice']??0,$currency));
+    gshop_sales_pdf_mini_card($pdf,29,537,130,'PIESE / PRODUSE',gshop_pdf_money($sheet['productPrice']??0,$currency));
+    gshop_sales_pdf_mini_card($pdf,164,537,120,'MANOPERĂ / SERVICII',gshop_pdf_money($sheet['deliveryPrice']??0,$currency));
     gshop_sales_pdf_mini_card($pdf,289,537,80,'MONEDĂ',$currency);
     $due=gshop_sales_pdf_local_date($sheet['dueAt']??'');if($due!=='')$due=explode(',',$due)[0];
     gshop_sales_pdf_mini_card($pdf,374,537,190,'SCADENȚĂ',$due!==''?$due:'Fără scadență');
@@ -131,12 +131,18 @@ function gshop_sales_pdf_file_name(array $sheet): string {
 }
 
 /** @return array{filePath:string,url:string,sha256:string,generatedAt:string} */
-function generate_sales_sheet_pdf(array $sheet, array $company, ?string $signaturePath, ?string $stampPath): array {
+function generate_sales_sheet_pdf(array $sheet, array $company, ?string $signaturePath, ?string $stampPath, ?string $revisionToken = null): array {
     $template = __DIR__ . '/../assets/sales-sheet-templates/with-company/sales-sheet.pdf';
     if (!is_file($template)) throw new RuntimeException('Șablonul fișei de vânzare nu este disponibil.');
-    $directory = __DIR__ . '/../uploads/sales-sheets';
+    $relativeDirectory = 'uploads/sales-sheets';
+    if ($revisionToken !== null) {
+        $revisionToken = strtolower(trim($revisionToken));
+        if (!preg_match('/^[a-z0-9-]{8,80}$/', $revisionToken)) throw new InvalidArgumentException('Versiunea PDF a fișei nu este validă.');
+        $relativeDirectory .= '/revisions/' . $revisionToken;
+    }
+    $directory = __DIR__ . '/../' . $relativeDirectory;
     if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) throw new RuntimeException('Directorul fișelor de vânzări nu poate fi creat.');
-    $relativePath = 'uploads/sales-sheets/' . gshop_sales_pdf_file_name($sheet);
+    $relativePath = $relativeDirectory . '/' . gshop_sales_pdf_file_name($sheet);
     $output = __DIR__ . '/../' . $relativePath;
     $temporary = $output . '.tmp-' . bin2hex(random_bytes(5));
     $currency = strtoupper(trim((string)($sheet['currencyCode'] ?? 'RON'))) ?: 'RON';
@@ -166,7 +172,9 @@ function generate_sales_sheet_pdf(array $sheet, array $company, ?string $signatu
     gshop_sales_pdf_shrink_text($pdf, 326, 125, $company['phone'] ?? '', 100, 6.2, 4.8, '');
     gshop_sales_pdf_shrink_text($pdf, 460, 125, $company['email'] ?? '', 100, 6.0, 4.3, '');
 
-    gshop_sales_pdf_text($pdf, 121, 200, $sheet['customerName'] ?? '', 219, 7.2, 'B');
+    $pdf->SetFillColor(255,255,255);$pdf->SetDrawColor(255,255,255);$pdf->Rect(34,188,86,16,'F');
+    gshop_sales_pdf_shrink_text($pdf, 36, 199, 'NUME ȘI PRENUME / FIRMĂ', 80, 5.0, 4.0, 'B');
+    gshop_sales_pdf_shrink_text($pdf, 121, 200, $sheet['customerName'] ?? '', 219, 7.2, 5.0, 'B');
     gshop_sales_pdf_text($pdf, 404, 200, $sheet['customerPhone'] ?? '', 158, 7.2);
     gshop_sales_pdf_text($pdf, 76, 223, $sheet['customerEmail'] ?? '', 180, 6.8);
     gshop_sales_pdf_text($pdf, 361, 223, $sheet['deliveryAddress'] ?? '', 200, 6.6);
@@ -185,8 +193,14 @@ function generate_sales_sheet_pdf(array $sheet, array $company, ?string $signatu
     gshop_sales_pdf_financial_summary($pdf,$sheet,$currency);
     gshop_sales_pdf_multiline($pdf, 36, 646, 523, $sheet['notes'] ?? '', 3);
 
-    $pdf->SetFillColor(255,255,255);$pdf->SetDrawColor(255,255,255);$pdf->Rect(31,697,255,78,'F');
-    gshop_sales_pdf_text($pdf, 36, 710, 'ȘTAMPILĂ', 110, 5.8, 'B');
+    $pdf->SetFillColor(255,255,255);$pdf->SetDrawColor(255,255,255);$pdf->Rect(31,697,530,78,'F');
+    gshop_sales_pdf_text($pdf, 36, 710, 'DATA / ORA:', 66, 7.0, 'B');
+    $pdf->SetDrawColor(200,211,227);$pdf->SetLineWidth(.55);$pdf->Line(104,713,270,713);
+    gshop_sales_pdf_shrink_text($pdf, 108, 710, gshop_sales_pdf_local_date($sheet['signedAt'] ?? $sheet['documentAt'] ?? ''), 158, 8.2, 5.2, '');
+    gshop_sales_pdf_text($pdf, 280, 710, 'NUME ȘI PRENUME / FIRMĂ:', 110, 7.0, 'B');
+    $pdf->Line(392,713,559,713);
+    gshop_sales_pdf_shrink_text($pdf, 396, 710, $sheet['customerName'] ?? '', 159, 8.2, 5.0, '');
+    $pdf->Line(310,760,440,760);
     gshop_sales_pdf_image($pdf, $stampPath, 36, 716, 118, 58, false);
     gshop_sales_pdf_image($pdf, $signaturePath, 310, 716, 130, 42, true);
 

@@ -114,12 +114,13 @@ La actualizarea unei instalări existente, apelează `POST /admin/migrations/cli
 - `POST /sales-sheets/{id}/documents/FINAL_ESTIMATE` — generează sau actualizează devizul cu desfășurător de piese/produse și manoperă/servicii
 - `POST /sales-sheets/{id}/documents/WARRANTY` — generează certificatul numai după existența devizului final
 - `DELETE /sales-sheets/{id}/documents/{type}` — elimină documentul pentru refacere; eliminarea devizului retrage și garanția dependentă
-- `GET|POST /companies?propertyId={uuid}` — lista firmelor este comună între proprietăți
+- `GET|POST /companies?propertyId={uuid}` — listează și creează firmele izolate pentru proprietatea/modulul cerut
+- `PUT /companies/{id}` cu `{ "propertyId": "uuid", ... }` — modifică firma în modulul cerut; un profil vechi partajat este duplicat automat înainte de scriere
 - `PUT /companies/{id}/default` cu `{ "propertyId": "uuid" }` — selectează independent firma activă pentru proprietatea Service sau Shop
 
-Fișa de vânzare fixează un snapshot al firmei active în momentul emiterii. Schimbarea ulterioară a firmei active nu rescrie documentele deja emise. Totalul produselor, livrarea și restul de plată sunt recalculate pe server, iar semnătura clientului și ștampila firmei sunt aplicate automat în PDF. Cheltuielile sunt valori interne protejate de permisiunea `financials.view`, nu apar în PDF și sunt folosite pentru calculul `bani încasați - cheltuieli = rămâne G-Shop`.
+Fișa de vânzare păstrează un snapshot al firmei active. Modificarea datelor sau ștampilei din Shop actualizează snapshotul și regenerează PDF-urile fișelor Shop asociate, fără să modifice produsele, sumele, cheltuielile, plățile ori semnăturile și fără să atingă Service. Cheltuielile sunt valori interne protejate de permisiunea `financials.view` și nu apar în PDF.
 
-Documentele DOSAR sunt generate exclusiv pe domeniul Shop, în `uploads/sales-documents`. Devizul are total propriu calculat din pozițiile sale, dar preia încasarea curentă din fișa de vânzare; astfel fișa deja emisă nu este rescrisă când operatorul detaliază desfășurătorul. Certificatul păstrează totalul devizului și se regenerează automat când se schimbă devizul, plata, semnătura sau ștampila. Toate PDF-urile folosesc identitatea `Calculatoare Profesionale | G-Shop`.
+Documentele DOSAR sunt generate exclusiv pe domeniul Shop, în `uploads/sales-documents`. Devizul își calculează totalul din pozițiile sale; când acordul este acceptat, totalurile pentru piese și manoperă, totalul general și situația plății devin valorile curente ale fișei și ale statisticilor, fără să fie modificate cheltuielile interne. Un deviz refuzat nu schimbă valorile fișei. Certificatul se regenerează automat când se schimbă devizul, plata, semnătura sau ștampila. Toate PDF-urile folosesc identitatea `Calculatoare Profesionale | G-Shop`.
 
 ### Service
 
