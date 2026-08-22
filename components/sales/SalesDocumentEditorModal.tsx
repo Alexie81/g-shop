@@ -50,24 +50,23 @@ export function SalesDocumentEditorModal({ visible, type, sheet, document, onGen
   const [warrantyPeriod, setWarrantyPeriod] = useState('');
   const [warrantyStartAt, setWarrantyStartAt] = useState(nowIso());
   const [warrantyEndAt, setWarrantyEndAt] = useState('');
-  const [warrantyRemediation, setWarrantyRemediation] = useState('10 zile lucrătoare');
 
   useEffect(() => {
     if (!visible) return;
+    const hasPersistedDocument = document?.status === 'PUBLISHED';
     const baseDate = document?.documentAt || nowIso();
     setDocumentAt(baseDate);
     setAgreementAt(document?.agreementAt || baseDate);
     setAgreementStatus(document?.agreementStatus || 'ACCEPTED');
     setTechnicalAssessment(document?.technicalAssessment || sheet.customerNotes || sheet.notes || 'Produs verificat conform specificațiilor și configurației agreate.');
     setFinalNotes(document?.finalNotes || sheet.notes || 'Valorile și operațiunile sunt cele prezentate în desfășurătorul de mai jos.');
-    setParts(toDraftItems(document?.available ? document.parts : defaultParts(sheet)));
-    setLabor(toDraftItems(document?.available ? document.labor : defaultLabor()));
+    setParts(toDraftItems(hasPersistedDocument ? document.parts : defaultParts(sheet)));
+    setLabor(toDraftItems(hasPersistedDocument ? document.labor : defaultLabor()));
     const period = document?.warrantyPeriod || sheet.warranty || '';
     const start = document?.warrantyStartAt || sheet.documentAt || baseDate;
     setWarrantyPeriod(period);
     setWarrantyStartAt(start);
     setWarrantyEndAt(document?.warrantyEndAt || calculateWarrantyEndAt(start, period));
-    setWarrantyRemediation(document?.warrantyRemediation || '10 zile lucrătoare');
     setError('');
   }, [document, sheet, visible]);
 
@@ -112,7 +111,6 @@ export function SalesDocumentEditorModal({ visible, type, sheet, document, onGen
         warrantyPeriod: warrantyPeriod.trim(),
         warrantyStartAt,
         warrantyEndAt,
-        warrantyRemediation: warrantyRemediation.trim(),
       });
       onClose();
     } catch (caught) {
@@ -145,15 +143,14 @@ export function SalesDocumentEditorModal({ visible, type, sheet, document, onGen
               <DocumentItemsEditor title="Manoperă / servicii" description="Servicii, instalare, configurare sau livrare." items={labor} onChange={setLabor} currencyCode={sheet.currencyCode} />
               <View style={[styles.summary, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
                 <View style={styles.titleWithInfo}><View style={styles.summaryTitle}><View style={[styles.summaryIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="wallet-outline" size={18} color={colors.primary} /></View><View><AppText variant="heading">Rezumat financiar</AppText><AppText variant="caption" muted>Devizul și calculele interne, separate clar</AppText></View></View><InfoTooltip title="Calcul automat" description="Piesele și manopera formează totalul devizului. Cheltuielile interne vin din fișa de vânzare, iar Rămâne G-Shop este totalul devizului minus aceste cheltuieli." /></View>
-                <View style={styles.summaryGrid}><SummaryValue label="Piese" value={formatFinanceMoney(totals.parts, sheet.currencyCode)} color={colors.primary} /><SummaryValue label="Manoperă" value={formatFinanceMoney(totals.labor, sheet.currencyCode)} color={palette.purple} /><SummaryValue label="Cheltuieli interne" value={formatFinanceMoney(totals.internal, sheet.currencyCode)} color={palette.warning} internal /><SummaryValue label="Total deviz" value={formatFinanceMoney(total, sheet.currencyCode)} color={colors.primary} accent /></View>
-                <View style={styles.paymentGrid}><PaymentValue label="ÎNCASAT" value={received} currency={sheet.currencyCode} color={palette.success} /><PaymentValue label="DE ÎNCASAT" value={remaining} currency={sheet.currencyCode} color={remaining > 0 ? palette.warning : palette.success} /><PaymentValue label="RĂMÂNE G-SHOP" value={gshopNet} currency={sheet.currencyCode} color={gshopNet >= 0 ? colors.primary : palette.danger} /></View>
+                <View style={styles.summaryGrid}><SummaryValue label="Piese" value={formatFinanceMoney(totals.parts, sheet.currencyCode)} color={colors.primary} /><SummaryValue label="Manoperă" value={formatFinanceMoney(totals.labor, sheet.currencyCode)} color={palette.purple} /><SummaryValue label="Cheltuieli interne" value={formatFinanceMoney(totals.internal, sheet.currencyCode)} color={palette.warning} /><SummaryValue label="Total deviz" value={formatFinanceMoney(total, sheet.currencyCode)} color={colors.primary} accent /></View>
+                <View style={styles.paymentGrid}><PaymentValue label="Încasat" value={received} currency={sheet.currencyCode} color={palette.success} /><PaymentValue label="De încasat" value={remaining} currency={sheet.currencyCode} color={remaining > 0 ? palette.warning : palette.success} /><PaymentValue label="Rămâne G-Shop" value={gshopNet} currency={sheet.currencyCode} color={gshopNet >= 0 ? colors.primary : palette.danger} /></View>
               </View>
             </> : <>
               <View style={styles.titleWithInfo}><AppText variant="heading">Perioada garanției</AppText><InfoTooltip title="Calculul perioadei" description="Scrie, de exemplu, 90 zile, 24 luni sau 2 ani. Data de final se calculează automat și poate fi corectată manual." /></View>
               <DateTimeField label="Data și ora certificatului" value={documentAt} onChange={setDocumentAt} allowClear showNow />
               <Input label="Perioada garanției *" value={warrantyPeriod} onChangeText={(value) => { setWarrantyPeriod(value); const calculated = calculateWarrantyEndAt(warrantyStartAt, value); if (calculated || !value.trim()) setWarrantyEndAt(calculated); }} maxLength={120} placeholder="ex. 24 luni" />
               <View style={styles.dateRow}><View style={styles.dateField}><DateTimeField label="Garanție de la" value={warrantyStartAt} onChange={(value) => { setWarrantyStartAt(value); const calculated = calculateWarrantyEndAt(value, warrantyPeriod); if (calculated || !value) setWarrantyEndAt(calculated); }} allowClear showNow /></View><View style={styles.dateField}><DateTimeField label="Garanție până la" value={warrantyEndAt} onChange={setWarrantyEndAt} allowClear /></View></View>
-              <Input label="Termen estimat de remediere" value={warrantyRemediation} onChangeText={setWarrantyRemediation} maxLength={160} placeholder="ex. 10 zile lucrătoare" />
               <View style={[styles.warrantyPreview, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}><View style={[styles.warrantyPreviewIcon, { backgroundColor: `${palette.success}16` }]}><Ionicons name="shield-checkmark" size={23} color={palette.success} /></View><View style={styles.noticeCopy}><AppText variant="label">Certificatul este legat de deviz</AppText><AppText variant="caption" muted>Produsul, seria, valorile financiare, semnătura și ștampila sunt preluate automat. PDF-ul folosește identitatea Calculatoare Profesionale | G-Shop.</AppText></View></View>
             </>}
 
@@ -173,7 +170,7 @@ function DocumentItemsEditor({ title, description, items, onChange, currencyCode
   const importable = expenseItems(importExpenses ?? []).filter((candidate) => !items.some((item) => sameItem(item, candidate)));
   const importFromExpenses = () => onChange([...items, ...importable.slice(0, Math.max(0, 60 - items.length)).map((item) => ({ ...item, key: draftKey() }))]);
   return <View style={[styles.itemsSection, { borderColor: colors.border }]}>
-    <View style={styles.itemsHeader}><View style={styles.headerCopy}><View style={styles.titleWithInfo}><AppText variant="heading">{title}</AppText>{importExpenses ? <InfoTooltip title="Import din cheltuieli" description="Preia denumirea, cantitatea și prețul unitar. Poți modifica apoi prețul care apare în deviz." /> : null}</View>{description ? <AppText variant="caption" muted>{description}</AppText> : null}</View><View style={styles.itemActions}>{importExpenses ? <Button compact variant="outline" label="Importă" icon="download-outline" disabled={!importable.length || items.length >= 60} onPress={importFromExpenses} /> : null}<Button compact variant="outline" label="Adaugă" icon="add" disabled={items.length >= 60} onPress={() => onChange([...items, { key: draftKey(), name: '', quantity: 1, unitPrice: 0, totalPrice: 0 }])} /></View></View>
+    <View style={styles.itemsHeader}><View style={styles.itemsHeaderCopy}><View style={styles.titleWithInfo}><AppText variant="heading" numberOfLines={1}>{title}</AppText>{importExpenses ? <InfoTooltip title="Import din cheltuieli" description="Preia denumirea, cantitatea și prețul unitar. Poți modifica apoi prețul care apare în deviz." /> : null}</View>{description ? <AppText variant="caption" muted>{description}</AppText> : null}</View><View style={styles.itemActions}>{importExpenses ? <Button compact variant="outline" label="Importă" icon="download-outline" disabled={!importable.length || items.length >= 60} onPress={importFromExpenses} style={styles.itemAction} /> : null}<Button compact variant="outline" label="Adaugă" icon="add" disabled={items.length >= 60} onPress={() => onChange([...items, { key: draftKey(), name: '', quantity: 1, unitPrice: 0, totalPrice: 0 }])} style={styles.itemAction} /></View></View>
     {items.length ? <View style={styles.itemList}>{items.map((item, index) => <View key={item.key} style={[styles.itemCard, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
       <View style={styles.itemHeader}><View style={[styles.position, { backgroundColor: colors.primarySoft }]}><AppText variant="caption" style={{ color: colors.primary, fontWeight: '900' }}>{index + 1}</AppText></View><AppText variant="label" style={styles.positionTitle}>Poziție deviz</AppText><Pressable accessibilityRole="button" accessibilityLabel={`Elimină poziția ${index + 1}`} hitSlop={8} onPress={() => onChange(items.filter((candidate) => candidate.key !== item.key))} style={[styles.remove, { backgroundColor: `${palette.danger}12` }]}><Ionicons name="trash-outline" size={17} color={palette.danger} /></Pressable></View>
       <Input label="Denumire" value={item.name} onChangeText={(name) => update(item.key, { name })} maxLength={180} placeholder={importExpenses ? 'Ex: Calculator Gaming Ryzen 7' : 'Ex: Instalare și configurare'} />
@@ -188,9 +185,9 @@ function Segment({ label, icon, selected, onPress }: { label: string; icon: keyo
   return <Pressable accessibilityRole="radio" accessibilityState={{ checked: selected }} onPress={onPress} style={({ pressed }) => [styles.segment, { backgroundColor: selected ? colors.primary : colors.surfaceMuted, borderColor: selected ? colors.primary : colors.border, opacity: pressed ? 0.72 : 1 }]}><Ionicons name={icon} size={18} color={selected ? '#FFFFFF' : colors.primary} /><AppText variant="label" style={{ color: selected ? '#FFFFFF' : colors.text }}>{label}</AppText></Pressable>;
 }
 
-function SummaryValue({ label, value, color, accent = false, internal = false }: { label: string; value: string; color: string; accent?: boolean; internal?: boolean }) {
+function SummaryValue({ label, value, color, accent = false }: { label: string; value: string; color: string; accent?: boolean }) {
   const { colors } = useAppTheme();
-  return <View style={[styles.summaryValue, { backgroundColor: accent ? colors.primarySoft : colors.surface, borderColor: `${color}45` }]}><View style={styles.summaryLabel}><View style={[styles.dot, { backgroundColor: color }]} /><AppText variant="caption" muted>{label}</AppText></View><AppText variant="label" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={{ color: accent ? color : colors.text }}>{value}</AppText>{internal ? <AppText variant="caption" style={{ color: palette.warning, fontWeight: '900' }}>DOAR PERSONAL</AppText> : null}</View>;
+  return <View style={[styles.summaryValue, { backgroundColor: accent ? colors.primarySoft : colors.surface, borderColor: `${color}45` }]}><View style={styles.summaryLabel}><View style={[styles.dot, { backgroundColor: color }]} /><AppText variant="caption" muted>{label}</AppText></View><AppText variant="label" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={{ color: accent ? color : colors.text }}>{value}</AppText></View>;
 }
 
 function PaymentValue({ label, value, currency, color }: { label: string; value: number; currency: string; color: string }) {
@@ -201,10 +198,19 @@ function PaymentValue({ label, value, currency, color }: { label: string; value:
 function toDraftItems(items: ServiceDocumentItem[]): DraftItem[] {
   return items.map((item) => ({ key: draftKey(), name: String(item.name ?? '').slice(0, 180), quantity: item.quantity > 0 ? item.quantity : 1, unitPrice: roundMoney(item.unitPrice), totalPrice: roundMoney(item.totalPrice) }));
 }
-function defaultParts(sheet: SalesSheet): ServiceDocumentItem[] { return [{ name: sheet.productName || 'Produs', quantity: sheet.quantity || 1, unitPrice: sheet.productUnitPrice || 0, totalPrice: sheet.productPrice || 0 }]; }
+function defaultParts(_sheet: SalesSheet): ServiceDocumentItem[] { return []; }
 function defaultLabor(): ServiceDocumentItem[] { return [{ name: 'Manoperă', quantity: 1, unitPrice: 0, totalPrice: 0 }]; }
-function expenseItems(expenses: SalesExpenseLine[]): ServiceDocumentItem[] { return expenses.filter((expense) => expense.name.trim() && Number.isFinite(expense.quantity) && expense.quantity > 0).map((expense) => ({ name: expense.name.trim().slice(0, 180), quantity: roundMoney(expense.quantity), unitPrice: roundMoney(expense.amount), totalPrice: roundMoney(expense.quantity * expense.amount) })); }
-function sameItem(left: ServiceDocumentItem, right: ServiceDocumentItem) { return left.name.trim().toLocaleLowerCase('ro-RO') === right.name.trim().toLocaleLowerCase('ro-RO') && roundMoney(left.quantity) === roundMoney(right.quantity) && roundMoney(left.unitPrice) === roundMoney(right.unitPrice); }
+function expenseItems(expenses: SalesExpenseLine[]): ServiceDocumentItem[] {
+  return expenses.flatMap((expense) => {
+    const name = expense.name.trim().replace(/\s+/g, ' ').slice(0, 180);
+    if (!name) return [];
+    const quantity = Number.isFinite(expense.quantity) && expense.quantity > 0 ? roundMoney(expense.quantity) : 1;
+    const unitPrice = Number.isFinite(expense.amount) && expense.amount > 0 ? roundMoney(expense.amount) : 0;
+    return [{ name, quantity, unitPrice, totalPrice: roundMoney(quantity * unitPrice) }];
+  });
+}
+function sameItem(left: ServiceDocumentItem, right: ServiceDocumentItem) { return normalizedItemName(left.name) === normalizedItemName(right.name) && roundMoney(left.quantity) === roundMoney(right.quantity) && roundMoney(left.unitPrice) === roundMoney(right.unitPrice); }
+function normalizedItemName(value: string) { return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('ro-RO'); }
 function cleanItems(items: DraftItem[]): ServiceDocumentItem[] { return items.filter((item) => item.name.trim() || item.unitPrice > 0).map((item) => ({ name: item.name.trim(), quantity: roundMoney(item.quantity || 1), unitPrice: roundMoney(item.unitPrice), totalPrice: roundMoney((item.quantity || 1) * item.unitPrice) })); }
 function firstInvalidItem(items: DraftItem[]): string | null { for (const item of items) { if (!item.name.trim() && item.unitPrice <= 0) continue; if (!item.name.trim()) return 'Completează denumirea fiecărei poziții cu valori.'; if (!Number.isFinite(item.quantity) || item.quantity <= 0) return 'Cantitatea trebuie să fie mai mare decât zero.'; } return null; }
 function validDate(value: string) { return value.trim() !== '' && !Number.isNaN(new Date(value).getTime()); }
@@ -223,7 +229,7 @@ const styles = StyleSheet.create({
   header: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, headerIcon: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' }, headerCopy: { minWidth: 0, flex: 1, gap: 1 }, step: { fontSize: 10, fontWeight: '900', letterSpacing: .5, textTransform: 'uppercase' }, close: { width: 38, height: 38, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   content: { minHeight: 0 }, contentInner: { gap: spacing.md, paddingBottom: spacing.sm }, autoNotice: { minHeight: 48, borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, noticeCopy: { minWidth: 0, flex: 1 }, titleWithInfo: { minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, textArea: { minHeight: 78, paddingTop: spacing.md },
   agreementChoice: { gap: spacing.sm }, segments: { flexDirection: 'row', gap: spacing.sm }, segment: { minHeight: 44, flex: 1, borderWidth: 1, borderRadius: radius.pill, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  itemsSection: { borderTopWidth: 1, paddingTop: spacing.md, gap: spacing.sm }, itemsHeader: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm }, itemActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }, itemList: { gap: spacing.sm }, itemCard: { borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, gap: spacing.sm }, itemHeader: { minHeight: 30, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, position: { width: 27, height: 27, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' }, positionTitle: { flex: 1 }, remove: { width: 32, height: 32, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' }, itemFields: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, itemField: { minWidth: 105, flexBasis: 115 }, itemFieldWide: { minWidth: 180, flex: 1 }, itemTotal: { textAlign: 'right', fontWeight: '800' }, emptyItems: { minHeight: 54, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  itemsSection: { borderTopWidth: 1, paddingTop: spacing.md, gap: spacing.sm }, itemsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm }, itemsHeaderCopy: { minWidth: 0, flex: 1, gap: 1 }, itemActions: { flexDirection: 'row', flexShrink: 0, gap: spacing.xs }, itemAction: { minHeight: 38, paddingHorizontal: 10, borderRadius: radius.pill }, itemList: { gap: spacing.sm }, itemCard: { borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, gap: spacing.sm }, itemHeader: { minHeight: 30, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, position: { width: 27, height: 27, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' }, positionTitle: { flex: 1 }, remove: { width: 32, height: 32, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' }, itemFields: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, itemField: { minWidth: 105, flexBasis: 115 }, itemFieldWide: { minWidth: 180, flex: 1 }, itemTotal: { textAlign: 'right', fontWeight: '800' }, emptyItems: { minHeight: 54, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   summary: { borderWidth: 1, borderRadius: radius.lg, padding: spacing.sm, gap: spacing.sm }, summaryTitle: { minWidth: 0, flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, summaryIcon: { width: 36, height: 36, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' }, summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, summaryValue: { minWidth: 130, flex: 1, borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, gap: 4 }, summaryLabel: { flexDirection: 'row', alignItems: 'center', gap: 6 }, dot: { width: 7, height: 7, borderRadius: radius.pill }, paymentGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, paymentValue: { minWidth: 130, flex: 1, borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, gap: 3 },
   dateRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, dateField: { minWidth: 240, flex: 1 }, warrantyPreview: { minHeight: 70, borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, warrantyPreviewIcon: { width: 42, height: 42, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   error: { borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, actions: { flexDirection: 'row', gap: spacing.sm }, action: { minWidth: 150, flex: 1 },
