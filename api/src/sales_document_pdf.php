@@ -71,7 +71,7 @@ function gshop_sales_document_footer(GshopServiceDocumentPdf $pdf, int $page): v
 
 function gshop_sales_document_add_page(GshopServiceDocumentPdf $pdf, string $title, array $document, int &$page): void {
     $page++;
-    $pdf->AddPage('P', [GSHOP_SALES_DOCUMENT_WIDTH, GSHOP_SALES_DOCUMENT_HEIGHT]);
+    $pdf->AddPage('P', 'A4');
     gshop_sales_document_header($pdf, $title, $document, $page);
     gshop_sales_document_footer($pdf, $page);
 }

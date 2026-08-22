@@ -222,6 +222,8 @@ function generate_sales_document_record(string $sheetId, string $type, array $bo
 
     $company = sales_document_company($row, $sheet);
     $snapshotSheet = $sheet;
+    $snapshotSheet['technicalAssessment']=$technical;
+    $snapshotSheet['finalNotes']=$finalNotes;
     foreach (['companySnapshot','signaturePath','filePath','fileSha256'] as $key) unset($snapshotSheet[$key]);
     $snapshot = [
         'brand'=>'Calculatoare Profesionale | G-Shop',

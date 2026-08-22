@@ -110,10 +110,16 @@ La actualizarea unei instalări existente, apelează `POST /admin/migrations/cli
 - `GET|PUT|DELETE /sales-sheets/{id}` — consultă, regenerează sau elimină o fișă de vânzare
 - `PUT /sales-sheets/{id}/expenses` — salvează pozițiile de cheltuieli interne și recalculează suma rămasă pentru G-Shop
 - `POST /sales-sheets/{id}/signature` — salvează semnătura electronică a clientului și regenerează PDF-ul
+- `GET /sales-sheets/{id}/documents` — returnează pașii DOSAR: deviz final și certificat de garanție
+- `POST /sales-sheets/{id}/documents/FINAL_ESTIMATE` — generează sau actualizează devizul cu desfășurător de piese/produse și manoperă/servicii
+- `POST /sales-sheets/{id}/documents/WARRANTY` — generează certificatul numai după existența devizului final
+- `DELETE /sales-sheets/{id}/documents/{type}` — elimină documentul pentru refacere; eliminarea devizului retrage și garanția dependentă
 - `GET|POST /companies?propertyId={uuid}` — lista firmelor este comună între proprietăți
 - `PUT /companies/{id}/default` cu `{ "propertyId": "uuid" }` — selectează independent firma activă pentru proprietatea Service sau Shop
 
 Fișa de vânzare fixează un snapshot al firmei active în momentul emiterii. Schimbarea ulterioară a firmei active nu rescrie documentele deja emise. Totalul produselor, livrarea și restul de plată sunt recalculate pe server, iar semnătura clientului și ștampila firmei sunt aplicate automat în PDF. Cheltuielile sunt valori interne protejate de permisiunea `financials.view`, nu apar în PDF și sunt folosite pentru calculul `bani încasați - cheltuieli = rămâne G-Shop`.
+
+Documentele DOSAR sunt generate exclusiv pe domeniul Shop, în `uploads/sales-documents`. Devizul are total propriu calculat din pozițiile sale, dar preia încasarea curentă din fișa de vânzare; astfel fișa deja emisă nu este rescrisă când operatorul detaliază desfășurătorul. Certificatul păstrează totalul devizului și se regenerează automat când se schimbă devizul, plata, semnătura sau ștampila. Toate PDF-urile folosesc identitatea `Calculatoare Profesionale | G-Shop`.
 
 ### Service
 
