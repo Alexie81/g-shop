@@ -3,6 +3,8 @@ DirectoryIndex index.php
 RewriteEngine On
 RewriteRule ^storage(?:/|$) - [F,L]
 RewriteRule ^uploads/service-sheets(?:/|$) - [F,L]
+RewriteRule ^uploads/sales-documents/(?!v2(?:/|$)).+\.pdf$ - [F,L,NC]
+RewriteRule ^uploads/sales-dossiers/(?!v2(?:/|$)).+\.pdf$ - [F,L,NC]
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ index.php [QSA,L]
