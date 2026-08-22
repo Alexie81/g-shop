@@ -28,6 +28,7 @@ export interface SalesSheetRepository {
   savePayment(id: UUID, paymentStatus: SalesPaymentStatus, advancePaid: number): Promise<SalesSheet>;
   saveExpenses(id: UUID, expenses: SalesSheet['expenses']): Promise<SalesSheet>;
   saveSignature(id: UUID, signature: string): Promise<SalesSheet>;
+  generatePdf(id: UUID): Promise<SalesSheet>;
   remove(id: UUID): Promise<void>;
 }
 export interface AppUpdateRepository { get(): Promise<AppUpdateInfo>; }

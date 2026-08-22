@@ -109,14 +109,34 @@ function gshop_sales_pdf_image(Fpdi $pdf, ?string $relativePath, float $x, float
     if ($temporary && is_file($temporary)) @unlink($temporary);
 }
 
+function gshop_sales_pdf_file_slug(mixed $value, string $fallback): string {
+    $text = trim((string)($value ?? ''));
+    if ($text !== '' && function_exists('iconv')) {
+        $transliterated = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $text);
+        if (is_string($transliterated) && $transliterated !== '') $text = $transliterated;
+    }
+    $slug = trim((string)preg_replace('/[^a-zA-Z0-9]+/', '-', $text), '-');
+    return $slug !== '' ? substr($slug, 0, 100) : $fallback;
+}
+
+function gshop_sales_pdf_file_name(array $sheet): string {
+    $client = gshop_sales_pdf_file_slug($sheet['customerName'] ?? '', 'Client');
+    $rawNumber = preg_replace('/^FV-?/i', '', trim((string)($sheet['number'] ?? ''))) ?? '';
+    if (preg_match('/^(\d{4})-(\d+)$/', $rawNumber, $match)) {
+        $number = $match[1] . '-' . str_pad($match[2], 6, '0', STR_PAD_LEFT);
+    } else {
+        $number = gshop_sales_pdf_file_slug($rawNumber, gmdate('Y') . '-000001');
+    }
+    return 'FV-' . $client . '-' . $number . '.pdf';
+}
+
 /** @return array{filePath:string,url:string,sha256:string,generatedAt:string} */
 function generate_sales_sheet_pdf(array $sheet, array $company, ?string $signaturePath, ?string $stampPath): array {
     $template = __DIR__ . '/../assets/sales-sheet-templates/with-company/sales-sheet.pdf';
     if (!is_file($template)) throw new RuntimeException('Șablonul fișei de vânzare nu este disponibil.');
     $directory = __DIR__ . '/../uploads/sales-sheets';
     if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) throw new RuntimeException('Directorul fișelor de vânzări nu poate fi creat.');
-    $id = preg_replace('/[^a-zA-Z0-9-]/', '', (string)($sheet['id'] ?? '')) ?: uuid_v4();
-    $relativePath = 'uploads/sales-sheets/' . $id . '.pdf';
+    $relativePath = 'uploads/sales-sheets/' . gshop_sales_pdf_file_name($sheet);
     $output = __DIR__ . '/../' . $relativePath;
     $temporary = $output . '.tmp-' . bin2hex(random_bytes(5));
     $currency = strtoupper(trim((string)($sheet['currencyCode'] ?? 'RON'))) ?: 'RON';

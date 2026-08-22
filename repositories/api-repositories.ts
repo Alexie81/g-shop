@@ -29,6 +29,7 @@ export const salesSheetRepository: SalesSheetRepository = {
   savePayment: (id, paymentStatus, advancePaid) => apiRequest(`/sales-sheets/${id}/payment`, { method: 'PUT', body: JSON.stringify({ paymentStatus, advancePaid }) }),
   saveExpenses: (id, expenses) => apiRequest(`/sales-sheets/${id}/expenses`, { method: 'PUT', body: JSON.stringify({ expenses: expenses ?? [] }) }),
   saveSignature: (id, signature) => apiRequest(`/sales-sheets/${id}/signature`, { method: 'POST', body: JSON.stringify({ signature }) }),
+  generatePdf: (id) => apiRequest(`/sales-sheets/${id}/pdf`, { method: 'POST' }),
   remove: (id) => apiRequest(`/sales-sheets/${id}`, { method: 'DELETE' }),
 };
 export const appUpdateRepository: AppUpdateRepository = { get: () => apiRequest('/app-update', { authenticated: false }) };

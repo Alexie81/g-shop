@@ -14,17 +14,55 @@ import { useAsyncData } from '@/hooks/useAsyncData';
 import { salesSheetRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { SalesPaymentStatus, SalesSheet } from '@/types';
-import { formatDate } from '@/utils/format';
+import { formatDate, normalizePhoneForWhatsApp } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Linking, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Linking, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 const paymentLabels = { CASH: 'Numerar', BANK_TRANSFER: 'Transfer bancar', CARD: 'Plată cu cardul' } as const;
 const deliveryLabels = { DELIVERY: 'Cu livrare', PICKUP: 'Fără livrare' } as const;
 const money = (value: number, currency: string) => new Intl.NumberFormat('ro-RO', { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 const numberValue = (value: string) => { const parsed = Number(value.replace(',', '.')); return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0; };
 type ExpenseDraft = { id: string; name: string; quantity: string; amount: string };
+
+const pdfFilePart = (value: string) => value
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^a-zA-Z0-9]+/g, '-')
+  .replace(/^-+|-+$/g, '') || 'Client';
+
+const salesSheetPdfFileName = (sheet: SalesSheet) => {
+  const rawNumber = sheet.number.replace(/^FV-?/i, '');
+  const match = rawNumber.match(/^(\d{4})-(\d+)$/);
+  const number = match ? `${match[1]}-${match[2].padStart(6, '0')}` : pdfFilePart(rawNumber);
+  return `FV-${pdfFilePart(sheet.customerName)}-${number}.pdf`;
+};
+
+async function downloadPdfOnWeb(url: string, fileName: string) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error('PDF-ul nu a putut fi descărcat.');
+  const objectUrl = URL.createObjectURL(await response.blob());
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
+async function sharePdfOnWeb(url: string, fileName: string) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error('PDF-ul nu a putut fi pregătit pentru trimitere.');
+  const file = new File([await response.blob()], fileName, { type: 'application/pdf' });
+  const shareData = { files: [file], title: fileName };
+  if (!navigator.share || (navigator.canShare && !navigator.canShare(shareData))) return false;
+  await navigator.share(shareData);
+  return true;
+}
 
 export default function SalesSheetDetailsScreen() {
   const { salesSheetId } = useLocalSearchParams<{ salesSheetId: string }>();
@@ -40,6 +78,7 @@ export default function SalesSheetDetailsScreen() {
   const [expensesEditing, setExpensesEditing] = useState(false);
   const [savingExpenses, setSavingExpenses] = useState(false);
   const [expenseDrafts, setExpenseDrafts] = useState<ExpenseDraft[]>([]);
+  const [pdfAction, setPdfAction] = useState<'download' | 'whatsapp' | null>(null);
   const state = useAsyncData<SalesSheet>(() => salesSheetRepository.get(salesSheetId), [salesSheetId]);
   const sheet = state.data;
   useEffect(() => { if (sheet) setPaymentDraft(String(sheet.advancePaid).replace('.', ',')); }, [sheet]);
@@ -47,6 +86,57 @@ export default function SalesSheetDetailsScreen() {
   const canViewFinancials = hasPermission('financials.view');
   const canEditPayment = hasPermission('sales_sheets.update');
   const canEditExpenses = canViewFinancials && hasPermission('sales_sheets.update');
+
+  const handlePdfAction = async (action: 'download' | 'whatsapp') => {
+    if (!sheet?.pdfUrl || pdfAction) return;
+    setPdfAction(action);
+    try {
+      const generatedSheet = await salesSheetRepository.generatePdf(sheet.id);
+      state.setData(generatedSheet);
+      if (!generatedSheet.pdfUrl) throw new Error('PDF-ul nu a putut fi generat.');
+      const fileName = salesSheetPdfFileName(generatedSheet);
+      if (Platform.OS === 'web') {
+        if (action === 'download') {
+          await downloadPdfOnWeb(generatedSheet.pdfUrl, fileName);
+          showToast(`PDF descărcat: ${fileName}`, 'success');
+          return;
+        }
+        if (await sharePdfOnWeb(generatedSheet.pdfUrl, fileName)) return;
+        const phone = normalizePhoneForWhatsApp(generatedSheet.customerPhone);
+        if (!phone) throw new Error('Clientul nu are un număr valid pentru WhatsApp.');
+        const message = `Bună ziua! Vă trimitem fișa de vânzare ${generatedSheet.number}: ${generatedSheet.pdfUrl}`;
+        await Linking.openURL(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`);
+        return;
+      }
+
+      if (!FileSystem.cacheDirectory) throw new Error('Spațiul temporar nu este disponibil.');
+      const localUri = `${FileSystem.cacheDirectory}${fileName}`;
+      await FileSystem.deleteAsync(localUri, { idempotent: true });
+      const download = await FileSystem.downloadAsync(generatedSheet.pdfUrl, localUri);
+      if (download.status < 200 || download.status >= 300) throw new Error('PDF-ul nu a putut fi descărcat.');
+      if (!await Sharing.isAvailableAsync()) throw new Error('Trimiterea fișierelor nu este disponibilă pe acest dispozitiv.');
+      await Sharing.shareAsync(download.uri, {
+        mimeType: 'application/pdf',
+        UTI: 'com.adobe.pdf',
+        dialogTitle: action === 'whatsapp' ? 'Trimite PDF-ul pe WhatsApp' : 'Salvează sau deschide PDF-ul',
+      });
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Acțiunea asupra PDF-ului nu a putut fi finalizată.', 'error');
+    } finally {
+      setPdfAction(null);
+    }
+  };
+
+  const openWhatsAppConversation = async () => {
+    if (!sheet) return;
+    const phone = normalizePhoneForWhatsApp(sheet.customerPhone);
+    if (!phone) return showToast('Clientul nu are un număr valid pentru WhatsApp.', 'error');
+    try {
+      await Linking.openURL(`https://wa.me/${phone}`);
+    } catch {
+      showToast('Conversația WhatsApp nu a putut fi deschisă.', 'error');
+    }
+  };
 
   const saveSignature = async (signature: string) => {
     if (!sheet) return;
@@ -98,7 +188,12 @@ export default function SalesSheetDetailsScreen() {
               <AppText variant={compact ? 'caption' : 'body'} muted>{sheet.customerName} · {sheet.productName}</AppText>
               <AppText variant="caption" muted>{formatDate(sheet.documentAt, true)}{sheet.companyName ? ` · ${sheet.companyName}` : ''}</AppText>
             </View>
-            <View style={[styles.heroActions, compact && styles.full]}>{hasPermission('sales_sheets.update') ? <Button compact={compact} variant="outline" label="Editează toate datele" icon="create-outline" onPress={() => router.push(`/shop/sales-sheets/${sheet.id}/edit` as never)} style={compact ? styles.full : undefined} /> : null}<Button compact={compact} label="Deschide PDF" icon="open-outline" disabled={!sheet.pdfUrl} onPress={() => sheet.pdfUrl && void Linking.openURL(sheet.pdfUrl)} style={compact ? styles.full : undefined} /></View>
+            <View style={[styles.heroActions, compact && styles.heroActionsCompact]}>
+              {hasPermission('sales_sheets.update') ? <Button compact variant="outline" label="Editează" icon="create-outline" onPress={() => router.push(`/shop/sales-sheets/${sheet.id}/edit` as never)} style={styles.heroAction} /> : null}
+              <Button compact label={pdfAction === 'download' ? 'Se descarcă…' : 'Descarcă'} icon="download-outline" loading={pdfAction === 'download'} disabled={!sheet.pdfUrl || pdfAction === 'whatsapp'} onPress={() => void handlePdfAction('download')} style={styles.heroAction} />
+              <Button compact label={pdfAction === 'whatsapp' ? 'Se pregătește…' : 'WhatsApp'} icon="logo-whatsapp" loading={pdfAction === 'whatsapp'} disabled={!sheet.pdfUrl || pdfAction === 'download'} onPress={() => void handlePdfAction('whatsapp')} style={[styles.heroAction, styles.whatsAppAction]} />
+              <Button compact variant="outline" label="Conversație" icon="chatbubble-ellipses-outline" onPress={() => void openWhatsAppConversation()} style={[styles.heroAction, styles.whatsAppConversationAction]} />
+            </View>
           </Card>
 
           <View style={[styles.metrics, compact && styles.metricsCompact]}>
@@ -155,7 +250,12 @@ const styles = StyleSheet.create({
   hero: { padding: spacing.md, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
   heroIcon: { width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   heroIconCompact: { width: 42, height: 42, borderRadius: 12 },
-  heroActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, copy: { minWidth: 0, flex: 1, gap: 3 },
+  heroActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  heroActionsCompact: { width: '100%' },
+  heroAction: { minWidth: 96, flexGrow: 1, paddingHorizontal: spacing.sm },
+  whatsAppAction: { backgroundColor: '#20B85A', borderColor: '#20B85A' },
+  whatsAppConversationAction: { borderColor: '#20B85A' },
+  copy: { minWidth: 0, flex: 1, gap: 3 },
   titleRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.xs },
   status: { minHeight: 24, paddingHorizontal: spacing.sm, borderRadius: radius.pill, flexDirection: 'row', alignItems: 'center', gap: 4 }, full: { width: '100%' },
   metrics: { flexDirection: 'row', gap: spacing.sm },
