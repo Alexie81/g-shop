@@ -28,6 +28,7 @@ function gshop_sales_pdf_shrink_text(Fpdi $pdf, float $x, float $baseline, mixed
     $text = trim((string)($value ?? ''));
     if ($text === '') return;
     do { $pdf->SetFont('DejaVu', $style, $size); $size -= 0.2; } while ($size >= $minimum && $pdf->GetStringWidth($text) > $width);
+    if ($pdf->GetStringWidth($text) > $width) $text = gshop_pdf_fit($pdf, $text, $width);
     $pdf->SetTextColor(7, 21, 45);
     $pdf->Text($x, $baseline, $text);
 }
@@ -165,7 +166,7 @@ function generate_sales_sheet_pdf(array $sheet, array $company, ?string $signatu
 
     gshop_sales_pdf_shrink_text($pdf, 398, 61, $sheet['number'] ?? '', 48, 6.4, 4.2);
     gshop_sales_pdf_shrink_text($pdf, 518, 61, gshop_sales_pdf_local_date($sheet['documentAt'] ?? ''), 38, 5.8, 3.8);
-    gshop_sales_pdf_shrink_text($pdf, 110, 106, $company['legalName'] ?? '', 96, 6.2, 4.8);
+    gshop_sales_pdf_shrink_text($pdf, 100, 106, $company['legalName'] ?? '', 108, 6.2, 4.2);
     gshop_sales_pdf_shrink_text($pdf, 245, 106, $company['taxId'] ?? '', 137, 6.5, 4.8);
     gshop_sales_pdf_shrink_text($pdf, 482, 106, $company['tradeRegisterNumber'] ?? '', 72, 6.0, 4.0);
     gshop_sales_pdf_shrink_text($pdf, 56, 125, gshop_pdf_full_address($company), 228, 6.1, 4.5, '');

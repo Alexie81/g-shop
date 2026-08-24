@@ -185,7 +185,7 @@ export default function SalesSheetDetailsScreen() {
           <Card style={styles.hero} elevated>
             <View style={[styles.heroIcon, compact && styles.heroIconCompact, { backgroundColor: colors.primarySoft }]}><Ionicons name="document-text-outline" size={compact ? 23 : 26} color={colors.primary} /></View>
             <View style={styles.copy}>
-              <View style={styles.titleRow}><AppText variant={compact ? 'heading' : 'title'}>{sheet.number}</AppText><View style={[styles.status, { backgroundColor: `${palette.success}16` }]}><Ionicons name="checkmark-circle" size={14} color={palette.success} /><AppText variant="caption" style={{ color: palette.success, fontWeight: '900' }}>DOCUMENT EMIS</AppText></View><PaymentBadge paid={sheet.paymentStatus === 'PAID'} /></View>
+              <View style={styles.titleRow}><AppText variant={compact ? 'heading' : 'title'}>{sheet.number}</AppText><View style={[styles.status, { backgroundColor: `${palette.success}16` }]}><Ionicons name="checkmark-circle" size={14} color={palette.success} /><AppText variant="caption" style={{ color: palette.success, fontWeight: '900' }}>DOCUMENT EMIS</AppText></View><PaymentBadge paid={sheet.paymentStatus === 'PAID'} />{sheet.paymentStatus === 'UNPAID' ? <AdvanceBadge value={money(sheet.receivedAmount, sheet.currencyCode)} /> : null}</View>
               <AppText variant={compact ? 'caption' : 'body'} muted>{sheet.customerName} · {sheet.productName}</AppText>
               <AppText variant="caption" muted>{formatDate(sheet.documentAt, true)}{sheet.companyName ? ` · ${sheet.companyName}` : ''}</AppText>
             </View>
@@ -247,6 +247,7 @@ function SectionTitle({ icon, title }: { icon: keyof typeof Ionicons.glyphMap; t
 function Data({ label, value, wide = false }: { label: string; value?: string; wide?: boolean }) { return <View style={[styles.data, wide && styles.dataWide]}><AppText variant="caption" muted>{label.toLocaleUpperCase('ro-RO')}</AppText><AppText variant="label">{value || '—'}</AppText></View>; }
 function Metric({ compact, label, value, color }: { compact: boolean; label: string; value: string; color: string }) { return <Card style={[styles.metric, compact && styles.metricCompact]}><AppText variant="caption" muted>{label}</AppText><AppText variant="heading" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.68} style={{ color }}>{value}</AppText></Card>; }
 function PaymentBadge({ paid }: { paid: boolean }) { return <View style={[styles.status, { backgroundColor: `${paid ? palette.success : palette.warning}16` }]}><Ionicons name={paid ? 'checkmark-circle' : 'time'} size={15} color={paid ? palette.success : palette.warning} /><AppText variant="caption" style={{ color: paid ? palette.success : palette.warning, fontWeight: '900' }}>{paid ? 'ACHITAT' : 'NEACHITAT'}</AppText></View>; }
+function AdvanceBadge({ value }: { value: string }) { return <View style={[styles.status, { backgroundColor: `${palette.danger}16` }]}><Ionicons name="cash-outline" size={15} color={palette.danger} /><AppText variant="caption" style={{ color: palette.danger, fontWeight: '900' }}>Avans: {value}</AppText></View>; }
 
 const styles = StyleSheet.create({
   stack: { width: '100%', maxWidth: 920, alignSelf: 'center', gap: spacing.md },

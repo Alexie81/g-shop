@@ -151,7 +151,10 @@ export function SalesDocumentsPanel({ sheet, onGenerated }: Props) {
       const contentLabel = dossier.documentCount >= 3
         ? 'dosarul complet G-Shop'
         : dossier.documentCount === 2 ? 'fișa de vânzare și devizul final' : 'fișa de vânzare';
-      const message = `Bună ziua! Vă trimitem ${contentLabel} pentru ${sheet.number}: ${dossier.url}`;
+      const documentLines = [`Fișa de vânzare: ${sheet.number}`];
+      if (dossier.documentCount >= 2) documentLines.push(`Deviz: ${slots[0].document?.number || 'emis'}`);
+      if (dossier.documentCount >= 3) documentLines.push(`Certificat de garanție: ${slots[1].document?.number || 'emis'}`);
+      const message = `Bună ziua! Vă trimitem ${contentLabel}:\n\n${documentLines.join('\n')}\n\nPDF: ${dossier.url}`;
       await Linking.openURL(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Dosarul nu a putut fi pregătit.', 'error');
@@ -267,6 +270,10 @@ export function SalesDocumentsPanel({ sheet, onGenerated }: Props) {
                 {available ? <View style={styles.emitted}>
                   <Ionicons name="checkmark-circle" size={14} color={palette.success} />
                   <AppText variant="caption" style={styles.emittedText}>Emis</AppText>
+                </View> : null}
+                {available && definition.type === 'FINAL_ESTIMATE' ? <View style={[styles.paymentBadge, { backgroundColor: `${sheet.paymentStatus === 'PAID' ? palette.success : palette.warning}16` }]}>
+                  <Ionicons name={sheet.paymentStatus === 'PAID' ? 'checkmark-circle' : 'time'} size={12} color={sheet.paymentStatus === 'PAID' ? palette.success : palette.warning} />
+                  <AppText variant="caption" style={{ color: sheet.paymentStatus === 'PAID' ? palette.success : palette.warning, fontWeight: '800' }}>{sheet.paymentStatus === 'PAID' ? 'Achitat' : 'Neachitat'}</AppText>
                 </View> : null}
               </View>
               <AppText variant="caption" muted numberOfLines={1}>{metadata}</AppText>
@@ -415,10 +422,11 @@ const styles = StyleSheet.create({
   documentMain: { minWidth: 180, flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   documentIcon: { width: 34, height: 34, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   documentCopy: { minWidth: 0, flex: 1, gap: 1 },
-  documentTitle: { minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  documentTitle: { minWidth: 0, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
   documentLabel: { minWidth: 0, flexShrink: 1 },
   emitted: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   emittedText: { color: palette.success, fontWeight: '800' },
+  paymentBadge: { minHeight: 20, borderRadius: radius.pill, paddingHorizontal: 7, flexDirection: 'row', alignItems: 'center', gap: 3 },
   documentActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.xs },
   documentActionsNarrow: { width: '100%', paddingLeft: 42, flexWrap: 'wrap' },
   sendOne: { minWidth: 92, minHeight: 44, backgroundColor: palette.success, borderColor: palette.success, paddingHorizontal: spacing.sm },
