@@ -3,9 +3,9 @@ const { defineConfig } = require('eslint/config');
 const expoConfig = require('eslint-config-expo/flat');
 
 module.exports = defineConfig([
+  { ignores: ['**/dist/**', '**/dist-*/**', '**/tmp/**', '**/.expo/**'] },
   expoConfig,
   {
-    ignores: ['dist/**', 'dist-*/**', 'tmp/**'],
     rules: {
       // React Native Animated values are intentionally read while styles are composed.
       // These compiler-oriented React rules currently flag that supported API pattern.
