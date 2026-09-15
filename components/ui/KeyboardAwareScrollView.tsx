@@ -13,6 +13,7 @@ import {
 
 const DEFAULT_KEYBOARD_GAP = 12;
 const REVEAL_DELAYS = Platform.OS === 'android' ? [40, 180, 320] : [20, 120];
+const keyboardMetrics = () => Platform.OS === 'web' || typeof Keyboard.metrics !== 'function' ? undefined : Keyboard.metrics();
 
 type Props = ScrollViewProps & {
   keyboardGap?: number;
@@ -51,7 +52,7 @@ export const KeyboardAwareScrollView = forwardRef<ScrollView, Props>(function Ke
   const revealFocusedInput = useCallback(() => {
     const target = focusedTargetRef.current;
     const scroll = scrollRef.current;
-    const keyboard = Keyboard.metrics();
+    const keyboard = keyboardMetrics();
     if (!target || !scroll || !keyboard || keyboard.height <= 0) return;
 
     UIManager.measureInWindow(target, (_inputX, inputY, _inputWidth, inputHeight) => {
@@ -74,7 +75,7 @@ export const KeyboardAwareScrollView = forwardRef<ScrollView, Props>(function Ke
 
   const updateKeyboardInset = useCallback(() => {
     const scroll = scrollRef.current;
-    const keyboard = Keyboard.metrics();
+    const keyboard = keyboardMetrics();
     const nativeScroll = scroll?.getNativeScrollRef();
     if (!nativeScroll || !keyboard || keyboard.height <= 0) {
       setKeyboardInset(0);
