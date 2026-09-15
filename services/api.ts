@@ -91,13 +91,17 @@ export function shopApiRequest<T>(path: string, options: RequestOptions = {}): P
   return requestFrom<T>(SHOP_API_URL, path, options);
 }
 
-export function setActivePropertyApi(property: Pick<Property, 'domain' | 'type'> | null) {
+export function apiUrlForProperty(property: Pick<Property, 'domain' | 'type'> | null) {
   const domain = property?.domain.trim().toLocaleLowerCase('ro-RO') ?? '';
-  activePropertyApiUrl = domain === 'gshop-trotinete.ro' || domain.endsWith('.gshop-trotinete.ro')
+  return domain === 'gshop-trotinete.ro' || domain.endsWith('.gshop-trotinete.ro')
     ? SCOOTER_API_URL
     : property?.type === 'SHOP'
       ? SHOP_API_URL
       : API_URL;
+}
+
+export function setActivePropertyApi(property: Pick<Property, 'domain' | 'type'> | null) {
+  activePropertyApiUrl = apiUrlForProperty(property);
 }
 
 export function propertyApiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
