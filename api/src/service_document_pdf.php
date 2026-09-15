@@ -298,8 +298,32 @@ function gshop_document_is_sales(array $snapshot): bool {
     return strtoupper(gshop_pdf_string($snapshot['documentProfile'] ?? '')) === 'SALES';
 }
 
+function gshop_document_service_brand(array $snapshot): string {
+    $company = is_array($snapshot['company'] ?? null) ? $snapshot['company'] : [];
+    $propertyName = gshop_pdf_string($company['propertyName'] ?? '');
+    $normalized = function_exists('mb_strtoupper') ? mb_strtoupper($propertyName, 'UTF-8') : strtoupper($propertyName);
+    return str_contains($normalized, 'G-SHOP TROTINETE') ? 'G-SHOP TROTINETE' : 'G-SHOP';
+}
+
 function gshop_document_footer_label(array $snapshot, string $serviceLabel): string {
-    return gshop_document_is_sales($snapshot) ? 'CALCULATOARE PROFESIONALE | G-SHOP' : $serviceLabel;
+    if (gshop_document_is_sales($snapshot)) return 'CALCULATOARE PROFESIONALE | G-SHOP';
+    return preg_replace('/^G-SHOP/u', gshop_document_service_brand($snapshot), $serviceLabel, 1) ?: $serviceLabel;
+}
+
+function gshop_document_overlay_service_template_brand(GshopServiceDocumentPdf $pdf, array $snapshot, string $type): void {
+    if (gshop_document_is_sales($snapshot) || gshop_document_service_brand($snapshot) === 'G-SHOP') return;
+    $prefix = match ($type) {
+        'INTAKE' => 'COST ESTIMATIV',
+        'FINAL_ESTIMATE' => 'DIAGNOSTIC, PIESE ȘI MANOPERĂ',
+        'EXIT' => 'PREDARE ȘI CONFIRMARE CLIENT',
+        'WARRANTY' => 'SERVICE ȘI PIESE ÎNLOCUITE',
+        default => '',
+    };
+    if ($prefix === '') return;
+    $pdf->SetFillColor(255, 255, 255);
+    $sourceBaseline = $type === 'WARRANTY' ? 770.0 : 779.0;
+    $pdf->Rect(96, $type === 'WARRANTY' ? 62 : 49, 240, $type === 'WARRANTY' ? 14 : 18, 'F');
+    gshop_pdf_text($pdf, 98, $sourceBaseline, $prefix . ' | ' . gshop_document_service_brand($snapshot), 6.6, 'B', 238, 'L', gshop_document_color('electricDark'));
 }
 
 function gshop_document_sales_warranty_conditions(GshopServiceDocumentPdf $pdf): void {
@@ -637,7 +661,7 @@ function gshop_document_overlay_intake(
         gshop_document_place_image($pdf, $stampPath, 32, 158, 96, 96);
         gshop_document_place_image($pdf, $signature['path'] ?? null, 367, 222, 98, 27, $signature);
     }
-    gshop_document_footer($pdf, $page, 2, 'G-SHOP | INTRARE SERVICE');
+    gshop_document_footer($pdf, $page, 2, gshop_document_footer_label($snapshot, 'G-SHOP | INTRARE SERVICE'));
 }
 
 /** @return list<array{name:string,quantity:mixed,unitPrice:mixed,totalPrice:float}> */
@@ -1090,6 +1114,7 @@ function gshop_document_build_final(
     foreach ($plans as $index => $plan) {
         gshop_document_add_template($pdf, $plan['first'] ? $templates['intro'] : $templates['continuation']);
         gshop_document_overlay_sales_template($pdf, $snapshot, $plan['first'] ? 'FINAL_INTRO' : 'FINAL_CONTINUATION', $plan['first'] ? 682 : 732);
+        gshop_document_overlay_service_template_brand($pdf, $snapshot, 'FINAL_ESTIMATE');
         if ($salesProfile && !empty($snapshot['nativeSalesTemplate'])) {
             gshop_pdf_text($pdf, 355, 779, $document['number'] ?? '', 6.3, 'B', 91);
             gshop_pdf_text($pdf, 464, 779, gshop_document_date($document['documentAt'] ?? ''), 6.3, 'B', 87);
@@ -1156,6 +1181,7 @@ function gshop_document_build_final(
     if ($salesProfile) return $totalPages;
     gshop_document_add_template($pdf, $templates['agreement']);
     gshop_document_overlay_sales_template($pdf, $snapshot, 'FINAL_AGREEMENT', 732);
+    gshop_document_overlay_service_template_brand($pdf, $snapshot, 'FINAL_ESTIMATE');
     gshop_document_overlay_final_agreement($pdf, $document, $snapshot, $signature, $stampPath);
     gshop_document_footer($pdf, $totalPages, $totalPages, gshop_document_footer_label($snapshot, 'G-SHOP | DEVIZ FINAL'));
     return $totalPages;
@@ -1188,7 +1214,7 @@ function gshop_document_overlay_exit(Fpdi $pdf, array $document, array $snapshot
     gshop_document_source_line($pdf, 390, 145, 492, 145, 'lineDark', .85);
     gshop_document_place_image($pdf, $stampPath, 37, 73, 96, 96);
     gshop_document_place_image($pdf, $signature['path'] ?? null, 392, 147, 98, 18, $signature);
-    gshop_document_footer($pdf, 1, 1, 'G-SHOP | IEȘIRE SERVICE');
+    gshop_document_footer($pdf, 1, 1, gshop_document_footer_label($snapshot, 'G-SHOP | IEȘIRE SERVICE'));
 }
 
 /** @param array{path:string,width:int,height:int}|null $signature */
@@ -1355,7 +1381,7 @@ function generate_service_document_pdf(
         'hash' => hash_file('sha256', $template) ?: '',
     ];
     $fingerprint = hash('sha256', serialize([
-        'version' => 33,
+        'version' => 37,
         'type' => $normalizedType,
         'document' => $document,
         'snapshot' => $snapshot,
@@ -1399,23 +1425,28 @@ function generate_service_document_pdf(
                 'EXIT' => 'Fișă de ieșire din service ' . gshop_pdf_string($document['number'] ?? ''),
                 'WARRANTY' => 'Certificat de calitate și garanție ' . gshop_pdf_string($document['number'] ?? ''),
             }, true);
-            $pdf->SetAuthor('G-Shop', true);
+            $company = is_array($snapshot['company'] ?? null) ? $snapshot['company'] : [];
+            $pdf->SetAuthor(gshop_pdf_string($company['propertyName'] ?? '') ?: 'G-Shop', true);
             $pdf->AddFont('DejaVu', '', 'DejaVuSans.ttf', true);
             $pdf->AddFont('DejaVu', 'B', 'DejaVuSans-Bold.ttf', true);
 
             if ($normalizedType === 'INTAKE') {
                 gshop_document_add_template($pdf, $templates['intake'], 1);
+                gshop_document_overlay_service_template_brand($pdf, $snapshot, 'INTAKE');
                 gshop_document_overlay_intake($pdf, 1, $document, $snapshot, $signature, $stamp);
                 gshop_document_add_template($pdf, $templates['intake'], 2);
+                gshop_document_overlay_service_template_brand($pdf, $snapshot, 'INTAKE');
                 gshop_document_overlay_intake($pdf, 2, $document, $snapshot, $signature, $stamp);
             } elseif ($normalizedType === 'FINAL_ESTIMATE') {
                 gshop_document_build_final($pdf, $document, $snapshot, $templates, $signature, $stamp);
             } elseif ($normalizedType === 'EXIT') {
                 gshop_document_add_template($pdf, $templates['exit']);
+                gshop_document_overlay_service_template_brand($pdf, $snapshot, 'EXIT');
                 gshop_document_overlay_exit($pdf, $document, $snapshot, $signature, $stamp);
             } else {
                 gshop_document_add_template($pdf, $templates['warranty']);
                 gshop_document_overlay_sales_template($pdf, $snapshot, 'WARRANTY', 679);
+                gshop_document_overlay_service_template_brand($pdf, $snapshot, 'WARRANTY');
                 gshop_document_overlay_warranty($pdf, $document, $snapshot, $signature, $stamp);
             }
 

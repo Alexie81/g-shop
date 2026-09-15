@@ -15,6 +15,7 @@ function gshop_pdf_property_label(mixed $value): string {
     $name = gshop_pdf_string($value);
     if ($name === '') return '';
     $uppercase = function_exists('mb_strtoupper') ? mb_strtoupper($name, 'UTF-8') : strtoupper($name);
+    if (str_contains($uppercase, 'G-SHOP TROTINETE')) return 'G-SHOP TROTINETE';
     return 'G-SHOP | ' . $uppercase;
 }
 
@@ -625,7 +626,7 @@ function generate_service_sheet_pdf(array $sheet, array $client, array $financia
         $pdf->SetAutoPageBreak(false);
         $pdf->SetMargins(0, 0, 0);
         $pdf->SetTitle('Fișă de service ' . gshop_pdf_string($sheet['number'] ?? ''), true);
-        $pdf->SetAuthor('G-Shop', true);
+        $pdf->SetAuthor(gshop_pdf_string($company['propertyName'] ?? '') ?: 'G-Shop', true);
         $pdf->AddFont('DejaVu', '', 'DejaVuSans.ttf', true);
         $pdf->AddFont('DejaVu', 'B', 'DejaVuSans-Bold.ttf', true);
         $pageCount = $pdf->setSourceFile($template);

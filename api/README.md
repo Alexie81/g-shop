@@ -124,6 +124,12 @@ Documentele DOSAR sunt generate exclusiv pe domeniul Shop, în `uploads/sales-do
 
 ### Service
 
+Proprietatea `G-Shop Trotinete` folosește aceeași interfață Service, dar aplicația rutează modulele proprietății către `https://gshop-trotinete.ro/app-api`. Instanța dedicată folosește configurația comună de autentificare și baza comună izolată prin `property_id`, iar PDF-urile, semnăturile, ștampilele și linkurile QR sunt create și servite din domeniul `gshop-trotinete.ro`. Profilul, utilizatorii, schimbarea proprietății și actualizarea aplicației rămân administrate de API-ul principal.
+
+La prima încărcare a listei de proprietăți, API-ul creează idempotent proprietatea, accesul administratorului principal, profilul de firmă separat și mesajele WhatsApp inițiale. Datele juridice, bancare și ștampila firmei selectate în Reparații Calculatoare București sunt copiate într-o înregistrare separată, iar telefonul `0735046534`, emailul `contact@gshop-trotinete.ro` și website-ul `gshop-trotinete.ro` rămân specifice proprietății noi. Pagina comună „Datele firmei” diferențiază proprietățile prin aliasurile `Calculatoare`, `Shop` și `Trotinete`.
+
+Documentele Service sunt independente: fișa de intrare, devizul final, fișa de ieșire și certificatul de garanție pot fi emise în orice combinație, fără documente prealabile obligatorii.
+
 - `GET|POST /service-sheets` — `POST` permite o singură fișă activă pentru fiecare client
 - `GET|PUT|DELETE /service-sheets/{id}` — ștergerea este logică și păstrează auditul
 - `POST /service-sheets/{id}/signature`

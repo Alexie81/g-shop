@@ -62,6 +62,7 @@ $files = if ($RelativeFiles) {
   Get-ChildItem -LiteralPath $apiRoot -File -Recurse | Where-Object {
     $_.Name -ne '.env' -and
     $_.Name -ne '.installed' -and
+    $_.Name -ne 'README.md' -and
     -not $_.FullName.StartsWith($uploadsRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase) -and
     -not $_.FullName.StartsWith($documentStorageRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)
   }
