@@ -232,10 +232,10 @@ export default function CollaboratorsScreen() {
       <View style={styles.heroCopy}>
         <View style={styles.eyebrow}>
           <Ionicons name="people" size={15} color="#BFD7FF" />
-          <AppText variant="label" style={styles.eyebrowText}>ECHIPA TA</AppText>
+          <AppText variant="label" style={styles.eyebrowText}>ECHIPĂ SERVICE COMUNĂ</AppText>
         </View>
         <AppText variant="display" style={styles.heroTitle}>Colaboratori și comisioane</AppText>
-        <AppText style={styles.heroSubtitle}>Gestionează echipa, regulile de plată și situația fiecărui client dintr-un singur loc.</AppText>
+        <AppText style={styles.heroSubtitle}>Aceeași listă apare în Calculatoare și Trotinete; comisioanele și situația clienților rămân separate pe proprietate.</AppText>
       </View>
       <View style={styles.heroTeamIcon}>
         <Ionicons name="people-outline" size={32} color="#FFFFFF" />
@@ -570,7 +570,7 @@ function EditorModal({ visible, isEditing, compact, form, saving, onChange, onSa
             </View>
             <View style={styles.editorHeaderCopy}>
               <AppText variant="title">{isEditing ? 'Editează colaboratorul' : 'Colaborator nou'}</AppText>
-              <AppText variant="caption" muted>{isEditing ? 'Actualizează datele și regula pentru lucrările viitoare.' : 'Adaugă datele de contact și regula implicită de plată.'}</AppText>
+              <AppText variant="caption" muted>{isEditing ? 'Datele persoanei sunt comune; regula curentă se folosește pentru lucrările viitoare.' : 'Persoana va fi disponibilă în ambele proprietăți Service.'}</AppText>
             </View>
             <Pressable accessibilityRole="button" accessibilityLabel="Închide" onPress={onClose} style={[styles.actionClose, { backgroundColor: colors.surfaceMuted }]}>
               <Ionicons name="close" size={20} color={colors.text} />

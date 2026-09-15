@@ -54,6 +54,7 @@ ORDER BY data_length + index_length DESC;
 - `POST /admin/migrations/collaborator-presets` — migrare administrativă idempotentă pentru instalările existente; necesită `settings.manage`
 - `POST /admin/migrations/client-collaborators` — creează legătura compactă pentru atribuirea mai multor colaboratori și preia automat atribuirea veche; necesită `settings.manage`
 - `POST /admin/migrations/client-finance` — creează idempotent structurile compacte pentru finanțe, cheltuieli și participanți și adaugă statusul client `FINALIZED`; necesită `settings.manage`
+- `POST /admin/migrations/shared-service-people` — partajează idempotent colaboratorii și tehnicienii între proprietățile active de tip `SERVICE`; necesită `settings.manage`
 
 ### Clienți și QR
 
@@ -125,6 +126,8 @@ Documentele DOSAR sunt generate exclusiv pe domeniul Shop, în `uploads/sales-do
 ### Service
 
 Proprietatea `G-Shop Trotinete` folosește aceeași interfață Service, dar aplicația rutează modulele proprietății către `https://gshop-trotinete.ro/app-api`. Instanța dedicată folosește configurația comună de autentificare și baza comună izolată prin `property_id`, iar PDF-urile, semnăturile, ștampilele și linkurile QR sunt create și servite din domeniul `gshop-trotinete.ro`. Profilul, utilizatorii, schimbarea proprietății și actualizarea aplicației rămân administrate de API-ul principal.
+
+Colaboratorii și tehnicienii sunt comuni între `Reparații Calculatoare București` și `G-Shop Trotinete`. Clientul, fișa, colaboratorul presetat, comisionul efectiv, plățile, rapoartele și istoricul operațional rămân separate prin `property_id`; proprietatea `SHOP` nu intră în aceste directoare Service.
 
 La prima încărcare a listei de proprietăți, API-ul creează idempotent proprietatea, accesul administratorului principal, profilul de firmă separat și mesajele WhatsApp inițiale. Datele juridice, bancare și ștampila firmei selectate în Reparații Calculatoare București sunt copiate într-o înregistrare separată, iar telefonul `0735046534`, emailul `contact@gshop-trotinete.ro` și website-ul `gshop-trotinete.ro` rămân specifice proprietății noi. Pagina comună „Datele firmei” diferențiază proprietățile prin aliasurile `Calculatoare`, `Shop` și `Trotinete`.
 

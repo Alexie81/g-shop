@@ -253,6 +253,15 @@ CREATE TABLE IF NOT EXISTS technicians (
   CONSTRAINT fk_technician_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS technician_properties (
+  technician_id BINARY(16) NOT NULL,
+  property_id BINARY(16) NOT NULL,
+  PRIMARY KEY (technician_id, property_id),
+  INDEX idx_technician_properties_property (property_id, technician_id),
+  CONSTRAINT fk_tp_technician FOREIGN KEY (technician_id) REFERENCES technicians(id) ON DELETE CASCADE,
+  CONSTRAINT fk_tp_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS clients (
   id BINARY(16) PRIMARY KEY,
   property_id BINARY(16) NOT NULL,

@@ -96,7 +96,7 @@ export function TechnicianField({ propertyId, technicianId, technicianName, onCh
             <View style={[styles.handle, { backgroundColor: colors.border }]} />
             <View style={styles.header}>
               <View style={[styles.headerIcon, { backgroundColor: `${palette.purple}18` }]}><Ionicons name={adding ? 'person-add-outline' : 'people-outline'} size={24} color={palette.purple} /></View>
-              <View style={styles.headerCopy}><AppText variant="title">{adding ? 'Tehnician nou' : 'Alege tehnicianul'}</AppText><AppText variant="caption" muted>{adding ? 'Va rămâne disponibil și la următoarele fișe.' : 'Selectează persoana care preia lucrarea.'}</AppText></View>
+              <View style={styles.headerCopy}><AppText variant="title">{adding ? 'Tehnician nou' : 'Alege tehnicianul'}</AppText><AppText variant="caption" muted>{adding ? 'Va fi disponibil în Calculatoare și Trotinete.' : 'Selectează persoana care preia lucrarea.'}</AppText></View>
               <Pressable accessibilityLabel="Închide" disabled={saving} onPress={close} style={[styles.close, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={22} color={colors.text} /></Pressable>
             </View>
 

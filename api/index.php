@@ -1202,7 +1202,28 @@ function ensure_technicians_table(PDO $pdo): void {
         INDEX idx_technicians_property_active (property_id,is_active,name),
         CONSTRAINT fk_technician_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS technician_properties (
+        technician_id BINARY(16) NOT NULL,
+        property_id BINARY(16) NOT NULL,
+        PRIMARY KEY (technician_id,property_id),
+        INDEX idx_technician_properties_property (property_id,technician_id),
+        CONSTRAINT fk_tp_technician FOREIGN KEY (technician_id) REFERENCES technicians(id) ON DELETE CASCADE,
+        CONSTRAINT fk_tp_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     $ready = true;
+}
+function sync_shared_service_people(PDO $pdo, bool $force = false): array {
+    static $ready = false;
+    if ($ready && !$force) return ['collaboratorLinks'=>0,'technicianLinks'=>0];
+    ensure_technicians_table($pdo);
+    $collaborators=$pdo->prepare("INSERT IGNORE INTO collaborator_properties (collaborator_id,property_id) SELECT c.id,p.id FROM collaborators c CROSS JOIN properties p WHERE c.is_active=1 AND p.is_active=1 AND p.type='SERVICE'");$collaborators->execute();
+    $technicians=$pdo->prepare("INSERT IGNORE INTO technician_properties (technician_id,property_id) SELECT t.id,p.id FROM technicians t CROSS JOIN properties p WHERE t.is_active=1 AND p.is_active=1 AND p.type='SERVICE'");$technicians->execute();
+    $ready = true;
+    return ['collaboratorLinks'=>$collaborators->rowCount(),'technicianLinks'=>$technicians->rowCount()];
+}
+function migrate_shared_service_people(PDO $pdo): array {
+    $lockName='gshop_shared_service_people_v1';$lock=$pdo->prepare('SELECT GET_LOCK(?,10)');$lock->execute([$lockName]);if((int)$lock->fetchColumn()!==1)throw new RuntimeException('Migrarea nu a putut obține blocarea bazei de date.');
+    try{return sync_shared_service_people($pdo,true);}finally{$release=$pdo->prepare('SELECT RELEASE_LOCK(?)');$release->execute([$lockName]);}
 }
 function technician_select(): string {
     return 'SELECT '.uuid_sql('t.id').' id,'.uuid_sql('t.property_id').' property_id,t.name,t.phone,t.specialty,t.notes,t.is_active,t.created_at,t.updated_at,'.uuid_sql('t.created_by').' created_by,'.uuid_sql('t.updated_by').' updated_by FROM technicians t';
@@ -1211,8 +1232,8 @@ function map_technician(array $row): array {
     $item=entity_base($row);$item['isActive']=(bool)$item['isActive'];return $item;
 }
 function get_technician(string $id, ?string $propertyId = null, bool $activeOnly = false): array {
-    ensure_technicians_table(db());$where=['t.id=?'];$args=[uuid_bin(validated_uuid($id,'Tehnicianul'))];
-    if($propertyId!==null){$where[]='t.property_id=?';$args[]=uuid_bin($propertyId);}if($activeOnly)$where[]='t.is_active=1';
+    sync_shared_service_people(db());$where=['t.id=?'];$args=[uuid_bin(validated_uuid($id,'Tehnicianul'))];
+    if($propertyId!==null){$where[]='EXISTS (SELECT 1 FROM technician_properties tp WHERE tp.technician_id=t.id AND tp.property_id=?)';$args[]=uuid_bin($propertyId);}if($activeOnly)$where[]='t.is_active=1';
     $stmt=db()->prepare(technician_select().' WHERE '.implode(' AND ',$where).' LIMIT 1');$stmt->execute($args);$row=$stmt->fetch();if(!$row)fail('Tehnicianul nu există.',404);return map_technician($row);
 }
 function technician_for_property(string $id, string $propertyId): array {
@@ -1249,6 +1270,7 @@ function map_collaborator(array $row, ?string $propertyId = null): array {
     return $collaborator;
 }
 function get_collaborator(string $id, ?string $propertyId = null): array {
+    sync_shared_service_people(db());
     $where = ['c.id=?']; $args = [uuid_bin($id)];
     if ($propertyId !== null) {
         $where[] = 'EXISTS (SELECT 1 FROM collaborator_properties cp WHERE cp.collaborator_id=c.id AND cp.property_id=?)';
@@ -1265,6 +1287,7 @@ function ensure_existing_property(string $propertyId): void {
     if (!$stmt->fetchColumn()) fail('Proprietatea nu există sau este inactivă.', 422);
 }
 function collaborator_for_property(string $collaboratorId, string $propertyId): array {
+    sync_shared_service_people(db());
     $sql = 'SELECT ' . uuid_sql('c.id') . ' id,c.name,c.default_commission_type,c.default_commission_value FROM collaborators c JOIN collaborator_properties cp ON cp.collaborator_id=c.id WHERE c.id=? AND cp.property_id=? AND c.is_active=1 LIMIT 1';
     $stmt = db()->prepare($sql);
     $stmt->execute([uuid_bin($collaboratorId), uuid_bin($propertyId)]);
@@ -1275,6 +1298,7 @@ function collaborator_for_property(string $collaboratorId, string $propertyId): 
     return $item;
 }
 function preset_collaborator_for_property(string $propertyId): ?array {
+    sync_shared_service_people(db());
     $sql = 'SELECT ' . uuid_sql('c.id') . ' id,c.name,c.default_commission_type,c.default_commission_value FROM collaborator_properties cp JOIN collaborators c ON c.id=cp.collaborator_id WHERE cp.property_id=? AND cp.is_preset=1 AND c.is_active=1 LIMIT 1';
     $stmt = db()->prepare($sql);
     $stmt->execute([uuid_bin($propertyId)]);
@@ -1694,6 +1718,11 @@ try {
         $changes = migrate_service_sheet_documents(db());
         if ($changes) audit_log('SCHEMA_MIGRATION_APPLIED','settings','Migrare aplicată pentru documentele fișelor de service','Database',null,null,null,['migration'=>'service-sheet-documents-v1','changes'=>$changes],$user);
         respond(['migration'=>'service-sheet-documents-v1','applied'=>(bool)$changes,'changes'=>$changes,'ready'=>true]);
+    }
+    if ($method === 'POST' && $path === '/admin/migrations/shared-service-people') {
+        $user=require_permission('settings.manage');$changes=migrate_shared_service_people(db());
+        if(array_sum($changes)>0)audit_log('SCHEMA_MIGRATION_APPLIED','settings','Colaboratorii și tehnicienii au fost partajați între proprietățile Service','Database',null,null,null,['migration'=>'shared-service-people-v1','changes'=>$changes],$user);
+        respond(['migration'=>'shared-service-people-v1','applied'=>array_sum($changes)>0,'changes'=>$changes,'ready'=>true]);
     }
 
     if ($method === 'GET' && $path === '/properties') {
@@ -2136,18 +2165,18 @@ try {
     }
 
     if ($method==='GET'&&$path==='/technicians') {
-        $user=require_permission('service_sheets.view');$propertyId=validated_uuid((string)($_GET['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);ensure_existing_property($propertyId);ensure_technicians_table(db());
-        $stmt=db()->prepare(technician_select().' WHERE t.property_id=? AND t.is_active=1 ORDER BY t.name');$stmt->execute([uuid_bin($propertyId)]);respond(array_map('map_technician',$stmt->fetchAll()));
+        $user=require_permission('service_sheets.view');$propertyId=validated_uuid((string)($_GET['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);ensure_existing_property($propertyId);sync_shared_service_people(db());
+        $stmt=db()->prepare(technician_select().' WHERE EXISTS (SELECT 1 FROM technician_properties tp WHERE tp.technician_id=t.id AND tp.property_id=?) AND t.is_active=1 ORDER BY t.name');$stmt->execute([uuid_bin($propertyId)]);respond(array_map('map_technician',$stmt->fetchAll()));
     }
     if ($method==='POST'&&$path==='/technicians') {
-        $user=require_permission('service_sheets.create');$body=json_body();$propertyId=validated_uuid((string)($body['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);ensure_existing_property($propertyId);ensure_technicians_table(db());$values=validated_technician_payload($body);
-        $duplicate=db()->prepare('SELECT '.uuid_sql('id').' FROM technicians WHERE property_id=? AND is_active=1 AND LOWER(name)=LOWER(?) LIMIT 1');$duplicate->execute([uuid_bin($propertyId),$values['name']]);if($duplicate->fetchColumn())fail('Există deja un tehnician activ cu acest nume.',409);
-        $id=uuid_v4();$now=now_utc();db()->prepare('INSERT INTO technicians (id,property_id,name,phone,specialty,notes,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,1,?,?,?,?)')->execute([uuid_bin($id),uuid_bin($propertyId),$values['name'],$values['phone'],$values['specialty'],$values['notes'],$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);
+        $user=require_permission('service_sheets.create');$body=json_body();$propertyId=validated_uuid((string)($body['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);ensure_existing_property($propertyId);sync_shared_service_people(db());$values=validated_technician_payload($body);
+        $duplicate=db()->prepare('SELECT '.uuid_sql('id').' FROM technicians WHERE is_active=1 AND LOWER(name)=LOWER(?) LIMIT 1');$duplicate->execute([$values['name']]);if($duplicate->fetchColumn())fail('Există deja un tehnician activ cu acest nume.',409);
+        $id=uuid_v4();$now=now_utc();$pdo=db();$pdo->beginTransaction();try{$pdo->prepare('INSERT INTO technicians (id,property_id,name,phone,specialty,notes,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,1,?,?,?,?)')->execute([uuid_bin($id),uuid_bin($propertyId),$values['name'],$values['phone'],$values['specialty'],$values['notes'],$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);$pdo->prepare("INSERT IGNORE INTO technician_properties (technician_id,property_id) SELECT ?,id FROM properties WHERE is_active=1 AND (type='SERVICE' OR id=?)")->execute([uuid_bin($id),uuid_bin($propertyId)]);$pdo->commit();}catch(Throwable$e){if($pdo->inTransaction())$pdo->rollBack();throw$e;}
         $created=get_technician($id,$propertyId,true);audit_log('TECHNICIAN_CREATED','technicians','Tehnician adăugat: '.$created['name'],'Technician',$id,$propertyId,null,$created,$user);respond($created,201);
     }
     if ($method==='PUT'&&path_match('/technicians/{id}',$path,$params)) {
         $user=require_permission('service_sheets.update');$body=json_body();$propertyId=validated_uuid((string)($body['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);$before=get_technician($params['id'],$propertyId,true);$values=validated_technician_payload($body);
-        $duplicate=db()->prepare('SELECT 1 FROM technicians WHERE property_id=? AND id<>? AND is_active=1 AND LOWER(name)=LOWER(?) LIMIT 1');$duplicate->execute([uuid_bin($propertyId),uuid_bin($params['id']),$values['name']]);if($duplicate->fetchColumn())fail('Există deja un tehnician activ cu acest nume.',409);
+        $duplicate=db()->prepare('SELECT 1 FROM technicians WHERE id<>? AND is_active=1 AND LOWER(name)=LOWER(?) LIMIT 1');$duplicate->execute([uuid_bin($params['id']),$values['name']]);if($duplicate->fetchColumn())fail('Există deja un tehnician activ cu acest nume.',409);
         db()->prepare('UPDATE technicians SET name=?,phone=?,specialty=?,notes=?,updated_at=?,updated_by=? WHERE id=?')->execute([$values['name'],$values['phone'],$values['specialty'],$values['notes'],now_utc(),uuid_bin($user['id']),uuid_bin($params['id'])]);$after=get_technician($params['id'],$propertyId,true);audit_log('TECHNICIAN_UPDATED','technicians','Tehnician actualizat: '.$after['name'],'Technician',$after['id'],$propertyId,$before,$after,$user);respond($after);
     }
     if ($method==='DELETE'&&path_match('/technicians/{id}',$path,$params)) {
@@ -2340,9 +2369,9 @@ try {
     }
 
     if ($method==='GET'&&$path==='/collaborators') {
-        $user=require_permission('collaborators.view');$propertyId=trim((string)($_GET['propertyId']??''));ensure_property($propertyId,$user);ensure_existing_property($propertyId);
+        $user=require_permission('collaborators.view');$propertyId=trim((string)($_GET['propertyId']??''));ensure_property($propertyId,$user);ensure_existing_property($propertyId);sync_shared_service_people(db());
         $sql=collaborator_select(',cp.is_preset').' JOIN collaborator_properties cp ON cp.collaborator_id=c.id WHERE cp.property_id=? AND c.is_active=1 ORDER BY c.name';$stmt=db()->prepare($sql);$stmt->execute([uuid_bin($propertyId)]);$data=[];
-        foreach($stmt->fetchAll()as$row){$item=entity_base($row);$item['defaultCommissionValue']=(float)$item['defaultCommissionValue'];$item['propertyIds']=[$propertyId];$item['isPreset']=(bool)($row['is_preset']??false);$data[]=$item;}
+        foreach($stmt->fetchAll()as$row)$data[]=map_collaborator($row,$propertyId);
         respond($data);
     }
     if ($method==='GET'&&path_match('/collaborators/{id}',$path,$params)) {
@@ -2350,19 +2379,20 @@ try {
     }
     if ($method==='POST'&&$path==='/collaborators') {
         $user=require_permission('collaborators.manage');$body=json_body();$name=trim((string)($body['name']??''));if(strlen($name)<3)fail('Numele trebuie să aibă minimum 3 caractere.',422);
-        $propertyIds=$body['propertyIds']??null;if(!is_array($propertyIds)||!$propertyIds)fail('Alege cel puțin o proprietate.',422);$propertyIds=array_values(array_unique(array_map(fn($value)=>trim((string)$value),$propertyIds)));
-        foreach($propertyIds as$propertyId){if($propertyId==='')fail('Lista proprietăților este invalidă.',422);ensure_property($propertyId,$user);ensure_existing_property($propertyId);}
+        $requestedPropertyIds=$body['propertyIds']??null;if(!is_array($requestedPropertyIds)||!$requestedPropertyIds)fail('Alege cel puțin o proprietate.',422);$requestedPropertyIds=array_values(array_unique(array_map(fn($value)=>trim((string)$value),$requestedPropertyIds)));
+        foreach($requestedPropertyIds as$propertyId){if($propertyId==='')fail('Lista proprietăților este invalidă.',422);ensure_property($propertyId,$user);ensure_existing_property($propertyId);}
+        $serviceProperties=db()->query("SELECT ".uuid_sql('id')." id FROM properties WHERE is_active=1 AND type='SERVICE'")->fetchAll();$propertyIds=array_values(array_unique(array_merge($requestedPropertyIds,array_column($serviceProperties,'id'))));
         $type=(string)($body['defaultCommissionType']??'PERCENT_NET');$value=validate_commission_settings($type,$body['defaultCommissionValue']??0);
         $isPreset=$body['isPreset']??false;if(!is_bool($isPreset))fail('Starea colaboratorului presetat trebuie să fie booleană.',422);
         $email=trim((string)($body['email']??''));if($email!==''&&!filter_var($email,FILTER_VALIDATE_EMAIL))fail('Adresa de email nu este validă.',422);
-        $previousPresets=[];if($isPreset)foreach($propertyIds as$propertyId)$previousPresets[$propertyId]=property_preset_collaborator_id($propertyId);
+        $previousPresets=[];if($isPreset)foreach($requestedPropertyIds as$propertyId)$previousPresets[$propertyId]=property_preset_collaborator_id($propertyId);
         $id=uuid_v4();$now=now_utc();$pdo=db();$pdo->beginTransaction();
         try{
             $pdo->prepare('INSERT INTO collaborators (id,name,phone,email,role,default_commission_type,default_commission_value,bank_account,notes,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,1,?,?,?,?)')->execute([uuid_bin($id),$name,trim((string)($body['phone']??''))?:null,$email?:null,trim((string)($body['role']??''))?:null,$type,$value,trim((string)($body['bankAccount']??''))?:null,trim((string)($body['notes']??''))?:null,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])]);
-            $link=$pdo->prepare('INSERT INTO collaborator_properties (collaborator_id,property_id) VALUES (?,?)');foreach($propertyIds as$propertyId){$link->execute([uuid_bin($id),uuid_bin($propertyId)]);if($isPreset)set_collaborator_preset($pdo,$id,$propertyId,true);}$pdo->commit();
+            $link=$pdo->prepare('INSERT INTO collaborator_properties (collaborator_id,property_id) VALUES (?,?)');foreach($propertyIds as$propertyId)$link->execute([uuid_bin($id),uuid_bin($propertyId)]);if($isPreset)foreach($requestedPropertyIds as$propertyId)set_collaborator_preset($pdo,$id,$propertyId,true);$pdo->commit();
         }catch(Throwable$e){$pdo->rollBack();throw$e;}
         $created=get_collaborator($id,$propertyIds[0]);audit_log('COLLABORATOR_CREATED','collaborators','Colaborator creat: '.$created['name'],'Collaborator',$id,$propertyIds[0],null,$created,$user);
-        if($isPreset)foreach($propertyIds as$propertyId)audit_log('COLLABORATOR_PRESET_CHANGED','collaborators','Colaborator presetat schimbat: '.$created['name'],'Property',$propertyId,$propertyId,['collaboratorId'=>$previousPresets[$propertyId]],['collaboratorId'=>$id],$user);
+        if($isPreset)foreach($requestedPropertyIds as$propertyId)audit_log('COLLABORATOR_PRESET_CHANGED','collaborators','Colaborator presetat schimbat: '.$created['name'],'Property',$propertyId,$propertyId,['collaboratorId'=>$previousPresets[$propertyId]],['collaboratorId'=>$id],$user);
         respond($created,201);
     }
     if ($method==='PUT'&&path_match('/collaborators/{id}',$path,$params)) {

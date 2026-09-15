@@ -76,7 +76,7 @@ export default function TechniciansScreen() {
         <LinearGradient onLayout={(event) => setHeroHeight(event.nativeEvent.layout.height)} colors={isDark ? ['#32146F', '#075CFF'] : ['#6937E6', '#075CFF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, styles.fixedHero, mobile && styles.fixedHeroMobile, mobile && styles.heroMobile]}>
           <View pointerEvents="none" style={styles.heroGlow} />
           <View style={styles.heroIcon}><Ionicons name="construct-outline" size={34} color="#FFFFFF" /></View>
-          <View style={styles.heroCopy}><AppText variant="caption" style={styles.eyebrow}>ECHIPA SERVICE</AppText><AppText variant="title" style={styles.heroTitle}>Tehnicienii tăi, gata de selectat</AppText><AppText style={styles.heroText}>Adaugă echipa o singură dată și atribuie rapid fiecare fișă tehnicianului potrivit.</AppText></View>
+          <View style={styles.heroCopy}><AppText variant="caption" style={styles.eyebrow}>ECHIPA SERVICE COMUNĂ</AppText><AppText variant="title" style={styles.heroTitle}>Tehnicienii tăi, gata de selectat</AppText><AppText style={styles.heroText}>Adaugă echipa o singură dată și folosește aceeași listă în Calculatoare și Trotinete.</AppText></View>
           <View style={styles.count}><AppText variant="title" style={styles.countValue}>{state.data?.length ?? 0}</AppText><AppText variant="caption" style={styles.countLabel}>ACTIVI</AppText></View>
         </LinearGradient>
 
@@ -85,13 +85,13 @@ export default function TechniciansScreen() {
         <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
         <View style={styles.heading}>
           <View style={[styles.headingIcon, { backgroundColor: `${palette.purple}18` }]}><Ionicons name="people-outline" size={23} color={palette.purple} /></View>
-          <View style={styles.headingCopy}><AppText variant="title">Lista tehnicienilor</AppText><AppText variant="caption" muted>Numele și specializarea apar în selectorul din fișa de service.</AppText></View>
+          <View style={styles.headingCopy}><AppText variant="title">Lista tehnicienilor</AppText><AppText variant="caption" muted>Lista este comună proprietăților Service; atribuirea rămâne salvată separat pe fiecare fișă.</AppText></View>
           {canCreate ? <Button compact label="Adaugă" icon="person-add-outline" onPress={() => open()} /> : null}
         </View>
 
         <Card style={[styles.tip, { backgroundColor: isDark ? '#17274A' : '#EDF4FF', borderColor: isDark ? '#2B4E88' : '#C9DCFF' }]}>
           <Ionicons name="flash-outline" size={22} color={colors.primary} />
-          <View style={styles.tipCopy}><AppText variant="label">Adăugare rapidă din fișă</AppText><AppText variant="caption" muted>Dacă lipsește cineva din listă, îl poți adăuga direct din câmpul Tehnician; va fi salvat automat și aici.</AppText></View>
+          <View style={styles.tipCopy}><AppText variant="label">Adăugare rapidă din fișă</AppText><AppText variant="caption" muted>Dacă lipsește cineva, îl poți adăuga direct din câmpul Tehnician; va fi disponibil automat în ambele service-uri.</AppText></View>
         </Card>
 
         {state.loading ? <LoadingState rows={5} /> : state.error ? <ErrorState message={state.error.message} onRetry={() => void state.reload()} /> : !state.data?.length ? <EmptyState icon="construct-outline" title="Niciun tehnician salvat" message="Adaugă primul tehnician pentru a-l selecta în fișele de service." action={canCreate ? 'Adaugă tehnician' : undefined} onAction={canCreate ? () => open() : undefined} /> : <View style={styles.grid}>{state.data.map((item, index) => <TechnicianCard key={item.id} item={item} index={index} canUpdate={canUpdate} onEdit={() => open(item)} onDelete={() => setDeleting(item)} />)}</View>}
@@ -140,7 +140,7 @@ function EditorModal({ draft, saving, onChange, onSave, onClose }: { draft: Draf
 
 function DeleteModal({ technician, loading, onClose, onConfirm }: { technician: Technician | null; loading: boolean; onClose: () => void; onConfirm: () => void }) {
   const { colors } = useAppTheme();
-  return <Modal visible={Boolean(technician)} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}><ModalSafeBottom style={[styles.overlay, styles.deleteOverlay, { backgroundColor: colors.overlay }]}><Pressable style={StyleSheet.absoluteFill} onPress={onClose} />{technician ? <View style={[styles.deleteCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}><View style={[styles.deleteIcon, { backgroundColor: palette.dangerSoft }]}><Ionicons name="trash-outline" size={28} color={palette.danger} /></View><AppText variant="title" style={styles.deleteTitle}>Elimini tehnicianul?</AppText><AppText muted style={styles.deleteText}>{technician.name} nu va mai apărea în selector. Fișele existente rămân neschimbate.</AppText><View style={styles.modalActions}><Button label="Păstrează" variant="outline" disabled={loading} onPress={onClose} style={styles.actionButton} /><Button label="Elimină" variant="danger" icon="trash-outline" loading={loading} onPress={onConfirm} style={styles.actionPrimary} /></View></View> : null}</ModalSafeBottom></Modal>;
+  return <Modal visible={Boolean(technician)} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}><ModalSafeBottom style={[styles.overlay, styles.deleteOverlay, { backgroundColor: colors.overlay }]}><Pressable style={StyleSheet.absoluteFill} onPress={onClose} />{technician ? <View style={[styles.deleteCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}><View style={[styles.deleteIcon, { backgroundColor: palette.dangerSoft }]}><Ionicons name="trash-outline" size={28} color={palette.danger} /></View><AppText variant="title" style={styles.deleteTitle}>Elimini tehnicianul?</AppText><AppText muted style={styles.deleteText}>{technician.name} nu va mai apărea în niciuna dintre proprietățile Service. Fișele existente rămân neschimbate.</AppText><View style={styles.modalActions}><Button label="Păstrează" variant="outline" disabled={loading} onPress={onClose} style={styles.actionButton} /><Button label="Elimină" variant="danger" icon="trash-outline" loading={loading} onPress={onConfirm} style={styles.actionPrimary} /></View></View> : null}</ModalSafeBottom></Modal>;
 }
 
 const styles = StyleSheet.create({
