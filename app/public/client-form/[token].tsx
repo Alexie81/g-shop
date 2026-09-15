@@ -94,7 +94,7 @@ export default function PublicRepairTracking() {
   const email = contact?.email?.trim() ?? '';
 
   return <SafeAreaView edges={['top', 'left', 'right']} style={styles.safe}>
-    <StatusBar style="dark" backgroundColor="#F5F7FB" />
+    <StatusBar style="dark" />
     <ScrollView contentContainerStyle={styles.page} refreshControl={<RefreshControl refreshing={info.refreshing} onRefresh={() => void info.reload(true)} tintColor={palette.electric} />}>
       <Brand propertyName={propertyName} />
       <Animated.View style={[styles.content, { opacity: reveal, transform: [{ translateY }] }]}>
@@ -203,7 +203,7 @@ function QuickContact({ phone }: { phone: string }) {
 }
 
 function PublicState({ loading = false, title, description, onRetry }: { loading?: boolean; title: string; description: string; onRetry?: () => void }) {
-  return <SafeAreaView style={styles.safe}><StatusBar style="dark" backgroundColor="#F5F7FB" /><View style={styles.statePage}><Brand /><View style={styles.stateCard}><View style={styles.stateIcon}>{loading ? <ActivityIndicator color={palette.electric} /> : <Ionicons name="cloud-offline-outline" size={30} color={palette.electric} />}</View><AppText variant="title" style={styles.center}>{title}</AppText><AppText style={[styles.muted, styles.center]}>{description}</AppText>{onRetry ? <Pressable onPress={onRetry} style={styles.refresh}><Ionicons name="refresh-outline" size={19} color={palette.electric} /><AppText variant="label" style={styles.refreshText}>Încearcă din nou</AppText></Pressable> : null}</View></View></SafeAreaView>;
+  return <SafeAreaView style={styles.safe}><StatusBar style="dark" /><View style={styles.statePage}><Brand /><View style={styles.stateCard}><View style={styles.stateIcon}>{loading ? <ActivityIndicator color={palette.electric} /> : <Ionicons name="cloud-offline-outline" size={30} color={palette.electric} />}</View><AppText variant="title" style={styles.center}>{title}</AppText><AppText style={[styles.muted, styles.center]}>{description}</AppText>{onRetry ? <Pressable onPress={onRetry} style={styles.refresh}><Ionicons name="refresh-outline" size={19} color={palette.electric} /><AppText variant="label" style={styles.refreshText}>Încearcă din nou</AppText></Pressable> : null}</View></View></SafeAreaView>;
 }
 
 function initials(name: string) { return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'GS'; }

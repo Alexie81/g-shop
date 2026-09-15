@@ -2,7 +2,7 @@ import { AppHeader } from '@/components/layout/AppHeader';
 import { ServiceSheetForm } from '@/components/service-sheets/ServiceSheetForm';
 import { Screen } from '@/components/ui/Screen';
 import { useProperty } from '@/contexts/PropertyContext';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router/react-navigation';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { BackHandler } from 'react-native';

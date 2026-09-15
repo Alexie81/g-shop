@@ -3,7 +3,7 @@ import { AppHeader } from '@/components/layout/AppHeader';
 import { AppText } from '@/components/ui/AppText';
 import { Screen } from '@/components/ui/Screen';
 import { useProperty } from '@/contexts/PropertyContext';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router/react-navigation';
 import { router } from 'expo-router';
 import { useCallback } from 'react';
 import { BackHandler } from 'react-native';

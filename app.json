@@ -2,12 +2,11 @@
   "expo": {
     "name": "G-Shop",
     "slug": "g-shop",
-    "version": "1.1.0",
+    "version": "1.1.31",
     "orientation": "default",
     "icon": "./logo/app-icon-v2.png",
     "scheme": "gshop",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "ro.gshop.mobile",
@@ -22,7 +21,6 @@
         "foregroundImage": "./logo/app-icon-v2.png",
         "backgroundColor": "#F6F9FF"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -79,13 +77,18 @@
           "defaultChannel": "service-reminders"
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-font",
+      "expo-image",
+      "expo-sharing",
+      "expo-status-bar",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "releaseVersion": "1.1.30",
+      "releaseVersion": "1.1.31",
       "router": {},
       "eas": {
         "projectId": "2fe0de49-704b-49f7-a4ef-0f78c8195e08"

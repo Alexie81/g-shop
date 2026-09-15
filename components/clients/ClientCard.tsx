@@ -165,7 +165,11 @@ const styles = StyleSheet.create({
   },
   swipeShellMobile: { width: '100%', maxWidth: '100%', flexBasis: '100%' },
   swipeActions: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     flexDirection: 'row',
     justifyContent: 'space-between',
   },

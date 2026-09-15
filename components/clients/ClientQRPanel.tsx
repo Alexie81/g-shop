@@ -10,11 +10,10 @@ import { radius, spacing } from '@/theme/tokens';
 import { Client } from '@/types';
 import { formatDate, normalizePhoneForWhatsApp } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
-import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { router } from 'expo-router';
 import { useRef } from 'react';
-import { Linking, StyleSheet, View } from 'react-native';
+import { Linking, Platform, StyleSheet, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { captureRef } from 'react-native-view-shot';
 
@@ -23,7 +22,20 @@ export function ClientQRPanel({ client }: { client: Client }) {
   const { colors } = useAppTheme(); const { hasPermission } = useAuth(); const { showToast } = useToast(); const qrRef = useRef<View>(null); const qr = client.qr; const link = qr?.publicUrl ?? '';
   const record = async (method: string) => { try { await clientRepository.recordQrShare(client.id, method); } catch { /* Share action is still useful if analytics fail. */ } };
   const openWhatsApp = async () => { if (!link) return; const phone = normalizePhoneForWhatsApp(client.phone); if (!phone) return showToast('Clientul nu are un număr de telefon valid.', 'error'); const url = `https://wa.me/${phone}?text=${encodeURIComponent(messageFor(link))}`; const supported = await Linking.canOpenURL(url); if (!supported) return showToast('WhatsApp nu este disponibil pe acest dispozitiv.', 'error'); await Linking.openURL(url); await record('WHATSAPP'); };
-  const save = async () => { if (!qrRef.current) return; const permission = await MediaLibrary.requestPermissionsAsync(); if (!permission.granted) return showToast('Permite accesul la galerie pentru a salva QR-ul.', 'error'); try { const uri = await captureRef(qrRef, { format: 'png', quality: 1 }); await MediaLibrary.saveToLibraryAsync(uri); showToast('Codul QR a fost salvat în galerie.', 'success'); } catch { showToast('Imaginea QR nu a putut fi salvată.', 'error'); } };
+  const save = async () => {
+    if (!qrRef.current) return;
+    if (Platform.OS === 'web') return showToast('Salvarea directă în galerie este disponibilă în aplicația Android.', 'info');
+    try {
+      const MediaLibrary = await import('expo-media-library');
+      const permission = await MediaLibrary.requestPermissionsAsync();
+      if (!permission.granted) return showToast('Permite accesul la galerie pentru a salva QR-ul.', 'error');
+      const uri = await captureRef(qrRef, { format: 'png', quality: 1 });
+      await MediaLibrary.saveToLibraryAsync(uri);
+      showToast('Codul QR a fost salvat în galerie.', 'success');
+    } catch {
+      showToast('Imaginea QR nu a putut fi salvată.', 'error');
+    }
+  };
   const shareQrImage = async () => { if (!qrRef.current) return; try { if (!(await Sharing.isAvailableAsync())) return showToast('Partajarea imaginilor nu este disponibilă pe acest dispozitiv.', 'error'); const uri = await captureRef(qrRef, { format: 'png', quality: 1 }); await Sharing.shareAsync(uri, { dialogTitle: 'Trimite codul QR G-Shop', mimeType: 'image/png', UTI: 'public.png' }); await record('NATIVE'); } catch { showToast('Imaginea QR nu a putut fi partajată.', 'error'); } };
   if (!qr || qr.status === 'NOT_GENERATED') return <Card style={styles.empty}><View style={[styles.bigIcon, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="qr-code-outline" size={42} color={colors.textMuted} /></View><AppText variant="heading">Cod QR indisponibil</AppText><AppText muted style={styles.center}>Această înregistrare provine din versiunea anterioară. Clienții noi primesc automat codul QR la adăugare.</AppText></Card>;
   if (!hasPermission('qr.share')) return <Card style={styles.empty}><View style={[styles.bigIcon, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="lock-closed-outline" size={40} color={colors.textMuted} /></View><AppText variant="heading">Cod QR protejat</AppText><AppText muted style={styles.center}>Contul tău poate vedea clientul, dar afișarea, salvarea și trimiterea codului necesită permisiunea „Trimite QR”.</AppText>{hasPermission('qr.scan') ? <Button label="Scanează un cod QR" icon="scan-outline" variant="secondary" onPress={() => router.push('/service/qr-scanner')} /> : null}</Card>;
