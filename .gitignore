@@ -54,5 +54,6 @@ app-example
 .expo-server.err.log
 /output/
 /tmp/
+/download-app/*.apk
 __pycache__/
 *.pyc
