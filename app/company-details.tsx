@@ -15,6 +15,7 @@ import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { companyDetailsRepository, shopCompanyDetailsRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { CompanyDetails } from '@/types';
+import { propertyAlias, propertyIcon } from '@/utils/property';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -33,7 +34,7 @@ function formFromCompany(company: CompanyDetails): CompanyForm {
 export default function CompanyDetailsScreen() {
   useBackToAdministration();
   const { user, hasPermission } = useAuth();
-  const { activeProperty } = useProperty();
+  const { properties, activeProperty, selectProperty } = useProperty();
   const { colors, isDark } = useAppTheme();
   const { showToast } = useToast();
   const { width } = useWindowDimensions();
@@ -52,6 +53,7 @@ export default function CompanyDetailsScreen() {
   const [activatingId, setActivatingId] = useState<string | null>(null);
 
   const selectedCompany = state.data?.find((company) => company.id === selectedId) ?? null;
+  const activeAlias = propertyAlias(activeProperty);
 
   useEffect(() => {
     if (!state.data || creating) return;
@@ -87,6 +89,16 @@ export default function CompanyDetailsScreen() {
     setForm({ ...emptyForm });
     setStampData(null);
     setStampRemoved(false);
+  };
+  const switchCompanyContext = async (propertyIdToSelect: string) => {
+    const property = properties.find((item) => item.id === propertyIdToSelect);
+    if (!property || property.id === propertyId) return;
+    setCreating(false);
+    setSelectedId(null);
+    setForm({ ...emptyForm });
+    setStampData(null);
+    setStampRemoved(false);
+    await selectProperty(property);
   };
 
   const pickStamp = async () => {
@@ -150,9 +162,21 @@ export default function CompanyDetailsScreen() {
       <LinearGradient colors={isDark ? ['#102A69', '#075CFF'] : ['#123EA9', '#0878FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
         <View pointerEvents="none" style={styles.heroOrb} />
         <View style={styles.heroIcon}><Ionicons name="business" size={28} color="#FFFFFF" /></View>
-        <View style={styles.heroCopy}><AppText variant="title" style={styles.heroTitle}>Firma din {moduleLabel}</AppText><AppText style={styles.heroSubtitle}>{isShop ? 'Datele și ștampila sunt separate de Service. La salvare se actualizează și PDF-urile Shop existente, fără să fie schimbate produsele, sumele sau semnătura.' : 'Datele și ștampila sunt păstrate separat pentru Service. Modificările de aici nu schimbă firma din Vânzări.'}</AppText></View>
-        <View style={styles.heroBadge}><Ionicons name="shield-checkmark" size={15} color="#FFFFFF" /><AppText variant="caption" style={styles.heroBadgeText}>DOAR ADMIN</AppText></View>
+        <View style={styles.heroCopy}><AppText variant="title" style={styles.heroTitle}>Datele firmelor</AppText><AppText style={styles.heroSubtitle}>Pagină comună pentru toate proprietățile. Alege aliasul, apoi administrează firma și ștampila folosite numai în acel context.</AppText></View>
+        <View style={styles.heroBadge}><Ionicons name="shield-checkmark" size={15} color="#FFFFFF" /><AppText variant="caption" style={styles.heroBadgeText}>{activeAlias.toLocaleUpperCase('ro-RO')} · ADMIN</AppText></View>
       </LinearGradient>
+
+      <Card style={styles.contextCard} elevated>
+        <View style={styles.sectionCopy}><AppText variant="heading">Alege proprietatea firmei</AppText><AppText variant="caption" muted>Aliasurile fac diferențierea rapidă; firma activă și documentele rămân separate pentru fiecare proprietate.</AppText></View>
+        <View style={styles.contextList}>{properties.map((property) => {
+          const active = property.id === propertyId;
+          return <Pressable key={property.id} accessibilityRole="button" accessibilityState={{ selected: active }} onPress={() => void switchCompanyContext(property.id)} style={({ pressed }) => [styles.contextOption, { borderColor: active ? colors.primary : colors.border, backgroundColor: active ? colors.primarySoft : colors.surfaceMuted, opacity: pressed ? 0.76 : 1 }]}>
+            <View style={[styles.contextIcon, { backgroundColor: active ? colors.primary : colors.surface }]}><Ionicons name={propertyIcon(property)} size={21} color={active ? '#FFFFFF' : colors.primary} /></View>
+            <View style={styles.contextCopy}><AppText variant="label">{propertyAlias(property)}</AppText><AppText variant="caption" muted numberOfLines={1}>{property.name} · {property.domain}</AppText></View>
+            {active ? <Ionicons name="checkmark-circle" size={23} color={colors.primary} /> : <Ionicons name="chevron-forward" size={19} color={colors.textMuted} />}
+          </Pressable>;
+        })}</View>
+      </Card>
 
       {state.loading ? <LoadingState rows={5} /> : state.error ? <ErrorState message={state.error.message} onRetry={() => void state.reload()} /> : <>
         <Card style={styles.companies} elevated>
@@ -164,7 +188,7 @@ export default function CompanyDetailsScreen() {
             const selected = !creating && selectedId === company.id;
             return <Pressable key={company.id} accessibilityRole="button" accessibilityState={{ selected }} onPress={() => selectCompany(company)} style={({ pressed }) => [styles.companyCard, { borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.primarySoft : colors.surfaceMuted, opacity: pressed ? 0.76 : 1 }]}>
               <View style={[styles.companyIcon, { backgroundColor: company.isDefault ? colors.primary : colors.surface }]}><Ionicons name="business-outline" size={21} color={company.isDefault ? '#FFFFFF' : colors.primary} /></View>
-              <View style={styles.companyCopy}><View style={styles.companyNameRow}><AppText variant="label" numberOfLines={1} style={styles.companyName}>{company.legalName}</AppText>{company.isDefault ? <View style={[styles.activeBadge, { backgroundColor: palette.success }]}><AppText variant="caption" style={styles.activeBadgeText}>ACTIVĂ ÎN {moduleLabel.toLocaleUpperCase('ro-RO')}</AppText></View> : null}</View><AppText variant="caption" muted numberOfLines={1}>{company.taxId || 'CUI necompletat'}{company.city ? ` · ${company.city}` : ''}</AppText></View>
+              <View style={styles.companyCopy}><View style={styles.companyNameRow}><AppText variant="label" numberOfLines={1} style={styles.companyName}>{company.legalName}</AppText><View style={[styles.aliasBadge, { backgroundColor: colors.surface }]}><AppText variant="caption" style={{ color: colors.primary, fontWeight: '900' }}>{activeAlias}</AppText></View>{company.isDefault ? <View style={[styles.activeBadge, { backgroundColor: palette.success }]}><AppText variant="caption" style={styles.activeBadgeText}>ACTIVĂ ÎN {moduleLabel.toLocaleUpperCase('ro-RO')}</AppText></View> : null}</View><AppText variant="caption" muted numberOfLines={1}>{company.taxId || 'CUI necompletat'}{company.city ? ` · ${company.city}` : ''}</AppText></View>
               {company.isDefault ? <Ionicons name="checkmark-circle" size={23} color={palette.success} /> : <Button compact variant="outline" label={activatingId === company.id ? 'Se activează…' : 'Folosește'} disabled={Boolean(activatingId)} onPress={() => void setDefault(company)} />}
             </Pressable>;
           })}</View> : <View style={[styles.emptyCompanies, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="business-outline" size={26} color={colors.primary} /><AppText variant="label">Nu ai încă nicio firmă configurată.</AppText></View>}
@@ -173,6 +197,7 @@ export default function CompanyDetailsScreen() {
         <View style={styles.editorHeading}><View style={[styles.editorIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name={creating ? 'add-outline' : 'create-outline'} size={22} color={colors.primary} /></View><View style={styles.sectionCopy}><AppText variant="heading">{creating ? 'Firmă nouă' : `Editează ${selectedCompany?.legalName ?? 'firma'}`}</AppText><AppText variant="caption" muted>{creating ? 'Completează denumirea, apoi salvează firma.' : selectedCompany?.isDefault ? (isShop ? 'Aceasta este firma folosită în Shop și în PDF-urile asociate.' : 'Aceasta este firma folosită în documentele noi.') : 'Poți edita firma sau o poți selecta ca activă din lista de mai sus.'}</AppText></View></View>
 
         <FormSection icon="document-text-outline" color={colors.primary} background={colors.primarySoft} title="Date juridice" subtitle="Informațiile de identificare fiscală." compact={compact}>
+          <Field><Input label="Alias proprietate" icon="pricetag-outline" value={activeAlias} editable={false} /></Field>
           <Field><Input label="Denumire juridică" icon="business-outline" value={form.legalName} onChangeText={(value) => update('legalName', value)} placeholder="Ex: G-Shop Service SRL" maxLength={160} /></Field>
           <Field><Input label="CUI / CIF" icon="barcode-outline" value={form.taxId} onChangeText={(value) => update('taxId', value)} placeholder="Ex: RO12345678" maxLength={24} autoCapitalize="characters" /></Field>
           <Field><Input label="Registrul Comerțului" icon="reader-outline" value={form.tradeRegisterNumber} onChangeText={(value) => update('tradeRegisterNumber', value)} placeholder="Ex: J40/1234/2026" maxLength={40} autoCapitalize="characters" /></Field>
@@ -221,7 +246,8 @@ function Field({ children, wide = false }: { children: React.ReactNode; wide?: b
 
 const styles = StyleSheet.create({
   stack: { width: '100%', maxWidth: 900, alignSelf: 'center', gap: spacing.lg }, hero: { minHeight: 150, borderRadius: radius.xl, padding: spacing.xl, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', gap: spacing.lg }, heroOrb: { position: 'absolute', width: 220, height: 220, borderRadius: 110, right: -70, top: -105, backgroundColor: 'rgba(255,255,255,0.10)' }, heroIcon: { width: 58, height: 58, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.20)' }, heroCopy: { minWidth: 0, flex: 1, gap: spacing.xs }, heroTitle: { color: '#FFFFFF' }, heroSubtitle: { color: '#D7E5FF', maxWidth: 560 }, heroBadge: { position: 'absolute', right: spacing.lg, bottom: spacing.md, minHeight: 28, paddingHorizontal: spacing.sm, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.16)', flexDirection: 'row', alignItems: 'center', gap: 5 }, heroBadgeText: { color: '#FFFFFF', fontWeight: '800' },
-  companies: { gap: spacing.md }, companiesHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md }, companiesHeaderCompact: { alignItems: 'stretch', flexDirection: 'column' }, companyList: { gap: spacing.sm }, companyCard: { minHeight: 72, padding: spacing.sm, borderWidth: 1.5, borderRadius: radius.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, companyIcon: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' }, companyCopy: { minWidth: 0, flex: 1, gap: 3 }, companyNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs }, companyName: { minWidth: 0, flexShrink: 1 }, activeBadge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: radius.pill }, activeBadgeText: { color: '#FFFFFF', fontWeight: '900', fontSize: 9 }, emptyCompanies: { minHeight: 92, padding: spacing.lg, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', gap: spacing.sm }, editorHeading: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.xs }, editorIcon: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  contextCard: { gap: spacing.md }, contextList: { gap: spacing.sm }, contextOption: { minHeight: 68, padding: spacing.sm, borderWidth: 1.5, borderRadius: radius.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, contextIcon: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' }, contextCopy: { minWidth: 0, flex: 1, gap: 2 },
+  companies: { gap: spacing.md }, companiesHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md }, companiesHeaderCompact: { alignItems: 'stretch', flexDirection: 'column' }, companyList: { gap: spacing.sm }, companyCard: { minHeight: 72, padding: spacing.sm, borderWidth: 1.5, borderRadius: radius.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, companyIcon: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' }, companyCopy: { minWidth: 0, flex: 1, gap: 3 }, companyNameRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.xs }, companyName: { minWidth: 0, flexShrink: 1 }, aliasBadge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: radius.pill }, activeBadge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: radius.pill }, activeBadgeText: { color: '#FFFFFF', fontWeight: '900', fontSize: 9 }, emptyCompanies: { minHeight: 92, padding: spacing.lg, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', gap: spacing.sm }, editorHeading: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.xs }, editorIcon: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   section: { gap: spacing.lg }, sectionHeading: { flexDirection: 'row', alignItems: 'center', gap: spacing.md }, sectionIcon: { width: 48, height: 48, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' }, sectionCopy: { minWidth: 0, flex: 1, gap: 2 }, fields: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }, fieldsCompact: { flexDirection: 'column', flexWrap: 'nowrap' }, field: { minWidth: 220, flexGrow: 1, flexBasis: '31%' }, fieldWide: { flexBasis: '64%' }, fieldCompact: { minWidth: 0, width: '100%', flexBasis: 'auto', flexGrow: 0 },
   switchBox: { minWidth: 220, flexGrow: 1, flexBasis: '31%', minHeight: 58, paddingHorizontal: spacing.sm, borderWidth: 1, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, switchIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }, switchCopy: { minWidth: 0, flex: 1 },
   stampArea: { minHeight: 190, borderRadius: radius.lg, borderWidth: 1.5, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }, stampImage: { width: '88%', height: 170 }, stampEmpty: { alignItems: 'center', gap: spacing.sm, padding: spacing.xl }, stampEmptyIcon: { width: 58, height: 58, borderRadius: 20, alignItems: 'center', justifyContent: 'center' }, stampHint: { textAlign: 'center' }, stampActions: { flexDirection: 'row', gap: spacing.md }, stampActionsCompact: { flexDirection: 'column' }, flexButton: { flex: 1 },

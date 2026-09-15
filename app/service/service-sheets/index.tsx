@@ -2,6 +2,7 @@ import { AppHeader } from '@/components/layout/AppHeader';
 import { ServiceSheetActionsModal } from '@/components/service-sheets/ServiceSheetActionsModal';
 import { ServiceSheetStatus } from '@/components/service-sheets/ServiceSheetStatus';
 import { AppText } from '@/components/ui/AppText';
+import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Screen } from '@/components/ui/Screen';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
@@ -29,10 +30,12 @@ export default function ServiceSheetsScreen() {
   const [selectedSheet, setSelectedSheet] = useState<ServiceSheet | null>(null);
   const lastLongPressAt = useRef(0);
   const canUpdate = hasPermission('service_sheets.update');
+  const canCreate = hasPermission('service_sheets.create');
   const canViewFinancials = hasPermission('financials.view');
   const state = useAsyncData(() => serviceSheetRepository.list(activeProperty?.id ?? ''), [activeProperty?.id]);
   useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);
   const sheets = (state.data?.data ?? []).filter((sheet, index, items) => items.findIndex((item) => item.clientId === sheet.clientId) === index);
+  const createSheet = () => router.push({ pathname: '/service/service-sheets/create', params: { returnTo: '/service/service-sheets' } });
 
   const openSheet = (sheet: ServiceSheet) => router.push(`/service/service-sheets/${sheet.id}`);
   const editSheet = (sheet: ServiceSheet) => router.push(`/service/service-sheets/${sheet.id}/edit`);
@@ -69,9 +72,12 @@ export default function ServiceSheetsScreen() {
           <AppText variant="title">Fișe de service</AppText>
           <AppText muted>{countLabel} în proprietatea activă</AppText>
         </View>
-        <View style={[styles.countBadge, { backgroundColor: colors.primarySoft }]}>
-          <Ionicons name="documents-outline" size={19} color={colors.primary} />
-          <AppText variant="label" style={{ color: colors.primary }}>{sheets.length}</AppText>
+        <View style={styles.headingActions}>
+          <View style={[styles.countBadge, { backgroundColor: colors.primarySoft }]}>
+            <Ionicons name="documents-outline" size={19} color={colors.primary} />
+            <AppText variant="label" style={{ color: colors.primary }}>{sheets.length}</AppText>
+          </View>
+          {canCreate ? <Button compact label="Fișă nouă" icon="add-circle-outline" onPress={createSheet} /> : null}
         </View>
       </View>
       <View style={[styles.hint, { backgroundColor: colors.surfaceMuted }]}>
@@ -83,7 +89,9 @@ export default function ServiceSheetsScreen() {
     {state.loading ? <LoadingState rows={5} /> : state.error ? <ErrorState message={state.error.message} onRetry={() => void state.reload()} /> : !sheets.length ? <EmptyState
       icon="document-text-outline"
       title="Nicio fișă de service"
-      message="Fișa de service se creează exclusiv din profilul clientului."
+      message="Creează un dosar nou și alege apoi, fără ordine impusă, documentele PDF necesare."
+      action={canCreate ? 'Creează prima fișă' : undefined}
+      onAction={canCreate ? createSheet : undefined}
     /> : <View style={styles.list}>{sheets.map((sheet) => {
       const clientName = sheet.client ? `${sheet.client.firstName} ${sheet.client.lastName}` : 'Client nespecificat';
       const equipment = [sheet.equipment, sheet.brand, sheet.model].filter(Boolean).join(' · ') || 'Echipament nespecificat';
@@ -162,8 +170,9 @@ export default function ServiceSheetsScreen() {
 
 const styles = StyleSheet.create({
   heading: { gap: spacing.md, marginBottom: spacing.lg },
-  headingRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  headingRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.md },
   headingCopy: { flex: 1, minWidth: 0, gap: 2 },
+  headingActions: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
   countBadge: { minWidth: 52, height: 44, paddingHorizontal: spacing.md, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   hint: { minHeight: 44, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   hintCopy: { flex: 1, minWidth: 0 },

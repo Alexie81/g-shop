@@ -15,6 +15,7 @@ import { useAsyncData } from '@/hooks/useAsyncData';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { userRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
+import { propertyAlias, propertyIcon } from '@/utils/property';
 import { Permission, UserRole } from '@/types';
 import { formatDate, initials } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
@@ -229,8 +230,8 @@ export default function UserDetails() {
               onPress={() => toggleProperty(property.id)}
               style={({ pressed }) => [styles.propertyAccess, { borderColor: enabled ? colors.primary : colors.border, backgroundColor: enabled ? colors.primarySoft : colors.surface, opacity: pressed ? 0.78 : 1 }]}
             >
-              <View style={[styles.propertyIcon, { backgroundColor: enabled ? colors.primary : colors.surfaceMuted }]}><Ionicons name={property.type === 'SERVICE' ? 'construct-outline' : 'storefront-outline'} size={21} color={enabled ? '#fff' : colors.textMuted} /></View>
-              <View style={styles.propertyCopy}><AppText variant="label" numberOfLines={2}>{property.name}</AppText><AppText variant="caption" muted>{property.type === 'SERVICE' ? 'Service' : 'Magazin'} · {enabled ? 'Acces permis' : 'Fără acces'}</AppText></View>
+              <View style={[styles.propertyIcon, { backgroundColor: enabled ? colors.primary : colors.surfaceMuted }]}><Ionicons name={propertyIcon(property)} size={21} color={enabled ? '#fff' : colors.textMuted} /></View>
+              <View style={styles.propertyCopy}><AppText variant="label" numberOfLines={2}>{propertyAlias(property)} · {property.name}</AppText><AppText variant="caption" muted>{property.type === 'SERVICE' ? 'Service' : 'Magazin'} · {enabled ? 'Acces permis' : 'Fără acces'}</AppText></View>
               <Switch
                 value={enabled}
                 disabled={globalAccess || !canManageRoles}

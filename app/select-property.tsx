@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useProperty } from '@/contexts/PropertyContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { palette, radius, spacing } from '@/theme/tokens';
+import { propertyAlias, propertyIcon, propertyModuleLabel } from '@/utils/property';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -85,11 +86,11 @@ export default function SelectPropertyScreen() {
                 style={({ pressed }) => [styles.card, { backgroundColor: isDark ? 'rgba(7,21,45,0.94)' : 'rgba(255,255,255,0.94)', borderColor: pressed ? accent : colors.border, shadowColor: colors.shadow, opacity: selecting && selecting !== property.id ? 0.55 : 1, transform: [{ scale: pressed ? 0.985 : 1 }] }]}
               >
                 <View style={[styles.accentLine, { backgroundColor: accent }]} />
-                <LinearGradient colors={service ? ['#3387FF', '#075CFF'] : ['#9B5BFF', '#6D28D9']} style={styles.propertyIcon}><Ionicons name={service ? 'construct-outline' : 'storefront-outline'} size={26} color="#fff" /></LinearGradient>
+                <LinearGradient colors={service ? ['#3387FF', '#075CFF'] : ['#9B5BFF', '#6D28D9']} style={styles.propertyIcon}><Ionicons name={propertyIcon(property)} size={26} color="#fff" /></LinearGradient>
                 <View style={styles.info}>
                   <AppText variant="heading" numberOfLines={2}>{property.name}</AppText>
-                  <AppText variant="caption" muted numberOfLines={1}>{property.domain}</AppText>
-                  <View style={[styles.type, { backgroundColor: isDark ? `${accent}20` : `${accent}10` }]}><Ionicons name={service ? 'document-text-outline' : 'bag-handle-outline'} size={13} color={accent} /><AppText variant="caption" style={{ color: accent, fontWeight: '800' }}>{service ? 'Service & fișe' : 'Magazin online · În lucru'}</AppText></View>
+                  <AppText variant="caption" muted numberOfLines={1}>{propertyAlias(property)} · {property.domain}</AppText>
+                  <View style={[styles.type, { backgroundColor: isDark ? `${accent}20` : `${accent}10` }]}><Ionicons name={service ? 'document-text-outline' : 'bag-handle-outline'} size={13} color={accent} /><AppText variant="caption" style={{ color: accent, fontWeight: '800' }}>{propertyModuleLabel(property)}</AppText></View>
                 </View>
                 <View style={[styles.arrow, { backgroundColor: selecting === property.id ? accent : colors.surfaceMuted }]}>{selecting === property.id ? <LoadingGlyph color="#fff" size={18} /> : <Ionicons name="arrow-forward" size={20} color={accent} />}</View>
               </Pressable>

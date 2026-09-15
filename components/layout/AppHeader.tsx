@@ -4,6 +4,7 @@ import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useProperty } from '@/contexts/PropertyContext';
 import { radius, spacing } from '@/theme/tokens';
+import { propertyAlias, propertyIcon } from '@/utils/property';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -39,7 +40,7 @@ export function AppHeader({ title, showProperty = true, back = false, onBack }: 
           {!back ? <LinearGradient colors={isDark ? ['#F5F9FF', '#CFE0FF'] : ['#FFFFFF', '#E7F0FF']} style={[styles.logoFrame, narrow && styles.logoFrameNarrow, { borderColor: isDark ? 'rgba(255,255,255,0.62)' : 'rgba(7,92,255,0.16)', shadowColor: isDark ? '#2F79FF' : colors.shadow }]}><View style={[styles.logoCrop, narrow && styles.logoCropNarrow]}><Image source={require('@/logo/logo.png')} resizeMode="cover" style={[styles.logo, narrow && styles.logoNarrow]} /></View></LinearGradient> : null}
           <View style={styles.titleWrap}>
             <AppText variant="heading" numberOfLines={1} style={narrow ? styles.titleNarrow : undefined}>{title ?? 'G-Shop'}</AppText>
-            {showProperty && activeProperty ? <View style={styles.property}><AppText variant="caption" muted numberOfLines={1} ellipsizeMode="tail" style={styles.propertyName}>{activeProperty.name}</AppText><Ionicons name="chevron-down" size={narrow ? 13 : 14} color={colors.textMuted} /></View> : null}
+            {showProperty && activeProperty ? <View style={styles.property}><AppText variant="caption" muted numberOfLines={1} ellipsizeMode="tail" style={styles.propertyName}>{propertyAlias(activeProperty)} · {activeProperty.name}</AppText><Ionicons name="chevron-down" size={narrow ? 13 : 14} color={colors.textMuted} /></View> : null}
           </View>
         </Pressable>
       </View>
@@ -51,7 +52,7 @@ export function AppHeader({ title, showProperty = true, back = false, onBack }: 
         <View style={[styles.sheet, { backgroundColor: colors.surface }]}>
           <AppText variant="title">Schimbă proprietatea</AppText>
           <AppText muted>Alege workspace-ul în care vrei să lucrezi.</AppText>
-          <View style={styles.list}>{properties.map((property) => <Pressable key={property.id} onPress={() => void switchTo(property.id)} style={[styles.propertyCard, { borderColor: property.id === activeProperty?.id ? colors.primary : colors.border, backgroundColor: property.id === activeProperty?.id ? colors.primarySoft : colors.surfaceMuted }]}><View style={[styles.propertyIcon, { backgroundColor: colors.primary }]}><Ionicons name={property.type === 'SERVICE' ? 'construct-outline' : 'storefront-outline'} size={20} color="#fff" /></View><View style={styles.propertyInfo}><AppText variant="label">{property.name}</AppText><AppText variant="caption" muted>{property.domain}</AppText></View>{property.id === activeProperty?.id ? <Ionicons name="checkmark-circle" size={22} color={colors.primary} /> : null}</Pressable>)}</View>
+          <View style={styles.list}>{properties.map((property) => <Pressable key={property.id} onPress={() => void switchTo(property.id)} style={[styles.propertyCard, { borderColor: property.id === activeProperty?.id ? colors.primary : colors.border, backgroundColor: property.id === activeProperty?.id ? colors.primarySoft : colors.surfaceMuted }]}><View style={[styles.propertyIcon, { backgroundColor: colors.primary }]}><Ionicons name={propertyIcon(property)} size={20} color="#fff" /></View><View style={styles.propertyInfo}><AppText variant="label">{propertyAlias(property)} · {property.name}</AppText><AppText variant="caption" muted>{property.domain}</AppText></View>{property.id === activeProperty?.id ? <Ionicons name="checkmark-circle" size={22} color={colors.primary} /> : null}</Pressable>)}</View>
         </View>
       </ModalSafeBottom>
     </Modal>

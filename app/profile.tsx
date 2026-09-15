@@ -12,6 +12,7 @@ import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useBackToAdministration } from '@/hooks/useBackToAdministration';
 import { palette, radius, spacing } from '@/theme/tokens';
+import { propertyAlias, propertyIcon } from '@/utils/property';
 import { initials } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -131,8 +132,8 @@ export default function ProfileScreen() {
           <View style={styles.propertyList}>{properties.map((property) => {
             const active = property.id === activeProperty?.id;
             return <View key={property.id} style={[styles.property, { backgroundColor: active ? colors.primarySoft : colors.surfaceMuted, borderColor: active ? `${colors.primary}55` : colors.border }]}>
-              <View style={[styles.propertyIcon, { backgroundColor: active ? colors.primary : colors.surface }]}><Ionicons name={property.domain.includes('calculatoareprofesionale') ? 'storefront-outline' : 'construct-outline'} size={20} color={active ? '#FFFFFF' : colors.primary} /></View>
-              <View style={styles.propertyCopy}><AppText variant="label" numberOfLines={1}>{property.name}</AppText><AppText variant="caption" muted numberOfLines={1}>{property.domain}</AppText></View>
+              <View style={[styles.propertyIcon, { backgroundColor: active ? colors.primary : colors.surface }]}><Ionicons name={propertyIcon(property)} size={20} color={active ? '#FFFFFF' : colors.primary} /></View>
+              <View style={styles.propertyCopy}><AppText variant="label" numberOfLines={1}>{propertyAlias(property)} · {property.name}</AppText><AppText variant="caption" muted numberOfLines={1}>{property.domain}</AppText></View>
               {active ? <View style={[styles.activeBadge, { backgroundColor: colors.surface }]}><View style={[styles.activeDot, { backgroundColor: palette.success }]} /><AppText variant="caption" style={{ color: palette.success, fontWeight: '800' }}>ACTIVĂ</AppText></View> : <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />}
             </View>;
           })}</View>

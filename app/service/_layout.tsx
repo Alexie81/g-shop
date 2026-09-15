@@ -53,9 +53,9 @@ export default function ServiceLayout() {
   return <Tabs
     screenListeners={({ route }) => ({ tabPress: (event) => {
       void Haptics.selectionAsync().catch(() => undefined);
-      if (route.name === 'clients') {
+      if (route.name === 'clients' || route.name === 'service-sheets') {
         event.preventDefault();
-        router.replace('/service/clients');
+        router.replace(route.name === 'clients' ? '/service/clients' : '/service/service-sheets');
       }
     } })}
     screenOptions={({ route }) => { const icon = icons[route.name] ?? 'ellipse-outline'; return { headerShown: false, tabBarActiveTintColor: colors.primary, tabBarInactiveTintColor: colors.textMuted, tabBarStyle: { backgroundColor: colors.tabBar, borderTopColor: colors.border, height: 62 + tabBarBottomPadding, paddingTop: 6, paddingBottom: tabBarBottomPadding }, tabBarLabelStyle: { fontSize: 10.5, fontWeight: '700' }, tabBarIcon: ({ color, size, focused }) => <Ionicons name={focused ? (icon.replace('-outline', '') as keyof typeof Ionicons.glyphMap) : icon} size={focused ? size + 1 : size} color={color} /> }; }}

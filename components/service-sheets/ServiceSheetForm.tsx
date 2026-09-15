@@ -14,7 +14,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { clientRepository, serviceSheetRepository } from '@/repositories/api-repositories';
-import { apiRequest, ApiError } from '@/services/api';
+import { ApiError, propertyApiRequest } from '@/services/api';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { Client, ClientFinancialOverview, EstimatedCosts, ServiceSheet, ServiceSheetStatus, UUID } from '@/types';
 import { calculateClientFinance, ClientFinanceValue } from '@/utils/client-finance';
@@ -193,7 +193,7 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
 
     Promise.all([
       clientRepository.get(associatedClientId),
-      apiRequest<Intake | null>('/clients/' + associatedClientId + '/intake').catch(() => null),
+      propertyApiRequest<Intake | null>('/clients/' + associatedClientId + '/intake').catch(() => null),
     ]).then(([nextClient, intake]) => {
       setClient(nextClient);
       setForm((current) => ({
@@ -328,7 +328,7 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
       return showToast('Alege clientul și completează problema declarată.', 'error');
     }
     const estimatedRepairDays = form.estimatedRepairDays.trim() === '' ? undefined : Number(form.estimatedRepairDays);
-    if (!sheet && (estimatedRepairDays === undefined || !Number.isInteger(estimatedRepairDays) || estimatedRepairDays < 0 || estimatedRepairDays > 730)) {
+    if (!sheet && estimatedRepairDays !== undefined && (!Number.isInteger(estimatedRepairDays) || estimatedRepairDays < 0 || estimatedRepairDays > 730)) {
       return showToast('Completează termenul estimativ cu un număr între 0 și 730 de zile lucrătoare.', 'error');
     }
     if (!sheet && !/^[A-Z]{3}$/.test(estimatedCosts.currencyCode)) {
@@ -369,18 +369,13 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
       internalNotes: form.internalNotes.trim(),
       estimatedAt: sheet
         ? form.estimatedAt || undefined
-        : estimatedDateFromWorkingDays(form.receivedAt || new Date().toISOString(), estimatedRepairDays ?? 0),
+        : estimatedRepairDays === undefined
+          ? undefined
+          : estimatedDateFromWorkingDays(form.receivedAt || new Date().toISOString(), estimatedRepairDays),
     };
 
     setLoading(true);
-    const intakeDocumentInput = {
-      agreementAt: form.intakeAgreementAt,
-      agreementStatus: form.repairRefused ? 'REFUSED' as const : 'ACCEPTED' as const,
-      estimatedRepairDays,
-      estimatedCosts,
-    };
     try {
-      let documentWarning: string | null = null;
       if (canEditFinancials) await clientRepository.updateFinancials(form.clientId, financeValue);
       const saved = sheet
         ? await serviceSheetRepository.update(sheet.id, editableFields)
@@ -390,30 +385,13 @@ export function ServiceSheetForm({ propertyId, clientId, sheet }: Props) {
           clientId: form.clientId,
           currencyCode: financeValue.currencyCode,
         });
-      if (!sheet) {
-        try {
-          await serviceSheetRepository.generateDocument(saved.id, 'INTAKE', intakeDocumentInput);
-        } catch (documentError) {
-          documentWarning = documentError instanceof Error ? `Fișa a fost salvată, dar documentul de intrare nu a putut fi generat: ${documentError.message}` : 'Fișa a fost salvată, dar documentul de intrare nu a putut fi generat.';
-        }
-      }
-      showToast(documentWarning ?? (sheet ? 'Fișa de service a fost actualizată.' : 'Fișa de service și documentul de intrare au fost create.'), documentWarning ? 'error' : 'success');
+      showToast(sheet ? 'Fișa de service a fost actualizată.' : 'Dosarul de service a fost creat. Alege documentul pe care vrei să îl emiți.', 'success');
       router.replace(('/service/service-sheets/' + saved.id) as never);
     } catch (error) {
       if (!sheet && error instanceof ApiError && error.status === 409) {
         const details = error.details as { code?: unknown; serviceSheetId?: unknown } | undefined;
         if (details?.code === 'SERVICE_SHEET_ALREADY_EXISTS' && typeof details.serviceSheetId === 'string') {
-          let recoveryWarning: string | null = null;
-          try {
-            const documents = await serviceSheetRepository.listDocuments(details.serviceSheetId);
-            const intakeExists = documents.some((document) => document.type === 'INTAKE' && document.available);
-            if (!intakeExists) await serviceSheetRepository.generateDocument(details.serviceSheetId, 'INTAKE', intakeDocumentInput);
-          } catch (documentError) {
-            recoveryWarning = documentError instanceof Error
-              ? `Fișa existentă a fost recuperată, dar documentul de intrare nu a putut fi generat: ${documentError.message}`
-              : 'Fișa existentă a fost recuperată, dar documentul de intrare nu a putut fi generat.';
-          }
-          showToast(recoveryWarning ?? 'Fișa existentă și documentul de intrare sunt pregătite.', recoveryWarning ? 'error' : 'success');
+          showToast('Clientul are deja un dosar de service activ. L-am deschis fără să generăm documente suplimentare.', 'info');
           router.replace(('/service/service-sheets/' + details.serviceSheetId) as never);
           return;
         }

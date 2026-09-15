@@ -48,19 +48,6 @@ export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style, 
   const allReady = state.data !== null && missing.length === 0;
   const selectedDocument = editorType ? state.data?.find((item) => item.type === editorType) : undefined;
   const openEditor = (type: ServiceDocumentType, document?: ServiceDocument) => {
-    const hasDocument = (requiredType: ServiceDocumentType) => state.data?.some((item) => item.type === requiredType && item.available) === true;
-    if (type !== 'INTAKE' && !hasDocument('INTAKE')) {
-      showToast('Creează mai întâi fișa de intrare.', 'info');
-      return;
-    }
-    if (['EXIT', 'WARRANTY'].includes(type) && !hasDocument('FINAL_ESTIMATE')) {
-      showToast('Creează mai întâi devizul final.', 'info');
-      return;
-    }
-    if (type === 'WARRANTY' && !hasDocument('EXIT')) {
-      showToast('Creează mai întâi fișa de ieșire.', 'info');
-      return;
-    }
     if (type === 'FINAL_ESTIMATE' && !document?.available && canViewFinancials && !financialState.data) {
       showToast(financialState.loading ? 'Se încarcă costurile interne ale pieselor. Încearcă din nou imediat.' : 'Costurile interne nu au putut fi încărcate. Reîncarcă dosarul înainte de deviz.', 'error');
       return;
@@ -129,7 +116,7 @@ export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style, 
     <Card style={[styles.panel, style]} elevated>
       <View style={styles.header}>
         <View style={[styles.headerIcon, { backgroundColor: isDark ? `${colors.primary}25` : colors.primarySoft }]}><Ionicons name="folder-open-outline" size={23} color={colors.primary} /></View>
-        <View style={styles.headerCopy}><AppText variant="heading">Documentele reparației</AppText><AppText variant="caption" muted>Dosarul clientului urmează cele patru etape, de la primire la garanție.</AppText></View>
+        <View style={styles.headerCopy}><AppText variant="heading">Documentele reparației</AppText><AppText variant="caption" muted>Fiecare document poate fi emis, actualizat sau șters independent.</AppText></View>
         <Pressable accessibilityRole="button" accessibilityLabel="Reîncarcă documentele" disabled={state.loading || state.refreshing} onPress={() => void state.reload(true)} style={[styles.refresh, { backgroundColor: colors.surfaceMuted }]}>{state.loading || state.refreshing ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="refresh-outline" size={20} color={colors.primary} />}</Pressable>
       </View>
 
@@ -154,7 +141,7 @@ export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style, 
       })}</View>
 
       {missing.length ? <View style={[styles.missingNotice, { backgroundColor: `${palette.warning}10`, borderColor: `${palette.warning}35` }]}>
-        <View style={styles.missingHeader}><Ionicons name="alert-circle-outline" size={21} color={palette.warning} /><View style={styles.noticeCopy}><AppText variant="label">Dosarul nu este complet</AppText><AppText variant="caption" muted>Lipsesc: {missing.map(({ definition }) => definition.label).join(', ')}. Generează-le înainte de trimiterea completă.</AppText></View></View>
+        <View style={styles.missingHeader}><Ionicons name="documents-outline" size={21} color={palette.warning} /><View style={styles.noticeCopy}><AppText variant="label">Documente disponibile individual</AppText><AppText variant="caption" muted>Poți emite numai documentele necesare acum: {missing.map(({ definition }) => definition.label).join(', ')}.</AppText></View></View>
         {canGenerate ? <View style={styles.missingActions}>{missing.map(({ definition, document }) => <Button key={definition.type} compact variant="outline" label={`Creează ${definition.label.toLocaleLowerCase('ro-RO')}`} icon="add" onPress={() => openEditor(definition.type, document)} style={styles.missingAction} />)}</View> : <AppText variant="caption" muted>Ai nevoie de permisiunea de modificare a fișelor pentru a genera documentele lipsă.</AppText>}
       </View> : null}
 
