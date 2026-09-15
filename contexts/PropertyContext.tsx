@@ -1,5 +1,6 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { propertyRepository } from '@/repositories/api-repositories';
+import { setActivePropertyApi } from '@/services/api';
 import { preferenceStorage } from '@/services/storage';
 import { Property } from '@/types';
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -32,7 +33,7 @@ export function PropertyProvider({ children }: PropsWithChildren) {
   const propertyIdsKey = user ? [...user.propertyIds].sort().join('\u0000') : '';
 
   const reload = useCallback(async () => {
-    if (!userId) { setProperties([]); setActiveProperty(null); return; }
+    if (!userId) { setProperties([]); setActivePropertyApi(null); setActiveProperty(null); return; }
     setLoading(true);
     setError(null);
     try {
@@ -43,8 +44,12 @@ export function PropertyProvider({ children }: PropsWithChildren) {
       const stored = result.find((property) => property.id === storedId);
       setActiveProperty((current) => {
         const currentAllowed = result.find((property) => property.id === current?.id);
-        if (userRole === 'ADMIN' && requiresPropertySelectionRef.current) return null;
+        if (userRole === 'ADMIN' && requiresPropertySelectionRef.current) {
+          setActivePropertyApi(null);
+          return null;
+        }
         const selected = currentAllowed ?? stored ?? result[0] ?? null;
+        setActivePropertyApi(selected);
         if (selected && selected.id !== storedId) void preferenceStorage.set(`property.${userId}`, selected.id);
         return selected;
       });
@@ -54,8 +59,10 @@ export function PropertyProvider({ children }: PropsWithChildren) {
   }, [propertyIdsKey, userId, userRole]);
 
   useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => { setActivePropertyApi(activeProperty); }, [activeProperty]);
 
   const selectProperty = useCallback(async (property: Property) => {
+    setActivePropertyApi(property);
     setActiveProperty(property);
     completePropertySelection();
     if (userId) await preferenceStorage.set(`property.${userId}`, property.id);

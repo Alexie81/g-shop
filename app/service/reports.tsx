@@ -15,7 +15,7 @@ import { useAsyncData } from '@/hooks/useAsyncData';
 import { useBackToAdministration } from '@/hooks/useBackToAdministration';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { dashboardRepository } from '@/repositories/api-repositories';
-import { apiRequest } from '@/services/api';
+import { propertyApiRequest } from '@/services/api';
 import { preferenceStorage } from '@/services/storage';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { Client, CollaboratorFinanceSummary, Commission, CommissionStatus, DashboardMetrics, Paginated } from '@/types';
@@ -91,8 +91,8 @@ export default function ReportsScreen() {
   const state = useAsyncData(async () => {
     const [metrics, report, financeSummary, clientCreatedAt] = await Promise.all([
       dashboardRepository.get(propertyId),
-      apiRequest<Report>(query),
-      apiRequest<CollaboratorFinanceSummary>(`/collaborator-finances?propertyId=${propertyId}`).catch(() => null),
+      propertyApiRequest<Report>(query),
+      propertyApiRequest<CollaboratorFinanceSummary>(`/collaborator-finances?propertyId=${propertyId}`).catch(() => null),
       period === 'TODAY' ? loadClientCreationTimes(propertyId).catch(() => null) : Promise.resolve(null),
     ]);
     return { ...report, dashboardMetrics: metrics, financeSummary, clientCreatedAt, metrics: { ...metrics, ...(report.periodMetrics ?? {}) } };
@@ -388,7 +388,7 @@ async function loadClientCreationTimes(propertyId: string) {
   let page = 1;
   let totalPages = 1;
   do {
-    const result = await apiRequest<Paginated<Client>>(`/clients?propertyId=${propertyId}&page=${page}&pageSize=100`);
+    const result = await propertyApiRequest<Paginated<Client>>(`/clients?propertyId=${propertyId}&page=${page}&pageSize=100`);
     createdAt.push(...result.data.map((client) => client.createdAt));
     totalPages = Math.max(1, result.totalPages);
     page += 1;

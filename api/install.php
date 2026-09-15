@@ -20,6 +20,8 @@ try {
     $adminId = '00000000-0000-4000-8000-000000000001';
     $serviceId = '11111111-1111-4111-8111-111111111111';
     $shopId = '22222222-2222-4222-8222-222222222222';
+    $scooterId = '33333333-3333-4333-8333-333333333333';
+    $scooterCompanyId = '33333333-3333-4333-8333-333333333334';
     $permissions = [
         'dashboard.view','clients.view','clients.create','clients.update','clients.delete','qr.generate','qr.scan','qr.share',
         'service_sheets.view','service_sheets.create','service_sheets.update','service_sheets.sign',
@@ -31,16 +33,24 @@ try {
     $property = $pdo->prepare('INSERT INTO properties (id,name,domain,type,enabled_modules,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,1,?,?,?,?) ON DUPLICATE KEY UPDATE name=VALUES(name), enabled_modules=VALUES(enabled_modules), updated_at=VALUES(updated_at)');
     $property->execute([uuid_bin($serviceId), 'Reparații Calculatoare București', 'reparatiicalculatoare-bucuresti.ro', 'SERVICE', json_encode(['dashboard','clients','qr','serviceSheets','collaborators','users','reports'], JSON_UNESCAPED_UNICODE), $now, $now, uuid_bin($adminId), uuid_bin($adminId)]);
     $property->execute([uuid_bin($shopId), 'Calculatoare Profesionale', 'calculatoareprofesionale.ro', 'SHOP', json_encode(['salesSheets','products','orders','stocks']), $now, $now, uuid_bin($adminId), uuid_bin($adminId)]);
+    $property->execute([uuid_bin($scooterId), 'G-Shop Trotinete', 'gshop-trotinete.ro', 'SERVICE', json_encode(['dashboard','clients','qr','serviceSheets','collaborators','technicians','whatsapp','users','reports','register','audit'], JSON_UNESCAPED_UNICODE), $now, $now, uuid_bin($adminId), uuid_bin($adminId)]);
 
     $admin = $pdo->prepare('INSERT INTO users (id,username,password_hash,first_name,last_name,email,role,permissions,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?, ?,1,?,?,?,?) ON DUPLICATE KEY UPDATE permissions=VALUES(permissions), is_active=1, updated_at=VALUES(updated_at)');
     $admin->execute([uuid_bin($adminId), 'admin', password_hash('admin', PASSWORD_DEFAULT), 'Administrator', 'G-Shop', 'admin@reparatiicalculatoare-bucuresti.ro', 'ADMIN', json_encode($permissions), $now, $now, uuid_bin($adminId), uuid_bin($adminId)]);
     $access = $pdo->prepare('INSERT IGNORE INTO user_properties (user_id,property_id) VALUES (?,?)');
     $access->execute([uuid_bin($adminId), uuid_bin($serviceId)]);
     $access->execute([uuid_bin($adminId), uuid_bin($shopId)]);
+    $access->execute([uuid_bin($adminId), uuid_bin($scooterId)]);
+
+    $scooterCompany = $pdo->prepare('INSERT INTO property_companies (id,property_id,is_default,legal_name,country,phone,email,website,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,1,?,?,?,?,?,1,?,?,?,?) ON DUPLICATE KEY UPDATE phone=VALUES(phone),email=VALUES(email),website=VALUES(website),is_active=1,updated_at=VALUES(updated_at)');
+    $scooterCompany->execute([uuid_bin($scooterCompanyId),uuid_bin($scooterId),'G-Shop Trotinete','România','0735046534','contact@gshop-trotinete.ro','gshop-trotinete.ro',$now,$now,uuid_bin($adminId),uuid_bin($adminId)]);
+    $pdo->prepare('INSERT INTO property_company_selections (property_id,company_id,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE company_id=VALUES(company_id),updated_at=VALUES(updated_at),updated_by=VALUES(updated_by)')
+        ->execute([uuid_bin($scooterId),uuid_bin($scooterCompanyId),$now,$now,uuid_bin($adminId),uuid_bin($adminId)]);
 
     $messageCount = $pdo->prepare('SELECT COUNT(*) FROM whatsapp_messages WHERE property_id=? AND user_id=?');
-    $messageCount->execute([uuid_bin($serviceId), uuid_bin($adminId)]);
-    if ((int)$messageCount->fetchColumn() === 0) {
+    foreach ([$serviceId, $scooterId] as $messagePropertyId) {
+      $messageCount->execute([uuid_bin($messagePropertyId), uuid_bin($adminId)]);
+      if ((int)$messageCount->fetchColumn() === 0) {
         $defaultMessages = [
             ['Actualizare reparație', 'Bună ziua, {prenume}! Vă contactăm din partea {proprietate} cu o actualizare privind reparația dumneavoastră.', 1],
             ['Reparație finalizată', 'Bună ziua, {prenume}! Reparația dumneavoastră este finalizată și poate fi ridicată. Vă mulțumim, {proprietate}!', 2],
@@ -48,8 +58,9 @@ try {
         ];
         $message = $pdo->prepare('INSERT INTO whatsapp_messages (id,property_id,user_id,title,message,sort_order,is_active,created_at,updated_at,created_by,updated_by) VALUES (?,?,?,?,?,?,1,?,?,?,?)');
         foreach ($defaultMessages as $defaultMessage) {
-            $message->execute([uuid_bin(uuid_v4()), uuid_bin($serviceId), uuid_bin($adminId), $defaultMessage[0], $defaultMessage[1], $defaultMessage[2], $now, $now, uuid_bin($adminId), uuid_bin($adminId)]);
+            $message->execute([uuid_bin(uuid_v4()), uuid_bin($messagePropertyId), uuid_bin($adminId), $defaultMessage[0], $defaultMessage[1], $defaultMessage[2], $now, $now, uuid_bin($adminId), uuid_bin($adminId)]);
         }
+      }
     }
 
     $clientCount = (int)$pdo->query('SELECT COUNT(*) FROM clients')->fetchColumn();

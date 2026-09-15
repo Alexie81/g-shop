@@ -1,4 +1,4 @@
-import { apiRequest, shopApiRequest } from '@/services/api';
+import { apiRequest, propertyApiRequest, shopApiRequest } from '@/services/api';
 import { AppUpdateRepository, AuthRepository, AuditRepository, ClientRepository, CollaboratorRepository, CompanyDetailsRepository, DashboardRepository, PropertyRepository, SalesSheetRepository, ServiceSheetRepository, TechnicianRepository, UserRepository, WhatsAppMessageRepository } from '@/repositories/interfaces';
 
 export const authRepository: AuthRepository = {
@@ -14,12 +14,12 @@ export const propertyRepository: PropertyRepository = {
   updateName: (id, name) => apiRequest(`/properties/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }),
 };
 export const companyDetailsRepository: CompanyDetailsRepository = {
-  list: (propertyId) => apiRequest(`/companies?propertyId=${propertyId}`),
-  create: (propertyId, input) => apiRequest('/companies', { method: 'POST', body: JSON.stringify({ propertyId, ...input }) }),
-  update: (companyId, propertyId, input) => apiRequest(`/companies/${companyId}`, { method: 'PUT', body: JSON.stringify({ propertyId, ...input }) }),
-  setDefault: (companyId, propertyId) => apiRequest(`/companies/${companyId}/default`, { method: 'PUT', body: JSON.stringify({ propertyId }) }),
-  saveStamp: (companyId, propertyId, stamp) => apiRequest(`/companies/${companyId}/stamp`, { method: 'POST', body: JSON.stringify({ propertyId, stamp }) }),
-  removeStamp: (companyId, propertyId) => apiRequest(`/companies/${companyId}/stamp?propertyId=${encodeURIComponent(propertyId)}`, { method: 'DELETE' }),
+  list: (propertyId) => propertyApiRequest(`/companies?propertyId=${propertyId}`),
+  create: (propertyId, input) => propertyApiRequest('/companies', { method: 'POST', body: JSON.stringify({ propertyId, ...input }) }),
+  update: (companyId, propertyId, input) => propertyApiRequest(`/companies/${companyId}`, { method: 'PUT', body: JSON.stringify({ propertyId, ...input }) }),
+  setDefault: (companyId, propertyId) => propertyApiRequest(`/companies/${companyId}/default`, { method: 'PUT', body: JSON.stringify({ propertyId }) }),
+  saveStamp: (companyId, propertyId, stamp) => propertyApiRequest(`/companies/${companyId}/stamp`, { method: 'POST', body: JSON.stringify({ propertyId, stamp }) }),
+  removeStamp: (companyId, propertyId) => propertyApiRequest(`/companies/${companyId}/stamp?propertyId=${encodeURIComponent(propertyId)}`, { method: 'DELETE' }),
 };
 
 export const shopCompanyDetailsRepository: CompanyDetailsRepository = {
@@ -47,50 +47,50 @@ export const salesSheetRepository: SalesSheetRepository = {
   remove: (id) => shopApiRequest(`/sales-sheets/${id}`, { method: 'DELETE' }),
 };
 export const appUpdateRepository: AppUpdateRepository = { get: () => apiRequest('/app-update', { authenticated: false }) };
-export const dashboardRepository: DashboardRepository = { get: (propertyId) => apiRequest(`/dashboard?propertyId=${propertyId}`) };
+export const dashboardRepository: DashboardRepository = { get: (propertyId) => propertyApiRequest(`/dashboard?propertyId=${propertyId}`) };
 export const clientRepository: ClientRepository = {
-  list: (propertyId, query = '', qrStatus = '') => apiRequest(`/clients?propertyId=${propertyId}&query=${encodeURIComponent(query)}&qrStatus=${encodeURIComponent(qrStatus)}`),
-  get: (id) => apiRequest(`/clients/${id}`),
-  create: (input) => apiRequest('/clients', { method: 'POST', body: JSON.stringify(input) }),
-  update: (id, input) => apiRequest(`/clients/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
-  remove: (id) => apiRequest(`/clients/${id}`, { method: 'DELETE' }),
-  ensureQr: (id) => apiRequest(`/clients/${id}/qr`, { method: 'POST' }),
-  markQrUsed: (id) => apiRequest(`/clients/${id}/qr/use`, { method: 'POST' }),
-  recordQrShare: (id, method) => apiRequest(`/clients/${id}/qr/share`, { method: 'POST', body: JSON.stringify({ method }) }),
-  saveSignature: (id, signature) => apiRequest(`/clients/${id}/signature`, { method: 'POST', body: JSON.stringify({ signature }) }),
-  getFinancials: (id) => apiRequest(`/clients/${id}/financials`),
-  updateFinancials: (id, input) => apiRequest(`/clients/${id}/financials`, { method: 'PUT', body: JSON.stringify(input) }),
-  addExpense: (id, input) => apiRequest(`/clients/${id}/expenses`, { method: 'POST', body: JSON.stringify(input) }),
-  updateExpense: (id, expenseId, input) => apiRequest(`/clients/${id}/expenses/${expenseId}`, { method: 'PUT', body: JSON.stringify(input) }),
-  removeExpense: (id, expenseId) => apiRequest(`/clients/${id}/expenses/${expenseId}`, { method: 'DELETE' }),
-  getParticipants: (id) => apiRequest(`/clients/${id}/participants`),
-  updateParticipants: (id, userIds) => apiRequest(`/clients/${id}/participants`, { method: 'PUT', body: JSON.stringify({ userIds }) }),
+  list: (propertyId, query = '', qrStatus = '') => propertyApiRequest(`/clients?propertyId=${propertyId}&query=${encodeURIComponent(query)}&qrStatus=${encodeURIComponent(qrStatus)}`),
+  get: (id) => propertyApiRequest(`/clients/${id}`),
+  create: (input) => propertyApiRequest('/clients', { method: 'POST', body: JSON.stringify(input) }),
+  update: (id, input) => propertyApiRequest(`/clients/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
+  remove: (id) => propertyApiRequest(`/clients/${id}`, { method: 'DELETE' }),
+  ensureQr: (id) => propertyApiRequest(`/clients/${id}/qr`, { method: 'POST' }),
+  markQrUsed: (id) => propertyApiRequest(`/clients/${id}/qr/use`, { method: 'POST' }),
+  recordQrShare: (id, method) => propertyApiRequest(`/clients/${id}/qr/share`, { method: 'POST', body: JSON.stringify({ method }) }),
+  saveSignature: (id, signature) => propertyApiRequest(`/clients/${id}/signature`, { method: 'POST', body: JSON.stringify({ signature }) }),
+  getFinancials: (id) => propertyApiRequest(`/clients/${id}/financials`),
+  updateFinancials: (id, input) => propertyApiRequest(`/clients/${id}/financials`, { method: 'PUT', body: JSON.stringify(input) }),
+  addExpense: (id, input) => propertyApiRequest(`/clients/${id}/expenses`, { method: 'POST', body: JSON.stringify(input) }),
+  updateExpense: (id, expenseId, input) => propertyApiRequest(`/clients/${id}/expenses/${expenseId}`, { method: 'PUT', body: JSON.stringify(input) }),
+  removeExpense: (id, expenseId) => propertyApiRequest(`/clients/${id}/expenses/${expenseId}`, { method: 'DELETE' }),
+  getParticipants: (id) => propertyApiRequest(`/clients/${id}/participants`),
+  updateParticipants: (id, userIds) => propertyApiRequest(`/clients/${id}/participants`, { method: 'PUT', body: JSON.stringify({ userIds }) }),
 };
 export const serviceSheetRepository: ServiceSheetRepository = {
-  list: (propertyId) => apiRequest(`/service-sheets?propertyId=${propertyId}`),
-  get: (id) => apiRequest(`/service-sheets/${id}`),
-  create: (input) => apiRequest('/service-sheets', { method: 'POST', body: JSON.stringify(input) }),
-  update: (id, input) => apiRequest(`/service-sheets/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
-  remove: (id) => apiRequest(`/service-sheets/${id}`, { method: 'DELETE' }),
-  saveSignature: (id, signature) => apiRequest(`/service-sheets/${id}/signature`, { method: 'POST', body: JSON.stringify({ signature }) }),
-  generatePdf: (id) => apiRequest(`/service-sheets/${id}/pdf`, { method: 'POST' }),
-  listDocuments: (id) => apiRequest(`/service-sheets/${id}/documents`),
-  generateDocument: (id, type, input = {}) => apiRequest(`/service-sheets/${id}/documents/${type}`, { method: 'POST', body: JSON.stringify(input) }),
-  removeDocument: (id, type) => apiRequest(`/service-sheets/${id}/documents/${type}`, { method: 'DELETE' }),
-  listRegister: (propertyId) => apiRequest(`/service-documents/register?propertyId=${encodeURIComponent(propertyId)}`),
+  list: (propertyId) => propertyApiRequest(`/service-sheets?propertyId=${propertyId}`),
+  get: (id) => propertyApiRequest(`/service-sheets/${id}`),
+  create: (input) => propertyApiRequest('/service-sheets', { method: 'POST', body: JSON.stringify(input) }),
+  update: (id, input) => propertyApiRequest(`/service-sheets/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
+  remove: (id) => propertyApiRequest(`/service-sheets/${id}`, { method: 'DELETE' }),
+  saveSignature: (id, signature) => propertyApiRequest(`/service-sheets/${id}/signature`, { method: 'POST', body: JSON.stringify({ signature }) }),
+  generatePdf: (id) => propertyApiRequest(`/service-sheets/${id}/pdf`, { method: 'POST' }),
+  listDocuments: (id) => propertyApiRequest(`/service-sheets/${id}/documents`),
+  generateDocument: (id, type, input = {}) => propertyApiRequest(`/service-sheets/${id}/documents/${type}`, { method: 'POST', body: JSON.stringify(input) }),
+  removeDocument: (id, type) => propertyApiRequest(`/service-sheets/${id}/documents/${type}`, { method: 'DELETE' }),
+  listRegister: (propertyId) => propertyApiRequest(`/service-documents/register?propertyId=${encodeURIComponent(propertyId)}`),
 };
 export const collaboratorRepository: CollaboratorRepository = {
-  list: (propertyId) => apiRequest(`/collaborators?propertyId=${propertyId}`),
-  get: (id, propertyId) => apiRequest(`/collaborators/${id}?propertyId=${propertyId}`),
-  create: (input) => apiRequest('/collaborators', { method: 'POST', body: JSON.stringify(input) }),
-  update: (id, input) => apiRequest(`/collaborators/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
-  remove: (id, propertyId) => apiRequest(`/collaborators/${id}?propertyId=${propertyId}`, { method: 'DELETE' }),
+  list: (propertyId) => propertyApiRequest(`/collaborators?propertyId=${propertyId}`),
+  get: (id, propertyId) => propertyApiRequest(`/collaborators/${id}?propertyId=${propertyId}`),
+  create: (input) => propertyApiRequest('/collaborators', { method: 'POST', body: JSON.stringify(input) }),
+  update: (id, input) => propertyApiRequest(`/collaborators/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
+  remove: (id, propertyId) => propertyApiRequest(`/collaborators/${id}?propertyId=${propertyId}`, { method: 'DELETE' }),
 };
 export const technicianRepository: TechnicianRepository = {
-  list: (propertyId) => apiRequest(`/technicians?propertyId=${encodeURIComponent(propertyId)}`),
-  create: (input) => apiRequest('/technicians', { method: 'POST', body: JSON.stringify(input) }),
-  update: (id, input) => apiRequest(`/technicians/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
-  remove: (id, propertyId) => apiRequest(`/technicians/${id}?propertyId=${encodeURIComponent(propertyId)}`, { method: 'DELETE' }),
+  list: (propertyId) => propertyApiRequest(`/technicians?propertyId=${encodeURIComponent(propertyId)}`),
+  create: (input) => propertyApiRequest('/technicians', { method: 'POST', body: JSON.stringify(input) }),
+  update: (id, input) => propertyApiRequest(`/technicians/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
+  remove: (id, propertyId) => propertyApiRequest(`/technicians/${id}?propertyId=${encodeURIComponent(propertyId)}`, { method: 'DELETE' }),
 };
 export const userRepository: UserRepository = {
   list: (propertyId) => apiRequest(`/users?propertyId=${propertyId}`),
@@ -102,13 +102,13 @@ export const userRepository: UserRepository = {
   updatePermissions: (id, permissions, propertyIds) => apiRequest(`/users/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ permissions, ...(propertyIds ? { propertyIds } : {}) }) }),
 };
 export const auditRepository: AuditRepository = {
-  list: (propertyId) => apiRequest(`/audit-logs${propertyId ? `?propertyId=${propertyId}` : ''}`),
-  remove: (propertyId, ids) => apiRequest(`/audit-logs?propertyId=${propertyId}`, { method: 'DELETE', body: JSON.stringify({ ids }) }),
+  list: (propertyId) => propertyApiRequest(`/audit-logs${propertyId ? `?propertyId=${propertyId}` : ''}`),
+  remove: (propertyId, ids) => propertyApiRequest(`/audit-logs?propertyId=${propertyId}`, { method: 'DELETE', body: JSON.stringify({ ids }) }),
 };
 export const whatsAppMessageRepository: WhatsAppMessageRepository = {
-  list: (propertyId) => apiRequest(`/whatsapp-messages?propertyId=${propertyId}`),
-  create: (input) => apiRequest('/whatsapp-messages', { method: 'POST', body: JSON.stringify(input) }),
-  update: (id, input) => apiRequest(`/whatsapp-messages/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
-  remove: (id, propertyId) => apiRequest(`/whatsapp-messages/${id}?propertyId=${propertyId}`, { method: 'DELETE' }),
-  recordUse: (id, clientId) => apiRequest(`/whatsapp-messages/${id}/use`, { method: 'POST', body: JSON.stringify({ clientId }) }),
+  list: (propertyId) => propertyApiRequest(`/whatsapp-messages?propertyId=${propertyId}`),
+  create: (input) => propertyApiRequest('/whatsapp-messages', { method: 'POST', body: JSON.stringify(input) }),
+  update: (id, input) => propertyApiRequest(`/whatsapp-messages/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
+  remove: (id, propertyId) => propertyApiRequest(`/whatsapp-messages/${id}?propertyId=${propertyId}`, { method: 'DELETE' }),
+  recordUse: (id, clientId) => propertyApiRequest(`/whatsapp-messages/${id}/use`, { method: 'POST', body: JSON.stringify({ clientId }) }),
 };

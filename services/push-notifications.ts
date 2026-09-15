@@ -1,5 +1,5 @@
 import { serviceSheetRepository } from '@/repositories/api-repositories';
-import { apiRequest } from '@/services/api';
+import { propertyApiRequest } from '@/services/api';
 import { preferenceStorage } from '@/services/storage';
 import { ServiceDocumentRegisterRow } from '@/types';
 import Constants from 'expo-constants';
@@ -46,7 +46,7 @@ export async function registerPushDevice(propertyId: string) {
   const easProjectId = projectId();
   if (!easProjectId) throw new Error('Proiectul Expo nu este configurat pentru notificări push.');
   const token = (await Notifications.getExpoPushTokenAsync({ projectId: easProjectId })).data;
-  await apiRequest('/push/devices', {
+  await propertyApiRequest('/push/devices', {
     method: 'POST',
     body: JSON.stringify({
       propertyId,

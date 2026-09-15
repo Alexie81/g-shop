@@ -8,7 +8,7 @@ import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { clientRepository, collaboratorRepository } from '@/repositories/api-repositories';
-import { apiRequest } from '@/services/api';
+import { propertyApiRequest } from '@/services/api';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { ClientFinancialCollaborator, ClientFinancialOverview, Collaborator, CommissionType, UUID } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
@@ -137,7 +137,7 @@ export function ServiceSheetCollaborators({ propertyId, clientId, overview, hasS
   };
 
   const setPaid = async (collaboratorId: UUID, paid: boolean) => {
-    await apiRequest('/commissions/client-status', {
+    await propertyApiRequest('/commissions/client-status', {
       method: 'PUT',
       body: JSON.stringify({ propertyId, collaboratorId, clientId, paid }),
     });

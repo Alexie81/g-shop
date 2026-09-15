@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/Button';
 import { LoadingExperience } from '@/components/ui/LoadingExperience';
 import { Card } from '@/components/ui/Card';
 import { useAppTheme } from '@/contexts/ThemeContext';
-import { apiRequest } from '@/services/api';
+import { propertyApiRequest } from '@/services/api';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { CollaboratorFinanceSummary } from '@/types';
 import { formatCurrency, formatDate } from '@/utils/format';
@@ -83,7 +83,7 @@ export function CollaboratorFinanceSheet({ visible, propertyId, collaboratorId, 
   const load = useCallback(async () => {
     if (!propertyId) return;
     setLoading(true); setError('');
-    try { setData(await apiRequest<CollaboratorFinanceSummary>(`/collaborator-finances?propertyId=${propertyId}`)); }
+    try { setData(await propertyApiRequest<CollaboratorFinanceSummary>(`/collaborator-finances?propertyId=${propertyId}`)); }
     catch (nextError) { setError(nextError instanceof Error ? nextError.message : 'Situația colaboratorilor nu a putut fi încărcată.'); }
     finally { setLoading(false); }
   }, [propertyId]);
@@ -93,7 +93,7 @@ export function CollaboratorFinanceSheet({ visible, propertyId, collaboratorId, 
   const setPaid = async (collaboratorId: string, clientId: string, paid: boolean) => {
     const key = `${collaboratorId}:${clientId}`; setUpdating(key);
     try {
-      await apiRequest('/commissions/client-status', { method: 'PUT', body: JSON.stringify({ propertyId, collaboratorId, clientId, paid }) });
+      await propertyApiRequest('/commissions/client-status', { method: 'PUT', body: JSON.stringify({ propertyId, collaboratorId, clientId, paid }) });
       await load(); onChanged();
     } catch (nextError) { setError(nextError instanceof Error ? nextError.message : 'Starea plății nu a putut fi actualizată.'); }
     finally { setUpdating(''); }

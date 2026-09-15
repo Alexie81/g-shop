@@ -20,7 +20,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { clientRepository, serviceSheetRepository, whatsAppMessageRepository } from '@/repositories/api-repositories';
-import { apiRequest } from '@/services/api';
+import { propertyApiRequest } from '@/services/api';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { AuditLog, Client, ClientFinancialOverview, Paginated } from '@/types';
 import { formatDate, fullName, initials } from '@/utils/format';
@@ -69,7 +69,7 @@ export default function ClientDetailsScreen() {
     const [sheets, financials, history, whatsAppMessages] = await Promise.all([
       canViewSheets ? serviceSheetRepository.list(client.propertyId) : Promise.resolve(null),
       canViewFinancials ? clientRepository.getFinancials(client.id) : Promise.resolve(null),
-      canViewAudit ? apiRequest<Paginated<AuditLog>>(`/audit-logs?propertyId=${client.propertyId}&entityId=${client.id}`) : Promise.resolve({ data: [], page: 1, pageSize: 0, total: 0, totalPages: 0 }),
+      canViewAudit ? propertyApiRequest<Paginated<AuditLog>>(`/audit-logs?propertyId=${client.propertyId}&entityId=${client.id}`) : Promise.resolve({ data: [], page: 1, pageSize: 0, total: 0, totalPages: 0 }),
       whatsAppMessageRepository.list(client.propertyId).catch(() => []),
     ]);
     return { client, sheets: sheets?.data.filter((item) => item.clientId === client.id) ?? [], financials, history: history.data, whatsAppMessages };
@@ -94,7 +94,7 @@ export default function ClientDetailsScreen() {
   const replaceFinancials = (next: ClientFinancialOverview) => state.setData((current) => current ? { ...current, financials: next } : current);
   const reloadFinanceHistory = async () => {
     if (!canViewAudit) return;
-    const next = await apiRequest<Paginated<AuditLog>>(`/audit-logs?propertyId=${client.propertyId}&entityId=${client.id}`);
+    const next = await propertyApiRequest<Paginated<AuditLog>>(`/audit-logs?propertyId=${client.propertyId}&entityId=${client.id}`);
     state.setData((current) => current ? { ...current, history: next.data } : current);
   };
   const saveFinancials = async (next: ClientFinanceValue) => {
@@ -152,7 +152,7 @@ export default function ClientDetailsScreen() {
   const setCollaboratorPaid = async (collaboratorId: string, paid: boolean) => {
     if (!canManageCollaborators) return;
     try {
-      await apiRequest('/commissions/client-status', {
+      await propertyApiRequest('/commissions/client-status', {
         method: 'PUT',
         body: JSON.stringify({ propertyId: client.propertyId, collaboratorId, clientId: client.id, paid }),
       });

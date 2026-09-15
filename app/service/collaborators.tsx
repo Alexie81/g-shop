@@ -16,7 +16,7 @@ import { useAsyncData } from '@/hooks/useAsyncData';
 import { useBackToAdministration } from '@/hooks/useBackToAdministration';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { collaboratorRepository } from '@/repositories/api-repositories';
-import { apiRequest } from '@/services/api';
+import { propertyApiRequest } from '@/services/api';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { Collaborator, CollaboratorFinanceGroup, CollaboratorFinanceSummary, CommissionType } from '@/types';
 import { calculateCommission, calculateNet } from '@/utils/commission';
@@ -113,7 +113,7 @@ export default function CollaboratorsScreen() {
 
   const state = useAsyncData(async () => {
     const collaborators = await collaboratorRepository.list(propertyId);
-    const finance = await apiRequest<CollaboratorFinanceSummary>(`/collaborator-finances?propertyId=${propertyId}`).catch(() => emptyFinance);
+    const finance = await propertyApiRequest<CollaboratorFinanceSummary>(`/collaborator-finances?propertyId=${propertyId}`).catch(() => emptyFinance);
     return { collaborators, finance };
   }, [propertyId]);
   useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);

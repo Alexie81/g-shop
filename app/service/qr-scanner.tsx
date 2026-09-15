@@ -10,7 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { clientRepository, serviceSheetRepository } from '@/repositories/api-repositories';
-import { apiRequest } from '@/services/api';
+import { propertyApiRequest } from '@/services/api';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { ServiceDocument, ServiceDocumentType, ServiceSheet, UUID } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
@@ -72,7 +72,7 @@ export default function QRScannerScreen() {
     setBusy(true);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     try {
-      const result = await apiRequest<{ clientId: string; clientName: string }>('/qr/resolve', {
+      const result = await propertyApiRequest<{ clientId: string; clientName: string }>('/qr/resolve', {
         method: 'POST',
         body: JSON.stringify({ data, action: 'OPEN_PROFILE', propertyId: activeProperty?.id, device: `${Platform.OS} ${Platform.Version}` }),
       });
