@@ -1,4 +1,5 @@
 import { AppHeader } from '@/components/layout/AppHeader';
+import { SalesSheetActionsModal } from '@/components/sales/SalesSheetActionsModal';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -8,6 +9,7 @@ import { ErrorState, LoadingState } from '@/components/ui/States';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProperty } from '@/contexts/PropertyContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
+import { useToast } from '@/contexts/ToastContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { useRefreshOnFocus } from '@/hooks/useRefreshOnFocus';
 import { salesSheetRepository } from '@/repositories/api-repositories';
@@ -17,7 +19,7 @@ import { formatDate } from '@/utils/format';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Redirect, router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 const money = (value: number, currency: string) => new Intl.NumberFormat('ro-RO', { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
@@ -26,9 +28,12 @@ export default function SalesSheetsScreen() {
   const { activeProperty } = useProperty();
   const { hasPermission } = useAuth();
   const { colors, isDark } = useAppTheme();
+  const { showToast } = useToast();
   const { width } = useWindowDimensions();
   const compact = width < 620;
   const [query, setQuery] = useState('');
+  const [selectedSheet, setSelectedSheet] = useState<SalesSheet | null>(null);
+  const lastLongPressAt = useRef(0);
   const propertyId = activeProperty?.id ?? '';
   const state = useAsyncData<Paginated<SalesSheet>>(() => propertyId ? salesSheetRepository.list(propertyId) : Promise.resolve({ data: [], page: 1, pageSize: 250, total: 0, totalPages: 1 }), [propertyId]);
   useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);
@@ -43,6 +48,18 @@ export default function SalesSheetsScreen() {
   const expenses = (state.data?.data ?? []).reduce((sum, item) => sum + (item.expenseTotal ?? 0), 0);
   const gshopNet = (state.data?.data ?? []).reduce((sum, item) => sum + (item.gshopNet ?? item.totalPrice - (item.expenseTotal ?? 0)), 0);
   const canViewFinancials = hasPermission('financials.view');
+  const canEdit = hasPermission('sales_sheets.update');
+  const canDelete = hasPermission('sales_sheets.delete');
+  const deleteSheet = async (sheet: SalesSheet) => {
+    try {
+      await salesSheetRepository.remove(sheet.id);
+      await state.reload(true);
+      showToast(`Fișa ${sheet.number} a fost ștearsă definitiv.`, 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Fișa nu a putut fi ștearsă.', 'error');
+      throw error;
+    }
+  };
 
   if (!hasPermission('sales_sheets.view')) return <Redirect href="/shop/home" />;
   return <Screen header={<AppHeader title="Fișe de vânzări" />} refreshing={state.refreshing} onRefresh={() => void state.reload(true)}>
@@ -73,8 +90,9 @@ export default function SalesSheetsScreen() {
       </View>
 
       <Input label="Caută rapid" icon="search-outline" value={query} onChangeText={setQuery} placeholder="Număr, client, telefon sau produs" />
+      {canEdit || canDelete ? <View style={[styles.hint, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="hand-left-outline" size={18} color={colors.primary} /><AppText variant="caption" muted style={styles.hintCopy}>Ține apăsat pe o fișă pentru editare sau ștergere.</AppText></View> : null}
 
-      {state.loading ? <LoadingState rows={5} /> : state.error ? <ErrorState message={state.error.message} onRetry={() => void state.reload()} /> : sheets.length ? <View style={styles.list}>{sheets.map((sheet) => <Pressable key={sheet.id} accessibilityRole="button" android_ripple={{ color: colors.primarySoft }} onPress={() => router.push(`/shop/sales-sheets/${sheet.id}` as never)} style={({ pressed }) => [styles.sheetCard, { backgroundColor: colors.surface, borderColor: colors.border, shadowColor: colors.shadow, shadowOpacity: isDark ? 0.12 : 0.06, opacity: pressed ? 0.82 : 1 }]}>
+      {state.loading ? <LoadingState rows={5} /> : state.error ? <ErrorState message={state.error.message} onRetry={() => void state.reload()} /> : sheets.length ? <View style={styles.list}>{sheets.map((sheet) => <Pressable key={sheet.id} accessibilityRole="button" accessibilityLabel={`${sheet.number}, ${sheet.customerName}`} accessibilityHint="Atinge pentru detalii sau ține apăsat pentru acțiuni." android_ripple={{ color: colors.primarySoft }} delayLongPress={450} onLongPress={canEdit || canDelete ? () => { lastLongPressAt.current = Date.now(); setSelectedSheet(sheet); } : undefined} onPress={() => { if (Date.now() - lastLongPressAt.current < 800) return; router.push(`/shop/sales-sheets/${sheet.id}` as never); }} style={({ pressed }) => [styles.sheetCard, { backgroundColor: colors.surface, borderColor: colors.border, shadowColor: colors.shadow, shadowOpacity: isDark ? 0.12 : 0.06, opacity: pressed ? 0.82 : 1 }]}>
         <View style={[styles.sheetHeader, { backgroundColor: colors.surfaceMuted }]}>
           <View style={[styles.sheetIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="document-text-outline" size={21} color={colors.primary} /></View>
           <AppText variant="heading" numberOfLines={1} style={styles.sheetNumber}>{sheet.number}</AppText>
@@ -91,6 +109,7 @@ export default function SalesSheetsScreen() {
         </View>
       </Pressable>)}</View> : <Card style={styles.empty}><View style={[styles.emptyIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="receipt-outline" size={30} color={colors.primary} /></View><AppText variant="heading">Nu există fișe de vânzări</AppText><AppText muted style={styles.center}>Prima fișă se completează în câțiva pași și este emisă imediat în format PDF.</AppText>{hasPermission('sales_sheets.create') ? <Button label="Creează prima fișă" icon="add-circle-outline" onPress={() => router.push('/shop/sales-sheets/new' as never)} /> : null}</Card>}
     </View>
+    {canEdit || canDelete ? <SalesSheetActionsModal visible={Boolean(selectedSheet)} sheet={selectedSheet} onClose={() => setSelectedSheet(null)} onEdit={canEdit ? (sheet) => router.push(`/shop/sales-sheets/${sheet.id}/edit` as never) : undefined} onDelete={canDelete ? deleteSheet : undefined} /> : null}
   </Screen>;
 }
 
@@ -132,6 +151,8 @@ const styles = StyleSheet.create({
   metricIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   metricCopy: { minWidth: 0, flex: 1 },
   list: { gap: spacing.sm },
+  hint: { minHeight: 42, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  hintCopy: { minWidth: 0, flex: 1 },
   sheetCard: { minHeight: 120, padding: 0, borderWidth: 1, borderRadius: radius.lg, overflow: 'hidden', shadowOffset: { width: 0, height: 5 }, shadowRadius: 14, elevation: 2 },
   sheetHeader: { minHeight: 58, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   sheetIcon: { width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },

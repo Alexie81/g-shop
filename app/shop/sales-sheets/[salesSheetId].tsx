@@ -1,4 +1,5 @@
 import { AppHeader } from '@/components/layout/AppHeader';
+import { SalesSheetActionsModal } from '@/components/sales/SalesSheetActionsModal';
 import { SalesPaymentStatusControl } from '@/components/sales/SalesPaymentStatusControl';
 import { SalesDocumentsPanel } from '@/components/sales/SalesDocumentsPanel';
 import { QuickSignatureModal } from '@/components/service-sheets/ScanServiceSheetModal';
@@ -80,6 +81,7 @@ export default function SalesSheetDetailsScreen() {
   const [savingExpenses, setSavingExpenses] = useState(false);
   const [expenseDrafts, setExpenseDrafts] = useState<ExpenseDraft[]>([]);
   const [pdfAction, setPdfAction] = useState<'download' | 'whatsapp' | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const state = useAsyncData<SalesSheet>(() => salesSheetRepository.get(salesSheetId), [salesSheetId]);
   const sheet = state.data;
   useEffect(() => { if (sheet) setPaymentDraft(String(sheet.advancePaid).replace('.', ',')); }, [sheet]);
@@ -87,6 +89,17 @@ export default function SalesSheetDetailsScreen() {
   const canViewFinancials = hasPermission('financials.view');
   const canEditPayment = hasPermission('sales_sheets.update');
   const canEditExpenses = canViewFinancials && hasPermission('sales_sheets.update');
+  const canDelete = hasPermission('sales_sheets.delete');
+  const deleteSheet = async (target: SalesSheet) => {
+    try {
+      await salesSheetRepository.remove(target.id);
+      showToast(`Fișa ${target.number} a fost ștearsă definitiv.`, 'success');
+      router.replace('/shop/sales-sheets' as never);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Fișa nu a putut fi ștearsă.', 'error');
+      throw error;
+    }
+  };
 
   const handlePdfAction = async (action: 'download' | 'whatsapp') => {
     if (!sheet?.pdfUrl || pdfAction) return;
@@ -194,6 +207,7 @@ export default function SalesSheetDetailsScreen() {
               <Button compact label={pdfAction === 'download' ? 'Se descarcă…' : 'Descarcă'} icon="download-outline" loading={pdfAction === 'download'} disabled={!sheet.pdfUrl || pdfAction === 'whatsapp'} onPress={() => void handlePdfAction('download')} style={styles.heroAction} />
               <Button compact label={pdfAction === 'whatsapp' ? 'Se pregătește…' : 'WhatsApp'} icon="logo-whatsapp" loading={pdfAction === 'whatsapp'} disabled={!sheet.pdfUrl || pdfAction === 'download'} onPress={() => void handlePdfAction('whatsapp')} style={[styles.heroAction, styles.whatsAppAction]} />
               <Button compact variant="outline" label="Conversație" icon="chatbubble-ellipses-outline" onPress={() => void openWhatsAppConversation()} style={[styles.heroAction, styles.whatsAppConversationAction]} />
+              {canDelete ? <Button compact variant="danger" label="Șterge fișa" icon="trash-outline" onPress={() => setDeleteOpen(true)} style={styles.heroAction} /> : null}
             </View>
           </Card>
 
@@ -240,6 +254,7 @@ export default function SalesSheetDetailsScreen() {
       </View>
     </Screen>
     {sheet ? <QuickSignatureModal visible={signatureOpen} clientName={sheet.customerName} saving={signing} onClose={() => !signing && setSignatureOpen(false)} onConfirm={(value) => void saveSignature(value)} /> : null}
+    {canDelete ? <SalesSheetActionsModal visible={deleteOpen} sheet={sheet} confirmOnOpen onClose={() => setDeleteOpen(false)} onDelete={deleteSheet} /> : null}
   </>;
 }
 
