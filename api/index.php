@@ -810,6 +810,26 @@ function save_sales_signature_file(string $sheetId,string $data): string {
     $directory=__DIR__.'/uploads/sales-signatures';if(!is_dir($directory)&&!mkdir($directory,0755,true)&&!is_dir($directory))throw new RuntimeException('Directorul pentru semnături nu poate fi creat.');$filename=$sheetId.'.png';$target=$directory.'/'.$filename;$temporary=tempnam($directory,'.signature-');if($temporary===false)throw new RuntimeException('Semnătura nu poate fi pregătită.');
     try{if(file_put_contents($temporary,$binary,LOCK_EX)===false)throw new RuntimeException('Semnătura nu poate fi salvată.');validate_service_document_signature('uploads/sales-signatures/'.basename($temporary));if(!@rename($temporary,$target)){if(is_file($target))@unlink($target);if(!@rename($temporary,$target))throw new RuntimeException('Semnătura nu poate fi publicată.');}@chmod($target,0644);}finally{if(is_file($temporary))@unlink($temporary);}return'uploads/sales-signatures/'.$filename;
 }
+function delete_sales_sheet_server_files(array $sheetRow,array $documents): array {
+    $failed=[];
+    $files=[];
+    $sheetPdf=sales_sheet_pdf_absolute_path($sheetRow['file_path']??null);
+    if($sheetPdf!==null)$files[$sheetPdf]=true;
+    foreach($documents as$document){
+        $documentPdf=sales_document_absolute_path($document['file_path']??null);
+        if($documentPdf!==null)$files[$documentPdf]=true;
+    }
+    $signature=(string)($sheetRow['signature_path']??'');
+    $sheetId=(string)($sheetRow['id']??'');
+    if($signature==='uploads/sales-signatures/'.$sheetId.'.png'){
+        $root=realpath(__DIR__.'/uploads/sales-signatures');
+        $candidate=realpath(__DIR__.'/'.$signature);
+        if($root!==false&&$candidate!==false&&str_starts_with($candidate,rtrim($root,'/\\').DIRECTORY_SEPARATOR)&&is_file($candidate))$files[$candidate]=true;
+    }
+    foreach(array_keys($files)as$path){if(is_file($path)&&!@unlink($path))$failed[]=basename($path);}
+    invalidate_sales_dossier_files($sheetId);
+    return$failed;
+}
 function generate_sales_sheet_record(string $sheetId,array $user,int $attempt=0): array {
     $row=sales_sheet_row($sheetId);$previousPath=(string)($row['file_path']??'');$sheet=map_sales_sheet($row,true);$sourceFingerprint=sales_document_sheet_sync_fingerprint($sheet);$company=json_decode((string)($row['company_snapshot']??''),true);if(!is_array($company))$company=[];
     require_once __DIR__.'/src/sales_sheet_pdf.php';$rendered=generate_sales_sheet_pdf($sheet,$company,$row['signature_path']??null,$company['stampPath']??null,strtolower(uuid_v4()));$generatedAt=gmdate('Y-m-d H:i:s',strtotime((string)$rendered['generatedAt']));$pdo=db();
@@ -2208,7 +2228,7 @@ try {
         $user=require_permission('sales_sheets.create');$body=json_body();if(!user_has_permission($user,'financials.view')&&!empty($body['expenses']))fail('Nu ai permisiunea de a adăuga cheltuieli interne.',403);$propertyId=validated_uuid((string)($body['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);$property=property_record($propertyId);if(($property['type']??'')!=='SHOP')fail('Fișele de vânzări pot fi create numai în modulul Shop.',422);ensure_sales_sheets_table(db());$values=validated_sales_sheet_payload($body);
         $company=company_details_record($propertyId);if(empty($company['id'])||trim((string)($company['legalName']??''))==='')fail('Configurează și selectează firma folosită în Shop înainte de emiterea fișei.',409);$companyFull=company_details_by_id((string)$company['id'],null,true);$companySnapshot=company_sheet_snapshot($companyFull);$id=uuid_v4();$now=now_utc();$signaturePath=null;$signedAt=null;
         if(!empty($body['signature'])){$signaturePath=save_sales_signature_file($id,(string)$body['signature']);$signedAt=$now;}
-        $pdo=db();$pdo->beginTransaction();try{$seqStmt=$pdo->prepare("SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(number,'-',-1) AS UNSIGNED)),0)+1 FROM sales_sheets WHERE property_id=? AND YEAR(document_at)=YEAR(?)");$seqStmt->execute([uuid_bin($propertyId),$values['documentAt']]);$seq=(int)$seqStmt->fetchColumn();$number='FV-'.gmdate('Y',strtotime($values['documentAt'])).'-'.str_pad((string)$seq,5,'0',STR_PAD_LEFT);
+        $pdo=db();$pdo->beginTransaction();try{$pdo->prepare('SELECT id FROM properties WHERE id=? FOR UPDATE')->execute([uuid_bin($propertyId)]);$seqStmt=$pdo->prepare("SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(number,'-',-1) AS UNSIGNED)),0)+1 FROM sales_sheets WHERE property_id=? AND YEAR(document_at)=YEAR(?)");$seqStmt->execute([uuid_bin($propertyId),$values['documentAt']]);$seq=(int)$seqStmt->fetchColumn();$number='FV-'.gmdate('Y',strtotime($values['documentAt'])).'-'.str_pad((string)$seq,5,'0',STR_PAD_LEFT);
             $columns=['id','property_id','company_id','company_snapshot','number','document_at','customer_name','customer_phone','customer_email','delivery_address','customer_notes','product_name','product_code','serial_number','quantity','warranty','payment_method','delivery_mode','product_unit_price','product_price','delivery_price','total_price','advance_paid','remaining_due','payment_status','due_at','currency_code','notes','expenses','expense_total','gshop_net','signature_path','signed_at','status','is_active','created_at','updated_at','created_by','updated_by'];
             $args=[uuid_bin($id),uuid_bin($propertyId),uuid_bin((string)$companyFull['id']),json_encode($companySnapshot,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),$number,$values['documentAt'],$values['customerName'],$values['customerPhone'],$values['customerEmail'],$values['deliveryAddress'],$values['customerNotes'],$values['productName'],$values['productCode'],$values['serialNumber'],$values['quantity'],$values['warranty'],$values['paymentMethod'],$values['deliveryMode'],$values['productUnitPrice'],$values['productPrice'],$values['deliveryPrice'],$values['totalPrice'],$values['advancePaid'],$values['remainingDue'],$values['paymentStatus'],$values['dueAt'],$values['currencyCode'],$values['notes'],$values['expenses'],$values['expenseTotal'],$values['gshopNet'],$signaturePath,$signedAt,'PUBLISHED',1,$now,$now,uuid_bin($user['id']),uuid_bin($user['id'])];
             $pdo->prepare('INSERT INTO sales_sheets ('.implode(',',$columns).') VALUES ('.implode(',',array_fill(0,count($args),'?')).')')->execute($args);$pdo->commit();
@@ -2260,7 +2280,19 @@ try {
         $user=require_permission('sales_sheets.update');$before=get_sales_sheet($params['id']);ensure_property($before['propertyId'],$user);$pathValue=save_sales_signature_file($before['id'],(string)(json_body()['signature']??''));$now=now_utc();db()->prepare('UPDATE sales_sheets SET signature_path=?,signed_at=?,updated_at=?,updated_by=? WHERE id=?')->execute([$pathValue,$now,$now,uuid_bin($user['id']),uuid_bin($before['id'])]);$after=generate_sales_sheet_record($before['id'],$user);audit_log('SALES_SHEET_SIGNED','sales_sheets','Semnătură client actualizată pe '.$after['number'],'SalesSheet',$after['id'],$after['propertyId'],['signedAt'=>$before['signedAt']??null],['signedAt'=>$after['signedAt']??null],$user);respond(sales_sheet_for_user($after,$user));
     }
     if($method==='DELETE'&&path_match('/sales-sheets/{id}',$path,$params)){
-        $user=require_permission('sales_sheets.delete');$row=sales_sheet_row($params['id']);$before=map_sales_sheet($row);ensure_property($before['propertyId'],$user);delete_all_sales_document_files($before['id'],$user);db()->prepare('UPDATE sales_sheets SET is_active=0,updated_at=?,updated_by=? WHERE id=?')->execute([now_utc(),uuid_bin($user['id']),uuid_bin($before['id'])]);foreach([$row['file_path']??null,$row['signature_path']??null]as$relative){if(!$relative)continue;$candidate=realpath(__DIR__.'/'.ltrim((string)$relative,'/'));$root=realpath(__DIR__.'/uploads');if($candidate&&$root&&str_starts_with($candidate,$root)&&is_file($candidate))@unlink($candidate);}audit_log('SALES_SHEET_DELETED','sales_sheets','Fișă de vânzare ștearsă: '.$before['number'],'SalesSheet',$before['id'],$before['propertyId'],$before,['deleted'=>true],$user);respond(['deleted'=>true]);
+        $user=require_permission('sales_sheets.delete');$sheetId=validated_uuid($params['id'],'Fișa de vânzare');$initial=sales_sheet_row($sheetId);$before=map_sales_sheet($initial);ensure_property($before['propertyId'],$user);$pdo=db();ensure_sales_documents_table($pdo);$pdo->beginTransaction();
+        try{
+            $pdo->prepare('SELECT id FROM properties WHERE id=? FOR UPDATE')->execute([uuid_bin($before['propertyId'])]);
+            $row=locked_sales_sheet_row($pdo,$sheetId);
+            $documentsStmt=$pdo->prepare('SELECT file_path FROM sales_sheet_documents WHERE sales_sheet_id=? FOR UPDATE');$documentsStmt->execute([uuid_bin($sheetId)]);$documents=$documentsStmt->fetchAll();
+            $pdo->prepare('DELETE FROM sales_sheet_documents WHERE sales_sheet_id=?')->execute([uuid_bin($sheetId)]);
+            $pdo->prepare('DELETE FROM sales_sheets WHERE id=? AND property_id=?')->execute([uuid_bin($sheetId),uuid_bin($before['propertyId'])]);
+            $pdo->commit();
+        }catch(Throwable$error){if($pdo->inTransaction())$pdo->rollBack();throw$error;}
+        $failedFiles=delete_sales_sheet_server_files($row,$documents);
+        audit_log('SALES_SHEET_DELETED','sales_sheets','Fișă de vânzare ștearsă: '.$before['number'],'SalesSheet',$sheetId,$before['propertyId'],['number'=>$before['number']],['deleted'=>true,'fileCleanupComplete'=>!$failedFiles],$user);
+        if($failedFiles){error_log('Sales sheet '.$sheetId.' deleted; file cleanup failed: '.implode(',',$failedFiles));fail('Fișa a fost ștearsă din baza de date, dar unele fișiere nu au putut fi eliminate de pe server. Contactează administratorul.',500);}
+        respond(['deleted'=>true,'number'=>$before['number']]);
     }
 
     if ($method==='GET'&&$path==='/service-sheets') { $user=require_permission('service_sheets.view');$propertyId=(string)($_GET['propertyId']??'');ensure_property($propertyId,$user);$stmt=db()->prepare(sheet_select().' WHERE s.property_id=? AND s.is_active=1 ORDER BY s.received_at DESC,s.created_at DESC LIMIT 100');$stmt->execute([uuid_bin($propertyId)]);$data=array_map(fn($row)=>sheet_for_user(map_sheet($row),$user),$stmt->fetchAll());respond(['data'=>$data,'page'=>1,'pageSize'=>100,'total'=>count($data),'totalPages'=>1]); }
