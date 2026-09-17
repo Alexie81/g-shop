@@ -5,7 +5,7 @@ import { useAppTheme } from '@/contexts/ThemeContext';
 import { appUpdateRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { AppUpdateInfo } from '@/types';
-import { compareVersions, isNativeUpdateAvailable, manifestReleaseVersion, releaseVersion } from '@/utils/app-version';
+import { isNativeUpdateAvailable, manifestReleaseVersion, releaseVersion } from '@/utils/app-version';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -19,6 +19,8 @@ export function AppUpdateCoordinator() {
   const checked = useRef(false);
   const [visible, setVisible] = useState(false);
   const [published, setPublished] = useState<AppUpdateInfo | null>(null);
+  const [otaReady, setOtaReady] = useState(false);
+  const [otaVersion, setOtaVersion] = useState<string | null>(null);
 
   useEffect(() => {
     if (checked.current || Platform.OS === 'web') return;
@@ -29,17 +31,20 @@ export function AppUpdateCoordinator() {
         try {
           const info = await appUpdateRepository.get();
           const nativeUpdateAvailable = isNativeUpdateAvailable(info.latestBuildNumber, info.latestVersion);
+          let pendingOta = updates.isUpdatePending;
           if (Updates.isEnabled && !updates.isUpdatePending) {
             try {
               const result = await Updates.checkForUpdateAsync();
-              const candidate = result.isAvailable ? manifestReleaseVersion(result.manifest) : null;
-              if (result.isAvailable && (!candidate || compareVersions(candidate, releaseVersion()) > 0)) {
+              if (result.isAvailable) {
+                setOtaVersion(manifestReleaseVersion(result.manifest));
                 await Updates.fetchUpdateAsync();
+                pendingOta = true;
+                setOtaReady(true);
               }
             }
             catch { /* Verificarea versiunii native rămâne disponibilă fără serviciul OTA. */ }
           }
-          if (!nativeUpdateAvailable) return;
+          if (!nativeUpdateAvailable && !pendingOta) return;
           setPublished(info);
           setVisible(true);
         } catch {
@@ -51,12 +56,17 @@ export function AppUpdateCoordinator() {
     return () => clearTimeout(timer);
   }, [updates.isUpdatePending]);
 
+  const nativeUpdateAvailable = published ? isNativeUpdateAvailable(published.latestBuildNumber, published.latestVersion) : false;
   const openNativeUpdate = () => {
     setVisible(false);
+    if (!nativeUpdateAvailable && (otaReady || updates.isUpdatePending)) {
+      void Updates.reloadAsync();
+      return;
+    }
     router.push('/app-update');
   };
 
-  const availableVersion = published?.latestVersion ?? releaseVersion();
+  const availableVersion = nativeUpdateAvailable ? published?.latestVersion ?? releaseVersion() : otaVersion ?? 'OTA disponibil';
   const notes = published?.releaseNotes.slice(0, 2) ?? [];
 
   return <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setVisible(false)}>
@@ -79,7 +89,7 @@ export function AppUpdateCoordinator() {
 
           <View style={styles.notes}>{notes.map((note) => <View key={note} style={styles.note}><View style={[styles.check, { backgroundColor: `${palette.success}18` }]}><Ionicons name="checkmark" size={15} color={palette.success} /></View><AppText style={styles.noteCopy}>{note}</AppText></View>)}</View>
 
-          <Button label="Vezi actualizarea" icon="sparkles-outline" onPress={openNativeUpdate} />
+          <Button label={nativeUpdateAvailable ? 'Vezi actualizarea' : 'Repornește și actualizează'} icon="sparkles-outline" onPress={openNativeUpdate} />
           <Pressable onPress={() => setVisible(false)} style={styles.later}><AppText variant="label" muted>Mai târziu</AppText></Pressable>
         </View>
       </View>

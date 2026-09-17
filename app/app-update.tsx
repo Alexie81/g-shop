@@ -48,12 +48,7 @@ export default function AppUpdateScreen() {
           return;
         }
         const ota = await Updates.checkForUpdateAsync();
-        let otaVersion: string | null = null;
-        if (ota.isAvailable && 'extra' in ota.manifest) {
-          const configured = ota.manifest.extra?.expoClient?.extra?.releaseVersion;
-          if (typeof configured === 'string' && configured.trim()) otaVersion = configured.trim();
-        }
-        if (ota.isAvailable && (!otaVersion || compareVersions(otaVersion, currentVersion) > 0)) {
+        if (ota.isAvailable) {
           showToast('Descărcăm actualizarea. Aplicația se va redeschide automat.', 'info');
           await Updates.fetchUpdateAsync();
           await Updates.reloadAsync();
