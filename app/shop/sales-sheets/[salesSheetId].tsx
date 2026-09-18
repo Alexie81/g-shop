@@ -69,7 +69,7 @@ async function sharePdfOnWeb(url: string, fileName: string) {
 export default function SalesSheetDetailsScreen() {
   const { salesSheetId } = useLocalSearchParams<{ salesSheetId: string }>();
   const { hasPermission } = useAuth();
-  const { colors } = useAppTheme();
+  const { colors, isDark } = useAppTheme();
   const { showToast } = useToast();
   const { width } = useWindowDimensions();
   const compact = width < 650;
@@ -81,7 +81,7 @@ export default function SalesSheetDetailsScreen() {
   const [savingExpenses, setSavingExpenses] = useState(false);
   const [expenseDrafts, setExpenseDrafts] = useState<ExpenseDraft[]>([]);
   const [pdfAction, setPdfAction] = useState<'download' | 'whatsapp' | null>(null);
-  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [actionOpen, setActionOpen] = useState<'status' | 'delete' | null>(null);
   const state = useAsyncData<SalesSheet>(() => salesSheetRepository.get(salesSheetId), [salesSheetId]);
   const sheet = state.data;
   useEffect(() => { if (sheet) setPaymentDraft(String(sheet.advancePaid).replace('.', ',')); }, [sheet]);
@@ -90,6 +90,16 @@ export default function SalesSheetDetailsScreen() {
   const canEditPayment = hasPermission('sales_sheets.update');
   const canEditExpenses = canViewFinancials && hasPermission('sales_sheets.update');
   const canDelete = hasPermission('sales_sheets.delete');
+  const changeStatus = async (target: SalesSheet) => {
+    try {
+      const updated = await salesSheetRepository.setStatus(target.id, target.status === 'CANCELLED' ? 'PUBLISHED' : 'CANCELLED');
+      state.setData(updated);
+      showToast(updated.status === 'CANCELLED' ? 'Fișa a fost anulată și exclusă din statistici.' : 'Fișa a fost reactivată și inclusă în statistici.', 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Statusul fișei nu a putut fi actualizat.', 'error');
+      throw error;
+    }
+  };
   const deleteSheet = async (target: SalesSheet) => {
     try {
       await salesSheetRepository.remove(target.id);
@@ -195,10 +205,10 @@ export default function SalesSheetDetailsScreen() {
     <Screen header={<AppHeader title={sheet?.number ?? 'Fișă de vânzare'} back onBack={() => router.replace('/shop/sales-sheets' as never)} />} refreshing={state.refreshing} onRefresh={() => void state.reload(true)}>
       <View style={styles.stack}>
         {state.loading ? <LoadingState rows={6} /> : state.error ? <ErrorState message={state.error.message} onRetry={() => void state.reload()} /> : sheet ? <>
-          <Card style={styles.hero} elevated>
-            <View style={[styles.heroIcon, compact && styles.heroIconCompact, { backgroundColor: colors.primarySoft }]}><Ionicons name="document-text-outline" size={compact ? 23 : 26} color={colors.primary} /></View>
+          <Card style={[styles.hero, sheet.status === 'CANCELLED' && { backgroundColor: isDark ? '#303740' : '#E5E8EB', borderColor: isDark ? '#59616A' : '#C9CFD6' }]} elevated>
+            <View style={[styles.heroIcon, compact && styles.heroIconCompact, { backgroundColor: sheet.status === 'CANCELLED' ? (isDark ? '#4A525B' : '#CDD2D8') : colors.primarySoft }]}><Ionicons name="document-text-outline" size={compact ? 23 : 26} color={sheet.status === 'CANCELLED' ? colors.textMuted : colors.primary} /></View>
             <View style={styles.copy}>
-              <View style={styles.titleRow}><AppText variant={compact ? 'heading' : 'title'}>{sheet.number}</AppText><View style={[styles.status, { backgroundColor: `${palette.success}16` }]}><Ionicons name="checkmark-circle" size={14} color={palette.success} /><AppText variant="caption" style={{ color: palette.success, fontWeight: '900' }}>DOCUMENT EMIS</AppText></View><PaymentBadge paid={sheet.paymentStatus === 'PAID'} />{sheet.paymentStatus === 'UNPAID' ? <AdvanceBadge value={money(sheet.receivedAmount, sheet.currencyCode)} /> : null}</View>
+              <View style={styles.titleRow}><AppText variant={compact ? 'heading' : 'title'}>{sheet.number}</AppText>{sheet.status === 'CANCELLED' ? <View style={[styles.status, { backgroundColor: '#66717D' }]}><Ionicons name="ban-outline" size={14} color="#FFFFFF" /><AppText variant="caption" style={{ color: '#FFFFFF', fontWeight: '900' }}>ANULATĂ</AppText></View> : <><View style={[styles.status, { backgroundColor: `${palette.success}16` }]}><Ionicons name="checkmark-circle" size={14} color={palette.success} /><AppText variant="caption" style={{ color: palette.success, fontWeight: '900' }}>DOCUMENT EMIS</AppText></View><PaymentBadge paid={sheet.paymentStatus === 'PAID'} />{sheet.paymentStatus === 'UNPAID' ? <AdvanceBadge value={money(sheet.receivedAmount, sheet.currencyCode)} /> : null}</>}</View>
               <AppText variant={compact ? 'caption' : 'body'} muted>{sheet.customerName} · {sheet.productName}</AppText>
               <AppText variant="caption" muted>{formatDate(sheet.documentAt, true)}{sheet.companyName ? ` · ${sheet.companyName}` : ''}</AppText>
             </View>
@@ -207,9 +217,12 @@ export default function SalesSheetDetailsScreen() {
               <Button compact label={pdfAction === 'download' ? 'Se descarcă…' : 'Descarcă'} icon="download-outline" loading={pdfAction === 'download'} disabled={!sheet.pdfUrl || pdfAction === 'whatsapp'} onPress={() => void handlePdfAction('download')} style={styles.heroAction} />
               <Button compact label={pdfAction === 'whatsapp' ? 'Se pregătește…' : 'WhatsApp'} icon="logo-whatsapp" loading={pdfAction === 'whatsapp'} disabled={!sheet.pdfUrl || pdfAction === 'download'} onPress={() => void handlePdfAction('whatsapp')} style={[styles.heroAction, styles.whatsAppAction]} />
               <Button compact variant="outline" label="Conversație" icon="chatbubble-ellipses-outline" onPress={() => void openWhatsAppConversation()} style={[styles.heroAction, styles.whatsAppConversationAction]} />
-              {canDelete ? <Button compact variant="danger" label="Șterge fișa" icon="trash-outline" onPress={() => setDeleteOpen(true)} style={styles.heroAction} /> : null}
+              {hasPermission('sales_sheets.update') ? <Button compact variant={sheet.status === 'CANCELLED' ? 'primary' : 'outline'} label={sheet.status === 'CANCELLED' ? 'Reactivează fișa' : 'Anulează fișa'} icon={sheet.status === 'CANCELLED' ? 'refresh-outline' : 'ban-outline'} onPress={() => setActionOpen('status')} style={styles.heroAction} /> : null}
+              {canDelete ? <Button compact variant="danger" label="Șterge fișa" icon="trash-outline" onPress={() => setActionOpen('delete')} style={styles.heroAction} /> : null}
             </View>
           </Card>
+
+          {sheet.status === 'CANCELLED' ? <View style={[styles.cancelledNotice, { backgroundColor: isDark ? '#303740' : '#E5E8EB', borderColor: isDark ? '#59616A' : '#C9CFD6' }]}><Ionicons name="information-circle-outline" size={20} color={colors.textMuted} /><AppText variant="caption" style={styles.copy}>Fișa este anulată: valorile de mai jos sunt păstrate pentru consultare, dar nu sunt incluse în totalurile și statisticile Shop. O poți reactiva oricând.</AppText></View> : null}
 
           <SalesDocumentsPanel sheet={sheet} onGenerated={() => state.reload(true)} />
 
@@ -254,7 +267,7 @@ export default function SalesSheetDetailsScreen() {
       </View>
     </Screen>
     {sheet ? <QuickSignatureModal visible={signatureOpen} clientName={sheet.customerName} saving={signing} onClose={() => !signing && setSignatureOpen(false)} onConfirm={(value) => void saveSignature(value)} /> : null}
-    {canDelete ? <SalesSheetActionsModal visible={deleteOpen} sheet={sheet} confirmOnOpen onClose={() => setDeleteOpen(false)} onDelete={deleteSheet} /> : null}
+    {hasPermission('sales_sheets.update') || canDelete ? <SalesSheetActionsModal visible={actionOpen !== null} sheet={sheet} confirmOnOpen={actionOpen === 'delete'} statusOnOpen={actionOpen === 'status'} onClose={() => setActionOpen(null)} onStatusChange={hasPermission('sales_sheets.update') ? changeStatus : undefined} onDelete={canDelete ? deleteSheet : undefined} /> : null}
   </>;
 }
 
@@ -277,6 +290,7 @@ const styles = StyleSheet.create({
   copy: { minWidth: 0, flex: 1, gap: 3 },
   titleRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.xs },
   status: { minHeight: 24, paddingHorizontal: spacing.sm, borderRadius: radius.pill, flexDirection: 'row', alignItems: 'center', gap: 4 }, full: { width: '100%' },
+  cancelledNotice: { padding: spacing.md, borderWidth: 1, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   metrics: { flexDirection: 'row', gap: spacing.sm },
   metricsCompact: { flexWrap: 'wrap' },
   metric: { minWidth: 150, flex: 1, gap: spacing.xs, padding: spacing.md },

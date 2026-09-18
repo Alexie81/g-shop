@@ -41,15 +41,26 @@ export default function SalesSheetsScreen() {
     const normalized = query.trim().toLocaleLowerCase('ro-RO');
     return (state.data?.data ?? []).filter((sheet) => !normalized || [sheet.number, sheet.customerName, sheet.customerPhone, sheet.productName, sheet.productCode].some((value) => value?.toLocaleLowerCase('ro-RO').includes(normalized)));
   }, [query, state.data?.data]);
-  const total = (state.data?.data ?? []).reduce((sum, item) => sum + item.totalPrice, 0);
-  const remaining = (state.data?.data ?? []).reduce((sum, item) => sum + item.remainingDue, 0);
-  const collected = (state.data?.data ?? []).reduce((sum, item) => sum + item.receivedAmount, 0);
+  const activeSheets = (state.data?.data ?? []).filter((item) => item.status !== 'CANCELLED');
+  const total = activeSheets.reduce((sum, item) => sum + item.totalPrice, 0);
+  const remaining = activeSheets.reduce((sum, item) => sum + item.remainingDue, 0);
+  const collected = activeSheets.reduce((sum, item) => sum + item.receivedAmount, 0);
   const totalReceivables = total;
-  const expenses = (state.data?.data ?? []).reduce((sum, item) => sum + (item.expenseTotal ?? 0), 0);
-  const gshopNet = (state.data?.data ?? []).reduce((sum, item) => sum + (item.gshopNet ?? item.totalPrice - (item.expenseTotal ?? 0)), 0);
+  const expenses = activeSheets.reduce((sum, item) => sum + (item.expenseTotal ?? 0), 0);
+  const gshopNet = activeSheets.reduce((sum, item) => sum + (item.gshopNet ?? item.totalPrice - (item.expenseTotal ?? 0)), 0);
   const canViewFinancials = hasPermission('financials.view');
   const canEdit = hasPermission('sales_sheets.update');
   const canDelete = hasPermission('sales_sheets.delete');
+  const changeStatus = async (sheet: SalesSheet) => {
+    try {
+      await salesSheetRepository.setStatus(sheet.id, sheet.status === 'CANCELLED' ? 'PUBLISHED' : 'CANCELLED');
+      await state.reload(true);
+      showToast(sheet.status === 'CANCELLED' ? `Fișa ${sheet.number} a fost reactivată.` : `Fișa ${sheet.number} a fost anulată și exclusă din statistici.`, 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Statusul fișei nu a putut fi actualizat.', 'error');
+      throw error;
+    }
+  };
   const deleteSheet = async (sheet: SalesSheet) => {
     try {
       await salesSheetRepository.remove(sheet.id);
@@ -83,20 +94,20 @@ export default function SalesSheetsScreen() {
           <Metric compact={compact} icon="receipt-outline" label="Cheltuieli" value={money(expenses, 'RON')} color={palette.danger} />
           <Metric compact={compact} wideOnCompact icon="wallet-outline" label="Rămâne G-Shop" value={money(gshopNet, 'RON')} color={gshopNet >= 0 ? colors.primary : palette.danger} />
         </> : <>
-          <Metric compact={compact} icon="documents-outline" label="Fișe emise" value={String(state.data?.total ?? 0)} color={colors.primary} />
+          <Metric compact={compact} icon="documents-outline" label="Fișe active" value={String(activeSheets.length)} color={colors.primary} />
           <Metric compact={compact} icon="cash-outline" label="Total vânzări" value={money(total, 'RON')} color={palette.success} />
           <Metric compact={compact} wideOnCompact icon="time-outline" label="Rest de încasat" value={money(remaining, 'RON')} color={remaining > 0 ? palette.warning : palette.success} />
         </>}
       </View>
 
       <Input label="Caută rapid" icon="search-outline" value={query} onChangeText={setQuery} placeholder="Număr, client, telefon sau produs" />
-      {canEdit || canDelete ? <View style={[styles.hint, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="hand-left-outline" size={18} color={colors.primary} /><AppText variant="caption" muted style={styles.hintCopy}>Ține apăsat pe o fișă pentru editare sau ștergere.</AppText></View> : null}
+      {canEdit || canDelete ? <View style={[styles.hint, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="hand-left-outline" size={18} color={colors.primary} /><AppText variant="caption" muted style={styles.hintCopy}>Ține apăsat pe o fișă pentru editare, anulare/reactivare sau ștergere.</AppText></View> : null}
 
-      {state.loading ? <LoadingState rows={5} /> : state.error ? <ErrorState message={state.error.message} onRetry={() => void state.reload()} /> : sheets.length ? <View style={styles.list}>{sheets.map((sheet) => <Pressable key={sheet.id} accessibilityRole="button" accessibilityLabel={`${sheet.number}, ${sheet.customerName}`} accessibilityHint="Atinge pentru detalii sau ține apăsat pentru acțiuni." android_ripple={{ color: colors.primarySoft }} delayLongPress={450} onLongPress={canEdit || canDelete ? () => { lastLongPressAt.current = Date.now(); setSelectedSheet(sheet); } : undefined} onPress={() => { if (Date.now() - lastLongPressAt.current < 800) return; router.push(`/shop/sales-sheets/${sheet.id}` as never); }} style={({ pressed }) => [styles.sheetCard, { backgroundColor: colors.surface, borderColor: colors.border, shadowColor: colors.shadow, shadowOpacity: isDark ? 0.12 : 0.06, opacity: pressed ? 0.82 : 1 }]}>
-        <View style={[styles.sheetHeader, { backgroundColor: colors.surfaceMuted }]}>
-          <View style={[styles.sheetIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="document-text-outline" size={21} color={colors.primary} /></View>
+      {state.loading ? <LoadingState rows={5} /> : state.error ? <ErrorState message={state.error.message} onRetry={() => void state.reload()} /> : sheets.length ? <View style={styles.list}>{sheets.map((sheet) => <Pressable key={sheet.id} accessibilityRole="button" accessibilityLabel={`${sheet.number}, ${sheet.customerName}${sheet.status === 'CANCELLED' ? ', anulată' : ''}`} accessibilityHint="Atinge pentru detalii sau ține apăsat pentru acțiuni." android_ripple={{ color: colors.primarySoft }} delayLongPress={450} onLongPress={canEdit || canDelete ? () => { lastLongPressAt.current = Date.now(); setSelectedSheet(sheet); } : undefined} onPress={() => { if (Date.now() - lastLongPressAt.current < 800) return; router.push(`/shop/sales-sheets/${sheet.id}` as never); }} style={({ pressed }) => [styles.sheetCard, { backgroundColor: sheet.status === 'CANCELLED' ? (isDark ? '#252B35' : '#ECEFF2') : colors.surface, borderColor: sheet.status === 'CANCELLED' ? (isDark ? '#48505A' : '#C9CFD6') : colors.border, shadowColor: colors.shadow, shadowOpacity: sheet.status === 'CANCELLED' ? 0 : isDark ? 0.12 : 0.06, opacity: pressed ? 0.82 : 1 }]}>
+        <View style={[styles.sheetHeader, { backgroundColor: sheet.status === 'CANCELLED' ? (isDark ? '#303740' : '#DEE2E6') : colors.surfaceMuted }]}>
+          <View style={[styles.sheetIcon, { backgroundColor: sheet.status === 'CANCELLED' ? (isDark ? '#4A525B' : '#CDD2D8') : colors.primarySoft }]}><Ionicons name="document-text-outline" size={21} color={sheet.status === 'CANCELLED' ? colors.textMuted : colors.primary} /></View>
           <AppText variant="heading" numberOfLines={1} style={styles.sheetNumber}>{sheet.number}</AppText>
-          <View style={[styles.amountChip, { backgroundColor: colors.primarySoft }]}><AppText variant="label" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={{ color: colors.primary }}>{money(sheet.totalPrice, sheet.currencyCode)}</AppText></View>
+          <View style={[styles.amountChip, { backgroundColor: sheet.status === 'CANCELLED' ? (isDark ? '#4A525B' : '#CDD2D8') : colors.primarySoft }]}><AppText variant="label" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={{ color: sheet.status === 'CANCELLED' ? colors.textMuted : colors.primary }}>{money(sheet.totalPrice, sheet.currencyCode)}</AppText></View>
           <View style={styles.chevron}><Ionicons name="chevron-forward" size={18} color={colors.textMuted} /></View>
         </View>
         <View style={styles.sheetBody}>
@@ -104,12 +115,12 @@ export default function SalesSheetsScreen() {
           <AppText variant="caption" muted numberOfLines={1}>{sheet.productName}</AppText>
           <View style={styles.sheetBottom}>
             <View style={styles.dateRow}><Ionicons name="calendar-outline" size={13} color={colors.textMuted} /><AppText variant="caption" muted>{formatDate(sheet.documentAt, true)}</AppText></View>
-            <View style={styles.statusRow}><View style={[styles.emitted, { backgroundColor: `${palette.success}16` }]}><Ionicons name="checkmark-circle" size={13} color={palette.success} /><AppText variant="caption" style={{ color: palette.success, fontWeight: '900' }}>EMIS</AppText></View><View style={[styles.emitted, { backgroundColor: `${sheet.paymentStatus === 'PAID' ? palette.success : palette.warning}16` }]}><Ionicons name={sheet.paymentStatus === 'PAID' ? 'checkmark-circle' : 'time'} size={13} color={sheet.paymentStatus === 'PAID' ? palette.success : palette.warning} /><AppText variant="caption" style={{ color: sheet.paymentStatus === 'PAID' ? palette.success : palette.warning, fontWeight: '900' }}>{sheet.paymentStatus === 'PAID' ? 'ACHITAT' : 'NEACHITAT'}</AppText></View>{sheet.paymentStatus === 'UNPAID' ? <View style={[styles.emitted, { backgroundColor: `${palette.danger}16` }]}><Ionicons name="cash-outline" size={13} color={palette.danger} /><AppText variant="caption" style={{ color: palette.danger, fontWeight: '900' }}>Avans: {money(sheet.receivedAmount, sheet.currencyCode)}</AppText></View> : null}</View>
+            <View style={styles.statusRow}>{sheet.status === 'CANCELLED' ? <View style={[styles.emitted, { backgroundColor: '#66717D' }]}><Ionicons name="ban-outline" size={13} color="#FFFFFF" /><AppText variant="caption" style={{ color: '#FFFFFF', fontWeight: '900' }}>ANULATĂ</AppText></View> : <><View style={[styles.emitted, { backgroundColor: `${palette.success}16` }]}><Ionicons name="checkmark-circle" size={13} color={palette.success} /><AppText variant="caption" style={{ color: palette.success, fontWeight: '900' }}>EMIS</AppText></View><View style={[styles.emitted, { backgroundColor: `${sheet.paymentStatus === 'PAID' ? palette.success : palette.warning}16` }]}><Ionicons name={sheet.paymentStatus === 'PAID' ? 'checkmark-circle' : 'time'} size={13} color={sheet.paymentStatus === 'PAID' ? palette.success : palette.warning} /><AppText variant="caption" style={{ color: sheet.paymentStatus === 'PAID' ? palette.success : palette.warning, fontWeight: '900' }}>{sheet.paymentStatus === 'PAID' ? 'ACHITAT' : 'NEACHITAT'}</AppText></View>{sheet.paymentStatus === 'UNPAID' ? <View style={[styles.emitted, { backgroundColor: `${palette.danger}16` }]}><Ionicons name="cash-outline" size={13} color={palette.danger} /><AppText variant="caption" style={{ color: palette.danger, fontWeight: '900' }}>Avans: {money(sheet.receivedAmount, sheet.currencyCode)}</AppText></View> : null}</>}</View>
           </View>
         </View>
       </Pressable>)}</View> : <Card style={styles.empty}><View style={[styles.emptyIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="receipt-outline" size={30} color={colors.primary} /></View><AppText variant="heading">Nu există fișe de vânzări</AppText><AppText muted style={styles.center}>Prima fișă se completează în câțiva pași și este emisă imediat în format PDF.</AppText>{hasPermission('sales_sheets.create') ? <Button label="Creează prima fișă" icon="add-circle-outline" onPress={() => router.push('/shop/sales-sheets/new' as never)} /> : null}</Card>}
     </View>
-    {canEdit || canDelete ? <SalesSheetActionsModal visible={Boolean(selectedSheet)} sheet={selectedSheet} onClose={() => setSelectedSheet(null)} onEdit={canEdit ? (sheet) => router.push(`/shop/sales-sheets/${sheet.id}/edit` as never) : undefined} onDelete={canDelete ? deleteSheet : undefined} /> : null}
+    {canEdit || canDelete ? <SalesSheetActionsModal visible={Boolean(selectedSheet)} sheet={selectedSheet} onClose={() => setSelectedSheet(null)} onEdit={canEdit ? (sheet) => router.push(`/shop/sales-sheets/${sheet.id}/edit` as never) : undefined} onStatusChange={canEdit ? changeStatus : undefined} onDelete={canDelete ? deleteSheet : undefined} /> : null}
   </Screen>;
 }
 

@@ -36,6 +36,7 @@ export const salesSheetRepository: SalesSheetRepository = {
   get: (id) => shopApiRequest(`/sales-sheets/${id}`),
   create: (input) => shopApiRequest('/sales-sheets', { method: 'POST', body: JSON.stringify(input) }),
   update: (id, input) => shopApiRequest(`/sales-sheets/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
+  setStatus: (id, status) => shopApiRequest(`/sales-sheets/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
   savePayment: (id, paymentStatus, advancePaid) => shopApiRequest(`/sales-sheets/${id}/payment`, { method: 'PUT', body: JSON.stringify({ paymentStatus, advancePaid }) }),
   saveExpenses: (id, expenses) => shopApiRequest(`/sales-sheets/${id}/expenses`, { method: 'PUT', body: JSON.stringify({ expenses: expenses ?? [] }) }),
   saveSignature: (id, signature) => shopApiRequest(`/sales-sheets/${id}/signature`, { method: 'POST', body: JSON.stringify({ signature }) }),

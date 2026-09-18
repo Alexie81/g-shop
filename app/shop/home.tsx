@@ -38,7 +38,7 @@ export default function ShopHomeScreen() {
     [activeProperty?.id, canView],
   );
   useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);
-  const sheets = state.data?.data ?? [];
+  const sheets = (state.data?.data ?? []).filter((item) => item.status !== 'CANCELLED');
   const salesTotal = sheets.reduce((sum, item) => sum + item.totalPrice, 0);
   const collected = sheets.reduce((sum, item) => sum + item.receivedAmount, 0);
   const remaining = sheets.reduce((sum, item) => sum + item.remainingDue, 0);
@@ -91,7 +91,7 @@ export default function ShopHomeScreen() {
             <Metric compact={overviewCompact} icon="receipt-outline" label="Cheltuieli" value={money(expenses)} color={palette.danger} />
             <Metric compact={overviewCompact} wideOnCompact icon="wallet-outline" label="Rămâne G-Shop" value={money(gshopNet)} color={gshopNet >= 0 ? colors.primary : palette.danger} />
           </> : <>
-            <Metric compact={overviewCompact} icon="receipt-outline" label="Fișe emise" value={String(state.data?.total ?? 0)} color={colors.primary} />
+            <Metric compact={overviewCompact} icon="receipt-outline" label="Fișe active" value={String(sheets.length)} color={colors.primary} />
             <Metric compact={overviewCompact} icon="cash-outline" label="Total vânzări" value={money(salesTotal)} color={palette.success} />
             <Metric compact={overviewCompact} wideOnCompact icon="time-outline" label="De încasat" value={money(remaining)} color={palette.warning} />
           </>}

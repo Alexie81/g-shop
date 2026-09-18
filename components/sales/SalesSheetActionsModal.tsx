@@ -12,28 +12,35 @@ type Props = {
   visible: boolean;
   sheet: SalesSheet | null;
   confirmOnOpen?: boolean;
+  statusOnOpen?: boolean;
   onClose: () => void;
   onEdit?: (sheet: SalesSheet) => void;
+  onStatusChange?: (sheet: SalesSheet) => Promise<void>;
   onDelete?: (sheet: SalesSheet) => Promise<void>;
 };
 
-export function SalesSheetActionsModal({ visible, sheet, confirmOnOpen = false, onClose, onEdit, onDelete }: Props) {
-  const { colors } = useAppTheme();
-  const [confirming, setConfirming] = useState(confirmOnOpen);
-  const [deleting, setDeleting] = useState(false);
+type Confirmation = 'delete' | 'status' | null;
 
-  useEffect(() => { if (visible) setConfirming(confirmOnOpen); }, [confirmOnOpen, visible]);
+export function SalesSheetActionsModal({ visible, sheet, confirmOnOpen = false, statusOnOpen = false, onClose, onEdit, onStatusChange, onDelete }: Props) {
+  const { colors } = useAppTheme();
+  const [confirmation, setConfirmation] = useState<Confirmation>(confirmOnOpen ? 'delete' : statusOnOpen ? 'status' : null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { if (visible) setConfirmation(confirmOnOpen ? 'delete' : statusOnOpen ? 'status' : null); }, [confirmOnOpen, statusOnOpen, visible]);
   if (!sheet) return null;
 
-  const close = () => { if (!deleting) onClose(); };
+  const close = () => { if (!saving) onClose(); };
   const edit = () => { onClose(); onEdit?.(sheet); };
-  const remove = async () => {
-    if (!onDelete) return;
-    setDeleting(true);
-    try { await onDelete(sheet); onClose(); }
+  const confirm = async () => {
+    const action = confirmation === 'delete' ? onDelete : onStatusChange;
+    if (!action) return;
+    setSaving(true);
+    try { await action(sheet); onClose(); }
     catch { /* Pagina afișează eroarea și păstrează confirmarea deschisă. */ }
-    finally { setDeleting(false); }
+    finally { setSaving(false); }
   };
+  const cancelled = sheet.status === 'CANCELLED';
+  const statusLabel = cancelled ? 'Reactivează fișa' : 'Anulează fișa';
 
   return <Modal visible={visible} transparent animationType="slide" statusBarTranslucent onRequestClose={close}>
     <ModalSafeBottom style={[styles.overlay, { backgroundColor: colors.overlay }]}>
@@ -41,16 +48,17 @@ export function SalesSheetActionsModal({ visible, sheet, confirmOnOpen = false, 
       <View style={[styles.panel, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
         <View style={[styles.handle, { backgroundColor: colors.border }]} />
         <View style={styles.heading}>
-          <View style={[styles.icon, { backgroundColor: confirming ? `${palette.danger}16` : colors.primarySoft }]}><Ionicons name={confirming ? 'trash-outline' : 'document-text-outline'} size={24} color={confirming ? palette.danger : colors.primary} /></View>
-          <View style={styles.headingCopy}><AppText variant="heading">{confirming ? 'Ștergi fișa de vânzare?' : sheet.number}</AppText><AppText variant="caption" muted numberOfLines={2}>{confirming ? `${sheet.number} · ${sheet.customerName}` : sheet.customerName}</AppText></View>
-          <Pressable accessibilityRole="button" accessibilityLabel="Închide" disabled={deleting} onPress={close} style={[styles.close, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={20} color={colors.text} /></Pressable>
+          <View style={[styles.icon, { backgroundColor: confirmation ? `${palette.danger}16` : colors.primarySoft }]}><Ionicons name={confirmation === 'delete' ? 'trash-outline' : confirmation === 'status' ? 'ban-outline' : 'document-text-outline'} size={24} color={confirmation ? palette.danger : colors.primary} /></View>
+          <View style={styles.headingCopy}><AppText variant="heading">{confirmation === 'delete' ? 'Ștergi fișa de vânzare?' : confirmation === 'status' ? `${statusLabel}?` : sheet.number}</AppText><AppText variant="caption" muted numberOfLines={2}>{confirmation ? `${sheet.number} · ${sheet.customerName}` : sheet.customerName}</AppText></View>
+          <Pressable accessibilityRole="button" accessibilityLabel="Închide" disabled={saving} onPress={close} style={[styles.close, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="close" size={20} color={colors.text} /></Pressable>
         </View>
-        {confirming ? <>
-          <View style={[styles.warning, { backgroundColor: `${palette.danger}0E`, borderColor: `${palette.danger}35` }]}><Ionicons name="alert-circle-outline" size={22} color={palette.danger} /><AppText variant="caption" style={styles.headingCopy}>Fișa, documentele PDF și semnătura ei vor fi șterse definitiv de pe server. Numărul poate fi refolosit numai dacă este ultimul emis în acel an.</AppText></View>
-          <View style={styles.confirmActions}><Button variant="outline" label="Anulează" disabled={deleting} onPress={close} style={styles.confirmButton} /><Button variant="danger" icon="trash-outline" label="Șterge definitiv" loading={deleting} onPress={() => void remove()} style={styles.confirmButton} /></View>
+        {confirmation ? <>
+          <View style={[styles.warning, { backgroundColor: `${palette.danger}0E`, borderColor: `${palette.danger}35` }]}><Ionicons name="alert-circle-outline" size={22} color={palette.danger} /><AppText variant="caption" style={styles.headingCopy}>{confirmation === 'delete' ? 'Fișa, documentele PDF și semnătura ei vor fi șterse definitiv de pe server. Numărul poate fi refolosit numai dacă este ultimul emis în acel an.' : cancelled ? 'Fișa va intra din nou în toate totalurile și statisticile Shop. Documentele și valorile păstrate rămân aceleași.' : 'Fișa rămâne accesibilă, dar toate valorile ei vor fi excluse din totalurile și statisticile Shop. Poți reactiva fișa oricând.'}</AppText></View>
+          <View style={styles.confirmActions}><Button variant="outline" label="Înapoi" disabled={saving} onPress={() => setConfirmation(null)} style={styles.confirmButton} /><Button variant={confirmation === 'delete' || !cancelled ? 'danger' : 'primary'} icon={confirmation === 'delete' ? 'trash-outline' : cancelled ? 'refresh-outline' : 'ban-outline'} label={confirmation === 'delete' ? 'Șterge definitiv' : statusLabel} loading={saving} onPress={() => void confirm()} style={styles.confirmButton} /></View>
         </> : <View style={styles.actions}>
           {onEdit ? <Action icon="create-outline" label="Editează fișa" color={colors.primary} onPress={edit} /> : null}
-          {onDelete ? <Action icon="trash-outline" label="Șterge fișa" color={palette.danger} onPress={() => setConfirming(true)} /> : null}
+          {onStatusChange ? <Action icon={cancelled ? 'refresh-outline' : 'ban-outline'} label={statusLabel} color={cancelled ? colors.primary : palette.warning} onPress={() => setConfirmation('status')} /> : null}
+          {onDelete ? <Action icon="trash-outline" label="Șterge fișa" color={palette.danger} onPress={() => setConfirmation('delete')} /> : null}
         </View>}
       </View>
     </ModalSafeBottom>

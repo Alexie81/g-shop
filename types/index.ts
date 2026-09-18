@@ -126,7 +126,7 @@ export interface SalesSheet extends BaseEntity {
   signedAt?: ISODate;
   generatedAt?: ISODate;
   pdfUrl?: string;
-  status: 'PUBLISHED';
+  status: 'PUBLISHED' | 'CANCELLED';
 }
 
 export type SalesDocumentType = 'FINAL_ESTIMATE' | 'WARRANTY';
