@@ -745,7 +745,7 @@ function ensure_sales_sheets_table(PDO $pdo): void {
         payment_method ENUM('CASH','BANK_TRANSFER','CARD') NOT NULL,delivery_mode ENUM('DELIVERY','PICKUP') NOT NULL,product_unit_price DECIMAL(12,2) NOT NULL DEFAULT 0,
         product_price DECIMAL(12,2) NOT NULL DEFAULT 0,delivery_price DECIMAL(12,2) NOT NULL DEFAULT 0,total_price DECIMAL(12,2) NOT NULL DEFAULT 0,advance_paid DECIMAL(12,2) NOT NULL DEFAULT 0,remaining_due DECIMAL(12,2) NOT NULL DEFAULT 0,payment_status ENUM('UNPAID','PAID') NOT NULL DEFAULT 'UNPAID',
         due_at DATETIME NULL,currency_code CHAR(3) NOT NULL DEFAULT 'RON',notes TEXT NULL,expenses LONGTEXT NULL,expense_total DECIMAL(12,2) NOT NULL DEFAULT 0,gshop_net DECIMAL(12,2) NOT NULL DEFAULT 0,signature_path VARCHAR(255) NULL,signed_at DATETIME NULL,file_path VARCHAR(255) NULL,file_sha256 CHAR(64) NULL,generated_at DATETIME NULL,
-        status ENUM('PUBLISHED') NOT NULL DEFAULT 'PUBLISHED',is_active TINYINT(1) NOT NULL DEFAULT 1,created_at DATETIME NOT NULL,updated_at DATETIME NOT NULL,created_by BINARY(16) NOT NULL,updated_by BINARY(16) NOT NULL,
+        status ENUM('PUBLISHED','CANCELLED') NOT NULL DEFAULT 'PUBLISHED',is_active TINYINT(1) NOT NULL DEFAULT 1,created_at DATETIME NOT NULL,updated_at DATETIME NOT NULL,created_by BINARY(16) NOT NULL,updated_by BINARY(16) NOT NULL,
         UNIQUE KEY uq_sales_sheet_number (property_id,number),INDEX idx_sales_sheets_list (property_id,is_active,document_at),
         CONSTRAINT fk_sales_sheet_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE,CONSTRAINT fk_sales_sheet_company FOREIGN KEY (company_id) REFERENCES property_companies(id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
@@ -754,6 +754,8 @@ function ensure_sales_sheets_table(PDO $pdo): void {
     if(!in_array('expense_total',$columns,true))$pdo->exec("ALTER TABLE sales_sheets ADD COLUMN expense_total DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER expenses");
     if(!in_array('gshop_net',$columns,true))$pdo->exec("ALTER TABLE sales_sheets ADD COLUMN gshop_net DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER expense_total");
     if($paymentStatusMissing){$pdo->exec("ALTER TABLE sales_sheets ADD COLUMN payment_status ENUM('UNPAID','PAID') NOT NULL DEFAULT 'UNPAID' AFTER remaining_due");$pdo->exec("UPDATE sales_sheets SET payment_status=CASE WHEN total_price>0 AND remaining_due<=0.009 THEN 'PAID' ELSE 'UNPAID' END");}
+    $statusType=(string)$pdo->query("SELECT column_type FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='sales_sheets' AND column_name='status'")->fetchColumn();
+    if(!str_contains(strtolower($statusType),'cancelled'))$pdo->exec("ALTER TABLE sales_sheets MODIFY COLUMN status ENUM('PUBLISHED','CANCELLED') NOT NULL DEFAULT 'PUBLISHED'");
     $pdo->exec("UPDATE sales_sheets SET expenses='[]',expense_total=0,gshop_net=total_price WHERE expenses IS NULL");$ready=true;
 }
 function sales_sheet_select(): string {
@@ -2211,6 +2213,18 @@ try {
         $user=require_permission('sales_sheets.view');$propertyId=validated_uuid((string)($_GET['propertyId']??''),'Proprietatea');ensure_property($propertyId,$user);ensure_sales_sheets_table(db());$stmt=db()->prepare(sales_sheet_select().' WHERE ss.property_id=? AND ss.is_active=1 ORDER BY ss.document_at DESC,ss.created_at DESC LIMIT 250');$stmt->execute([uuid_bin($propertyId)]);$data=array_map(fn($row)=>sales_sheet_for_user(map_sales_sheet($row),$user),$stmt->fetchAll());respond(['data'=>$data,'page'=>1,'pageSize'=>250,'total'=>count($data),'totalPages'=>1]);
     }
     if($method==='GET'&&path_match('/sales-sheets/{id}',$path,$params)){$user=require_permission('sales_sheets.view');$sheet=get_sales_sheet($params['id']);ensure_property($sheet['propertyId'],$user);respond(sales_sheet_for_user($sheet,$user));}
+    if($method==='PUT'&&path_match('/sales-sheets/{id}/status',$path,$params)){
+        $user=require_permission('sales_sheets.update');$status=strtoupper(trim((string)(json_body()['status']??'')));
+        if(!in_array($status,['PUBLISHED','CANCELLED'],true))fail('Statusul fișei nu este valid.',422);
+        $pdo=db();ensure_sales_sheets_table($pdo);$pdo->beginTransaction();
+        try{$row=locked_sales_sheet_row($pdo,$params['id']);$before=map_sales_sheet($row);ensure_property($before['propertyId'],$user);
+            if($before['status']!==$status)$pdo->prepare('UPDATE sales_sheets SET status=?,updated_at=?,updated_by=? WHERE id=? AND property_id=?')->execute([$status,now_utc(),uuid_bin($user['id']),uuid_bin($before['id']),uuid_bin($before['propertyId'])]);
+            $pdo->commit();
+        }catch(Throwable$error){if($pdo->inTransaction())$pdo->rollBack();throw$error;}
+        $after=get_sales_sheet($before['id']);
+        if($before['status']!==$status)audit_log($status==='CANCELLED'?'SALES_SHEET_CANCELLED':'SALES_SHEET_REACTIVATED','sales_sheets',($status==='CANCELLED'?'Fișă de vânzare anulată: ':'Fișă de vânzare reactivată: ').$after['number'],'SalesSheet',$after['id'],$after['propertyId'],['status'=>$before['status']],['status'=>$after['status']],$user);
+        respond(sales_sheet_for_user($after,$user));
+    }
     if($method==='GET'&&path_match('/sales-sheets/{id}/documents',$path,$params)){
         $user=require_permission('sales_sheets.view');$sheet=get_sales_sheet($params['id']);ensure_property($sheet['propertyId'],$user);respond(sales_document_slots($sheet['id'],$user));
     }

@@ -109,6 +109,7 @@ La actualizarea unei instalări existente, apelează `POST /admin/migrations/cli
 
 - `GET|POST /sales-sheets` — listează sau emite o fișă nouă și generează PDF-ul din șablonul A4
 - `GET|PUT|DELETE /sales-sheets/{id}` — consultă, regenerează sau elimină o fișă de vânzare
+- `PUT /sales-sheets/{id}/status` — anulează (`CANCELLED`) sau reactivează (`PUBLISHED`) fișa fără a șterge sumele/documentele; fișele anulate nu intră în statisticile Shop
 - `PUT /sales-sheets/{id}/expenses` — salvează pozițiile de cheltuieli interne și recalculează suma rămasă pentru G-Shop
 - `POST /sales-sheets/{id}/signature` — salvează semnătura electronică a clientului și regenerează PDF-ul
 - `GET /sales-sheets/{id}/documents` — returnează pașii DOSAR: deviz final și certificat de garanție
