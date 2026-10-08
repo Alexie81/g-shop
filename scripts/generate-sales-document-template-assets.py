@@ -10,6 +10,28 @@ from reportlab.pdfgen import canvas
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "api" / "assets" / "sales-document-templates"
+READABLE_FONT_SCALE = 1.12
+
+
+class ReadableCanvas(canvas.Canvas):
+    """Render template labels slightly larger without changing A4 geometry."""
+
+    def setFont(self, psfontname: str, size: float, leading: float | None = None) -> None:  # noqa: N802
+        scaled_leading = leading * READABLE_FONT_SCALE if leading is not None else None
+        super().setFont(psfontname, size * READABLE_FONT_SCALE, scaled_leading)
+
+
+class ReadablePdfMetrics:
+    """Make template wrapping calculations match the enlarged font size."""
+
+    def __init__(self, delegate: object) -> None:
+        self.delegate = delegate
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self.delegate, name)
+
+    def stringWidth(self, text: str, font_name: str, size: float, encoding: str = "utf8") -> float:  # noqa: N802
+        return self.delegate.stringWidth(text, font_name, size * READABLE_FONT_SCALE, encoding)
 
 
 def load_base() -> ModuleType:
@@ -172,7 +194,7 @@ def sales_narrative_box(
 
 def build_sales_sheet(base: ModuleType, data: dict[str, object]) -> Path:
     output = OUTPUT / "sales-sheet.pdf"
-    pdf = canvas.Canvas(str(output), pagesize=base.A4, pageCompression=1)
+    pdf = ReadableCanvas(str(output), pagesize=base.A4, pageCompression=1)
     pdf.setTitle("Șablon fișă de vânzare | G-Shop")
     base.draw_background(pdf)
     header(pdf, base, "FIȘĂ DE VÂNZARE", "NR. FIȘĂ", "DATA ȘI ORA")
@@ -194,7 +216,7 @@ def build_sales_sheet(base: ModuleType, data: dict[str, object]) -> Path:
 def build_final_templates(base: ModuleType, data: dict[str, object]) -> list[Path]:
     outputs: list[Path] = []
     intro = OUTPUT / "final-estimate-intro.pdf"
-    pdf = canvas.Canvas(str(intro), pagesize=base.A4, pageCompression=1)
+    pdf = ReadableCanvas(str(intro), pagesize=base.A4, pageCompression=1)
     pdf.setTitle("Șablon deviz final fișă de vânzare | G-Shop")
     base.draw_background(pdf)
     header(pdf, base, "DEVIZ FINAL", "NR. DEVIZ", "DATA")
@@ -210,7 +232,7 @@ def build_final_templates(base: ModuleType, data: dict[str, object]) -> list[Pat
     outputs.append(intro)
 
     continuation = OUTPUT / "final-estimate-continuation.pdf"
-    pdf = canvas.Canvas(str(continuation), pagesize=base.A4, pageCompression=1)
+    pdf = ReadableCanvas(str(continuation), pagesize=base.A4, pageCompression=1)
     pdf.setTitle("Șablon continuare deviz fișă de vânzare | G-Shop")
     base.draw_background(pdf)
     header(pdf, base, "DEVIZ FINAL", "NR. DEVIZ", "DATA")
@@ -221,7 +243,7 @@ def build_final_templates(base: ModuleType, data: dict[str, object]) -> list[Pat
     outputs.append(continuation)
 
     agreement = OUTPUT / "final-estimate-agreement.pdf"
-    pdf = canvas.Canvas(str(agreement), pagesize=base.A4, pageCompression=1)
+    pdf = ReadableCanvas(str(agreement), pagesize=base.A4, pageCompression=1)
     pdf.setTitle("Șablon acord deviz fișă de vânzare | G-Shop")
     base.draw_background(pdf)
     header(pdf, base, "DEVIZ FINAL", "NR. DEVIZ", "DATA")
@@ -301,7 +323,7 @@ def confirmation_card(pdf: canvas.Canvas, base: ModuleType) -> None:
 
 def build_warranty(base: ModuleType, data: dict[str, object]) -> Path:
     output = OUTPUT / "warranty.pdf"
-    pdf = canvas.Canvas(str(output), pagesize=base.A4, pageCompression=1)
+    pdf = ReadableCanvas(str(output), pagesize=base.A4, pageCompression=1)
     pdf.setTitle("Șablon certificat de garanție fișă de vânzare | G-Shop")
     base.draw_background(pdf)
     header(pdf, base, "CERTIFICAT DE GARANȚIE", "NR. CERTIFICAT", "DATA ȘI ORA")
@@ -323,6 +345,7 @@ def build_warranty(base: ModuleType, data: dict[str, object]) -> Path:
 def main() -> int:
     OUTPUT.mkdir(parents=True, exist_ok=True)
     base = load_base()
+    base.pdfmetrics = ReadablePdfMetrics(base.pdfmetrics)
     base.register_fonts()
     data = blank_data()
     outputs = [build_sales_sheet(base, data), *build_final_templates(base, data), build_warranty(base, data)]

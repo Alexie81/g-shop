@@ -43,6 +43,31 @@ DANGER = HexColor("#E7354C")
 DANGER_SOFT = HexColor("#FDECEF")
 PURPLE = HexColor("#7C3AED")
 CYAN = HexColor("#05A7C4")
+READABLE_FONT_SCALE = 1.12
+
+
+class ReadableCanvas(canvas.Canvas):
+    """Render template labels slightly larger without changing A4 geometry."""
+
+    def setFont(self, psfontname: str, size: float, leading: float | None = None) -> None:  # noqa: N802
+        scaled_leading = leading * READABLE_FONT_SCALE if leading is not None else None
+        super().setFont(psfontname, size * READABLE_FONT_SCALE, scaled_leading)
+
+
+class ReadablePdfMetrics:
+    """Make template wrapping calculations match the enlarged font size."""
+
+    def __init__(self, delegate: object) -> None:
+        self.delegate = delegate
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self.delegate, name)
+
+    def stringWidth(self, text: str, font_name: str, size: float, encoding: str = "utf8") -> float:  # noqa: N802
+        return self.delegate.stringWidth(text, font_name, size * READABLE_FONT_SCALE, encoding)
+
+
+pdfmetrics = ReadablePdfMetrics(pdfmetrics)
 
 
 @dataclass(frozen=True)
@@ -727,7 +752,7 @@ def draw_signatures(c: canvas.Canvas, data: dict[str, Any], show_company: bool) 
 def build_pdf(output: Path, data: dict[str, Any], variant: Variant, show_company: bool) -> Path:
     register_fonts()
     output.parent.mkdir(parents=True, exist_ok=True)
-    c = canvas.Canvas(str(output), pagesize=A4, pageCompression=1)
+    c = ReadableCanvas(str(output), pagesize=A4, pageCompression=1)
     c.setTitle("Fișă de service G-Shop")
     c.setAuthor("G-Shop")
     c.setSubject("Recepție, diagnostic, lucrări, costuri și predare echipament")
