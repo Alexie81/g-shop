@@ -164,8 +164,8 @@ function generate_sales_sheet_pdf(array $sheet, array $company, ?string $signatu
     $pdf->SetFont('DejaVu', 'B', 7.2);
     $pdf->Text(98, 61.5, 'Calculatoare Profesionale | G-Shop');
 
-    gshop_sales_pdf_shrink_text($pdf, 398, 61, $sheet['number'] ?? '', 48, 6.4, 4.2);
-    gshop_sales_pdf_shrink_text($pdf, 518, 61, gshop_sales_pdf_local_date($sheet['documentAt'] ?? ''), 38, 5.8, 3.8);
+    gshop_sales_pdf_shrink_text($pdf, 393, 61, $sheet['number'] ?? '', 70, 6.4, 4.8);
+    gshop_sales_pdf_shrink_text($pdf, 501, 61, gshop_sales_pdf_local_date($sheet['documentAt'] ?? ''), 59, 5.4, 4.4);
     gshop_sales_pdf_shrink_text($pdf, 100, 106, $company['legalName'] ?? '', 108, 6.2, 4.2);
     gshop_sales_pdf_shrink_text($pdf, 245, 106, $company['taxId'] ?? '', 137, 6.5, 4.8);
     gshop_sales_pdf_shrink_text($pdf, 482, 106, $company['tradeRegisterNumber'] ?? '', 72, 6.0, 4.0);

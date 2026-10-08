@@ -6,6 +6,15 @@ require_once __DIR__ . '/../vendor/autoload.php';
 use setasign\Fpdi\Tfpdf\Fpdi;
 
 const GSHOP_PDF_PAGE_HEIGHT = 841.8898;
+const GSHOP_PDF_FONT_SCALE = 1.12;
+
+/** Keeps the original A4 portrait layout while making generated text easier to print. */
+class GshopReadablePdf extends Fpdi {
+    public function SetFont($family, $style = '', $size = 0): void {
+        if ($size > 0 && strcasecmp((string)$family, 'DejaVu') === 0) $size *= GSHOP_PDF_FONT_SCALE;
+        parent::SetFont($family, $style, $size);
+    }
+}
 
 function gshop_pdf_string(mixed $value): string {
     return trim((string)($value ?? ''));
@@ -496,7 +505,7 @@ function gshop_pdf_overlay_page_two(Fpdi $pdf, array $sheet, array $client, stri
     $checks = ['approveDiagnostics','approveRepair','repairRefused','productDelivered'];
     foreach ($checks as $index => $key) if (!empty($sheet[$key])) gshop_pdf_text($pdf, $checkXs[$index] + 1, 517, '✓', 8.5, 'B');
     gshop_pdf_text($pdf, 100, 487, $sheet['warranty'] ?? '', 6.8, '', 92);
-    gshop_pdf_text($pdf, 270, 487, $sheet['storageAfter'] ?? '', 6.8, '', 86);
+    gshop_pdf_text($pdf, 291, 487, $sheet['storageAfter'] ?? '', 6.8, '', 65);
     $statuses = ['NEW'=>'Nouă','WAITING'=>'În așteptare','VERIFYING'=>'În verificare','IN_PROGRESS'=>'În lucru','WAITING_PARTS'=>'Așteptăm piesele','COMPLETED'=>'Finalizată','DELIVERED'=>'Predată','CANCELLED'=>'Anulată'];
     gshop_pdf_text($pdf, 445, 487, $statuses[$sheet['status'] ?? ''] ?? ($sheet['status'] ?? ''), 6.8, '', 112);
     gshop_pdf_text($pdf, 130, 464, $sheet['handoverNotes'] ?? '', 6.8, '', 426);
@@ -588,7 +597,7 @@ function generate_service_sheet_pdf(array $sheet, array $client, array $financia
     $output = $directory . '/' . $filename;
     $metadata = $output . '.sha256';
     $fingerprint = hash('sha256', serialize([
-        'version' => 8,
+        'version' => 10,
         'sheet' => $sheet,
         'client' => $client,
         'financial' => $financial,
@@ -622,7 +631,7 @@ function generate_service_sheet_pdf(array $sheet, array $client, array $financia
         $temporary = tempnam($directory, $fileStem . '-generating-');
         if ($temporary === false) throw new RuntimeException('Fișierul temporar pentru PDF nu poate fi creat.');
 
-        $pdf = new Fpdi('P', 'pt', 'A4');
+        $pdf = new GshopReadablePdf('P', 'pt', 'A4');
         $pdf->SetAutoPageBreak(false);
         $pdf->SetMargins(0, 0, 0);
         $pdf->SetTitle('Fișă de service ' . gshop_pdf_string($sheet['number'] ?? ''), true);

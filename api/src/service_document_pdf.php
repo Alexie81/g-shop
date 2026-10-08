@@ -20,7 +20,7 @@ const GSHOP_DOCUMENT_TOTALS_HEIGHT = 143.0;
  * FPDI extension used only for the rounded client-facing cards drawn over the
  * static templates. Coordinates accepted here use FPDF's top-left origin.
  */
-final class GshopServiceDocumentPdf extends Fpdi {
+final class GshopServiceDocumentPdf extends GshopReadablePdf {
     public function RoundedRect(float $x, float $y, float $w, float $h, float $r, string $style = 'D'): void {
         $operator = match ($style) {
             'F' => 'f',
@@ -433,8 +433,8 @@ function gshop_document_financial_values(array $snapshot): array {
 }
 
 function gshop_document_overlay_header(Fpdi $pdf, array $document, array $company, float $baseline = 779): void {
-    gshop_pdf_text($pdf, 356, $baseline, $document['number'] ?? '', 6.3, 'B', 91);
-    gshop_pdf_text($pdf, 462, $baseline, gshop_document_date($document['documentAt'] ?? ''), 6.3, 'B', 91);
+    gshop_document_shrink_text($pdf, 356, $baseline, $document['number'] ?? '', 91, 6.3, 4.7, 'B');
+    gshop_document_shrink_text($pdf, 462, $baseline, gshop_document_date($document['documentAt'] ?? ''), 91, 6.3, 4.7, 'B');
 }
 
 function gshop_document_overlay_company(Fpdi $pdf, array $company): void {
@@ -455,7 +455,7 @@ function gshop_document_overlay_company(Fpdi $pdf, array $company): void {
         gshop_document_source_line($pdf, $x + $labelWidth, $lineY, $x + $width, $lineY, 'lineDark', .7);
         gshop_document_shrink_text($pdf, $x + $labelWidth + 4, $lineY + 2, $value, $width - $labelWidth - 7, $valueSize, 4.9, $label === 'Denumire juridică' ? 'B' : '');
     };
-    $field(32, 730, 190, 'Denumire juridică', $company['legalName'] ?? '', 64);
+    $field(32, 730, 190, 'Denumire juridică', $company['legalName'] ?? '', 76);
     $field(230, 730, 105, 'CUI / CIF', $company['taxId'] ?? '', 34, 5.1, 6.1);
     $field(343, 730, 220, 'Registrul Comerțului', $company['tradeRegisterNumber'] ?? '', 103, 5.1, 6.6);
     $field(32, 716, 531, 'Sediu', gshop_pdf_full_address($company), 32, 5.6, 6.3);
@@ -507,10 +507,10 @@ function gshop_document_reference(Fpdi $pdf, array $snapshot, float $baseline = 
     $sheet = is_array($snapshot['sheet'] ?? null) ? $snapshot['sheet'] : [];
     $intake = is_array($snapshot['intake'] ?? null) ? $snapshot['intake'] : [];
     $estimate = is_array($snapshot['estimate'] ?? null) ? $snapshot['estimate'] : [];
-    gshop_pdf_text($pdf, 140, $baseline, $intake['number'] ?? $sheet['number'] ?? '', 6.4, '', 198);
+    gshop_document_shrink_text($pdf, 166, $baseline, $intake['number'] ?? $sheet['number'] ?? '', 172, 6.4, 4.9, '');
     gshop_pdf_text($pdf, $withEstimate ? 410 : 382, $baseline, gshop_document_date($intake['date'] ?? $sheet['receivedAt'] ?? ''), 6.2, '', $withEstimate ? 143 : 169);
     if ($withEstimate) {
-        gshop_pdf_text($pdf, 140, $baseline - 15, $estimate['number'] ?? $sheet['finalEstimateNumber'] ?? '', 6.4, '', 198);
+        gshop_document_shrink_text($pdf, 166, $baseline - 15, $estimate['number'] ?? $sheet['finalEstimateNumber'] ?? '', 172, 6.4, 4.9, '');
         gshop_pdf_text($pdf, 410, $baseline - 15, gshop_document_date($estimate['date'] ?? $sheet['finalEstimateAt'] ?? ''), 6.2, '', 143);
     }
 }
@@ -1116,8 +1116,8 @@ function gshop_document_build_final(
         gshop_document_overlay_sales_template($pdf, $snapshot, $plan['first'] ? 'FINAL_INTRO' : 'FINAL_CONTINUATION', $plan['first'] ? 682 : 732);
         gshop_document_overlay_service_template_brand($pdf, $snapshot, 'FINAL_ESTIMATE');
         if ($salesProfile && !empty($snapshot['nativeSalesTemplate'])) {
-            gshop_pdf_text($pdf, 355, 779, $document['number'] ?? '', 6.3, 'B', 91);
-            gshop_pdf_text($pdf, 464, 779, gshop_document_date($document['documentAt'] ?? ''), 6.3, 'B', 87);
+            gshop_document_shrink_text($pdf, 355, 779, $document['number'] ?? '', 91, 6.3, 4.7, 'B');
+            gshop_document_shrink_text($pdf, 464, 779, gshop_document_date($document['documentAt'] ?? ''), 87, 6.3, 4.7, 'B');
         } else {
             gshop_document_overlay_header($pdf, $document, $company);
         }
@@ -1381,7 +1381,7 @@ function generate_service_document_pdf(
         'hash' => hash_file('sha256', $template) ?: '',
     ];
     $fingerprint = hash('sha256', serialize([
-        'version' => 37,
+        'version' => 42,
         'type' => $normalizedType,
         'document' => $document,
         'snapshot' => $snapshot,
