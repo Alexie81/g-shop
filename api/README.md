@@ -5,7 +5,7 @@ API REST PHP 8 + MySQL pentru aplicația Expo G-Shop. Aplicația mobilă nu se c
 ## Configurare
 
 1. Copiază `.env.example` în `.env` pe server și completează datele MySQL, `APP_KEY` și un `INSTALL_TOKEN` unic.
-2. Publică dosarul în `public_html/app-api/`.
+2. Publică dosarul în `reparatiicalculatoare-bucuresti.ro/app-api/`.
 3. Accesează o singură dată `https://domeniu/app-api/install.php?token=...`.
 4. Instalarea creează `.installed`, iar endpointul nu mai poate fi refolosit.
 5. Autentificarea inițială este `admin` / `admin`; parola trebuie schimbată imediat din Setări.

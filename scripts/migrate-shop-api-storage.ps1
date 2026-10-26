@@ -2,7 +2,7 @@ param(
   [Parameter(Mandatory = $true)][string]$FtpHost,
   [Parameter(Mandatory = $true)][string]$FtpUser,
   [Parameter(Mandatory = $true)][string]$FtpPassword,
-  [string]$SourcePath = 'public_html/app-api',
+  [string]$SourcePath = 'reparatiicalculatoare-bucuresti.ro/app-api',
   [string]$TargetPath = 'calculatoareprofesionale.ro/app-api',
   [switch]$SkipCertificateCheck
 )
