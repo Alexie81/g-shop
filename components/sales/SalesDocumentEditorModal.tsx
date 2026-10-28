@@ -51,10 +51,12 @@ export function SalesDocumentEditorModal({ visible, type, sheet, document, onGen
   const [warrantyPeriod, setWarrantyPeriod] = useState('');
   const [warrantyStartAt, setWarrantyStartAt] = useState(nowIso());
   const [warrantyEndAt, setWarrantyEndAt] = useState('');
+  const pricingMatchesSheet = type !== 'FINAL_ESTIMATE' || document?.agreementStatus === 'REFUSED' || (document?.pricingMatchesSheet ?? documentPricesMatchSheet(document, sheet));
+  const pricingOutOfSync = type === 'FINAL_ESTIMATE' && document?.status === 'PUBLISHED' && !pricingMatchesSheet;
 
   useEffect(() => {
     if (!visible) return;
-    const hasPersistedDocument = document?.status === 'PUBLISHED';
+    const hasPersistedDocument = document?.status === 'PUBLISHED' && pricingMatchesSheet;
     const baseDate = document?.documentAt || nowIso();
     setDocumentAt(baseDate);
     setAgreementAt(document?.agreementAt || baseDate);
@@ -63,14 +65,14 @@ export function SalesDocumentEditorModal({ visible, type, sheet, document, onGen
     setTechnicalAssessment(document?.technicalAssessment || 'Configurația a fost verificată integral înainte de livrare.');
     setFinalNotes(document?.finalNotes || sheet.notes || 'Valorile și operațiunile sunt cele prezentate în desfășurătorul de mai jos.');
     setParts(toDraftItems(hasPersistedDocument ? document.parts : defaultParts(sheet)));
-    setLabor(toDraftItems(hasPersistedDocument ? document.labor : defaultLabor()));
+    setLabor(toDraftItems(hasPersistedDocument ? document.labor : defaultLabor(sheet)));
     const period = document?.warrantyPeriod || sheet.warranty || '';
     const start = document?.warrantyStartAt || sheet.documentAt || baseDate;
     setWarrantyPeriod(period);
     setWarrantyStartAt(start);
     setWarrantyEndAt(document?.warrantyEndAt || calculateWarrantyEndAt(start, period));
     setError('');
-  }, [document, sheet, visible]);
+  }, [document, pricingMatchesSheet, sheet, visible]);
 
   const totals = useMemo(() => ({
     parts: roundMoney(parts.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0)),
@@ -137,6 +139,7 @@ export function SalesDocumentEditorModal({ visible, type, sheet, document, onGen
             <View style={[styles.autoNotice, { backgroundColor: colors.primarySoft, borderColor: `${colors.primary}30` }]}><Ionicons name="sparkles-outline" size={19} color={colors.primary} /><AppText variant="caption" style={styles.noticeCopy}>Firma, clientul, produsul, numerele documentelor, plățile, semnătura și ștampila se completează automat.</AppText></View>
 
             {type === 'FINAL_ESTIMATE' ? <>
+              {pricingOutOfSync ? <View style={[styles.syncNotice, { backgroundColor: `${palette.warning}12`, borderColor: `${palette.warning}45` }]}><Ionicons name="sync-outline" size={20} color={palette.warning} /><View style={styles.noticeCopy}><AppText variant="label" style={{ color: palette.warning }}>Valorile noi ale fișei au fost preluate</AppText><AppText variant="caption" muted>Ultimul deviz avea alte sume. Pozițiile de mai jos au fost refăcute din prețul produsului și manopera salvate acum, ca PDF-ul să nu readucă valorile vechi.</AppText></View></View> : null}
               <View style={styles.titleWithInfo}><AppText variant="heading">Datele devizului</AppText><InfoTooltip title="Sincronizare cu fișa" description="Totalul devizului se calculează exclusiv din pozițiile de mai jos. Dacă acordul este Acceptat, prețurile și statisticile fișei de vânzare se actualizează direct; dacă este Refuzat, valorile fișei rămân neschimbate." /></View>
               <Input label="Solicitarea clientului" value={customerRequest} onChangeText={setCustomerRequest} maxLength={1000} multiline numberOfLines={3} textAlignVertical="top" style={styles.textArea} placeholder="Ce produse, servicii sau configurație a solicitat clientul" />
               <Input label="Configurație și verificare" value={technicalAssessment} onChangeText={setTechnicalAssessment} maxLength={1200} multiline numberOfLines={3} textAlignVertical="top" style={styles.textArea} placeholder="Configurația livrată și verificările efectuate" />
@@ -202,8 +205,25 @@ function PaymentValue({ label, value, currency, color }: { label: string; value:
 function toDraftItems(items: ServiceDocumentItem[]): DraftItem[] {
   return items.map((item) => ({ key: draftKey(), name: String(item.name ?? '').slice(0, 180), quantity: item.quantity > 0 ? item.quantity : 1, unitPrice: roundMoney(item.unitPrice), totalPrice: roundMoney(item.totalPrice) }));
 }
-function defaultParts(_sheet: SalesSheet): ServiceDocumentItem[] { return []; }
-function defaultLabor(): ServiceDocumentItem[] { return [{ name: 'Manoperă', quantity: 1, unitPrice: 0, totalPrice: 0 }]; }
+function defaultParts(sheet: SalesSheet): ServiceDocumentItem[] {
+  if (sheet.productPrice <= 0) return [];
+  const quantity = sheet.quantity > 0 ? roundMoney(sheet.quantity) : 1;
+  const unitPrice = roundMoney(sheet.productUnitPrice);
+  return [{ name: sheet.productName.trim() || 'Produs / echipament', quantity, unitPrice, totalPrice: roundMoney(quantity * unitPrice) }];
+}
+function defaultLabor(sheet: SalesSheet): ServiceDocumentItem[] {
+  if (sheet.deliveryPrice <= 0) return [];
+  const name = sheet.deliveryMode === 'DELIVERY' ? 'Livrare / servicii' : 'Manoperă / servicii';
+  return [{ name, quantity: 1, unitPrice: roundMoney(sheet.deliveryPrice), totalPrice: roundMoney(sheet.deliveryPrice) }];
+}
+function documentPricesMatchSheet(document: SalesDocument | undefined, sheet: SalesSheet) {
+  if (!document || document.status !== 'PUBLISHED') return true;
+  const partsTotal = roundMoney(document.parts.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0));
+  const laborTotal = roundMoney(document.labor.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0));
+  return Math.abs(partsTotal - sheet.productPrice) <= 0.009
+    && Math.abs(laborTotal - sheet.deliveryPrice) <= 0.009
+    && Math.abs(partsTotal + laborTotal - sheet.totalPrice) <= 0.009;
+}
 function expenseItems(expenses: SalesExpenseLine[]): ServiceDocumentItem[] {
   return expenses.flatMap((expense) => {
     const name = expense.name.trim().replace(/\s+/g, ' ').slice(0, 180);
@@ -231,7 +251,7 @@ const styles = StyleSheet.create({
   sheet: { width: '100%', maxWidth: 820, maxHeight: '95%', alignSelf: 'center', borderWidth: 1, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.md, gap: spacing.md },
   handleWrap: { alignItems: 'center' }, handle: { width: 44, height: 4, borderRadius: radius.pill },
   header: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, headerIcon: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' }, headerCopy: { minWidth: 0, flex: 1, gap: 1 }, step: { fontSize: 10, fontWeight: '900', letterSpacing: .5, textTransform: 'uppercase' }, close: { width: 38, height: 38, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
-  content: { minHeight: 0 }, contentInner: { gap: spacing.md, paddingBottom: spacing.sm }, autoNotice: { minHeight: 48, borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, noticeCopy: { minWidth: 0, flex: 1 }, titleWithInfo: { minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, textArea: { minHeight: 78, paddingTop: spacing.md },
+  content: { minHeight: 0 }, contentInner: { gap: spacing.md, paddingBottom: spacing.sm }, autoNotice: { minHeight: 48, borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, syncNotice: { minHeight: 62, borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, noticeCopy: { minWidth: 0, flex: 1 }, titleWithInfo: { minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, textArea: { minHeight: 78, paddingTop: spacing.md },
   agreementChoice: { gap: spacing.sm }, segments: { flexDirection: 'row', gap: spacing.sm }, segment: { minHeight: 44, flex: 1, borderWidth: 1, borderRadius: radius.pill, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   itemsSection: { borderTopWidth: 1, paddingTop: spacing.md, gap: spacing.sm }, itemsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm }, itemsHeaderCopy: { minWidth: 0, flex: 1, gap: 1 }, itemActions: { flexDirection: 'row', flexShrink: 0, gap: spacing.xs }, itemAction: { minHeight: 38, paddingHorizontal: 10, borderRadius: radius.pill }, itemList: { gap: spacing.sm }, itemCard: { borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, gap: spacing.sm }, itemHeader: { minHeight: 30, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, position: { width: 27, height: 27, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' }, positionTitle: { flex: 1 }, remove: { width: 32, height: 32, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' }, itemFields: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, itemField: { minWidth: 105, flexBasis: 115 }, itemFieldWide: { minWidth: 180, flex: 1 }, itemTotal: { textAlign: 'right', fontWeight: '800' }, emptyItems: { minHeight: 54, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   summary: { borderWidth: 1, borderRadius: radius.lg, padding: spacing.sm, gap: spacing.sm }, summaryTitle: { minWidth: 0, flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, summaryIcon: { width: 36, height: 36, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' }, summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, summaryValue: { minWidth: 130, flex: 1, borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, gap: 4 }, summaryLabel: { flexDirection: 'row', alignItems: 'center', gap: 6 }, dot: { width: 7, height: 7, borderRadius: radius.pill }, paymentGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }, paymentValue: { minWidth: 130, flex: 1, borderWidth: 1, borderRadius: radius.md, padding: spacing.sm, gap: 3 },

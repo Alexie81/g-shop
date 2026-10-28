@@ -139,6 +139,7 @@ export interface SalesDocument {
   label: string;
   status: SalesDocumentStatus;
   available: boolean;
+  pricingMatchesSheet?: boolean;
   number?: string;
   documentAt?: ISODate;
   agreementAt?: ISODate;
