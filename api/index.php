@@ -2257,15 +2257,7 @@ try {
         try{
             $row=locked_sales_sheet_row($pdo,$params['id']);$before=map_sales_sheet($row);ensure_property($before['propertyId'],$user);
             if(!$canViewFinancials)$body['expenses']=$before['expenses']??[];
-            $hasAcceptedEstimate=sales_document_has_accepted_final_estimate($pdo,$before['id'],true);
-            if($hasAcceptedEstimate){
-                $body['quantity']=1;$body['productUnitPrice']=$before['productPrice'];$body['deliveryPrice']=$before['deliveryPrice'];$body['advancePaid']=$before['receivedAmount'];$body['paymentStatus']=$before['paymentStatus'];$body['currencyCode']=$before['currencyCode'];
-            }
             $values=validated_sales_sheet_payload($body);
-            if($hasAcceptedEstimate){
-                foreach(['quantity','productUnitPrice','productPrice','deliveryPrice','totalPrice','advancePaid','remainingDue','paymentStatus','currencyCode']as$key)$values[$key]=$key==='advancePaid'?round((float)$before['receivedAmount'],2):$before[$key];
-                $values['gshopNet']=round((float)$values['totalPrice']-(float)$values['expenseTotal'],2);
-            }
             $columns=['document_at','customer_name','customer_phone','customer_email','delivery_address','customer_notes','product_name','product_code','serial_number','quantity','warranty','payment_method','delivery_mode','product_unit_price','product_price','delivery_price','total_price','advance_paid','remaining_due','payment_status','due_at','currency_code','notes','expenses','expense_total','gshop_net'];
             $args=array_values($values);$assignments=array_map(fn($column)=>$column.'=?',$columns);$args[]=now_utc();$args[]=uuid_bin($user['id']);$args[]=uuid_bin($before['id']);
             $pdo->prepare('UPDATE sales_sheets SET '.implode(',',$assignments).',updated_at=?,updated_by=? WHERE id=?')->execute($args);$pdo->commit();

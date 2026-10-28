@@ -246,13 +246,6 @@ function sales_document_stored_row(PDO $pdo, string $sheetId, string $type, bool
     return $row ?: null;
 }
 
-function sales_document_has_accepted_final_estimate(PDO $pdo, string $sheetId, bool $forUpdate = false): bool {
-    $sql = "SELECT agreement_status FROM sales_sheet_documents WHERE sales_sheet_id=? AND type='FINAL_ESTIMATE' AND status='PUBLISHED' AND is_active=1 LIMIT 1".($forUpdate ? ' FOR UPDATE' : '');
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([uuid_bin($sheetId)]);
-    return strtoupper((string)($stmt->fetchColumn() ?: '')) === 'ACCEPTED';
-}
-
 function sales_document_record(string $sheetId, string $type, array $user, bool $required = true): ?array {
     $row = sales_document_existing_row($sheetId, $type);
     if (!$row) { if ($required) fail('Documentul nu a fost încă generat.', 404); return null; }
