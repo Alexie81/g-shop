@@ -136,6 +136,29 @@ function sales_document_snapshot_has_canonical_pricing(array $snapshot): bool {
     return abs((float)$marker['productPrice'] + (float)$marker['deliveryPrice'] - (float)$marker['totalPrice']) <= .009;
 }
 
+function sales_document_item_totals(array $parts, array $labor): array {
+    $partsTotal = round(array_sum(array_map(fn(array $item)=>(float)($item['totalPrice'] ?? 0), $parts)), 2);
+    $laborTotal = round(array_sum(array_map(fn(array $item)=>(float)($item['totalPrice'] ?? 0), $labor)), 2);
+    return [$partsTotal, $laborTotal, round($partsTotal + $laborTotal, 2)];
+}
+
+function sales_document_pricing_matches_sheet(array $sheet, array $parts, array $labor): bool {
+    [$partsTotal, $laborTotal, $total] = sales_document_item_totals($parts, $labor);
+    return abs($partsTotal - (float)($sheet['productPrice'] ?? 0)) <= .009
+        && abs($laborTotal - (float)($sheet['deliveryPrice'] ?? 0)) <= .009
+        && abs($total - (float)($sheet['totalPrice'] ?? 0)) <= .009;
+}
+
+function sales_document_items_fingerprint(array $items): string {
+    $normalized = array_map(fn(array $item)=>[
+        'name'=>trim((string)($item['name'] ?? '')),
+        'quantity'=>round((float)($item['quantity'] ?? 0), 2),
+        'unitPrice'=>round((float)($item['unitPrice'] ?? 0), 2),
+        'totalPrice'=>round((float)($item['totalPrice'] ?? 0), 2),
+    ], $items);
+    return hash('sha256', json_encode($normalized, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR));
+}
+
 function sales_document_canonical_pricing_marker_for_generation(string $type, string $agreementStatus, ?array $canonicalSheetPrices, array $existingSnapshot): ?array {
     if ($type !== 'FINAL_ESTIMATE' || $agreementStatus !== 'ACCEPTED') return null;
     if ($canonicalSheetPrices !== null) return sales_document_canonical_pricing_marker($canonicalSheetPrices);
@@ -204,7 +227,7 @@ function invalidate_sales_dossier_files(string $sheetId): void {
     }
 }
 
-function map_sales_document(array $row, array $user): array {
+function map_sales_document(array $row, array $user, ?array $sheet = null): array {
     $item = entity_base($row);
     $definition = sales_document_definitions()[$item['type']];
     $snapshot = json_decode((string)($row['snapshot_json'] ?? ''), true);
@@ -221,8 +244,13 @@ function map_sales_document(array $row, array $user): array {
     $item['labor'] = array_map(function (array $line): array { unset($line['directCost']); return $line; }, $item['labor']);
     unset($item['warrantyRemediation']);
     $item['label'] = $definition['label'];
+    $item['pricingMatchesSheet'] = $item['type'] !== 'FINAL_ESTIMATE'
+        || strtoupper((string)($item['agreementStatus'] ?? '')) === 'REFUSED'
+        || $sheet === null
+        || sales_document_pricing_matches_sheet($sheet, $item['parts'], $item['labor']);
     $item['available'] = $item['status'] === 'PUBLISHED'
         && sales_document_pdf_is_current($row)
+        && $item['pricingMatchesSheet']
         && sales_document_absolute_path($row['file_path'] ?? null) !== null;
     $version = trim((string)($item['fileSha256'] ?? $item['generatedAt'] ?? ''));
     $item['url'] = $item['available'] ? public_base_url().'/'.ltrim((string)$row['file_path'], '/').($version !== '' ? '?v='.rawurlencode($version) : '') : null;
@@ -249,16 +277,17 @@ function sales_document_stored_row(PDO $pdo, string $sheetId, string $type, bool
 function sales_document_record(string $sheetId, string $type, array $user, bool $required = true): ?array {
     $row = sales_document_existing_row($sheetId, $type);
     if (!$row) { if ($required) fail('Documentul nu a fost încă generat.', 404); return null; }
-    return map_sales_document($row, $user);
+    return map_sales_document($row, $user, get_sales_sheet($sheetId));
 }
 
 function sales_document_slots(string $sheetId, array $user): array {
     ensure_sales_documents_table(db());
+    $sheet = get_sales_sheet($sheetId);
     $stmt = db()->prepare(sales_document_select().' WHERE d.sales_sheet_id=? AND d.is_active=1');
     $stmt->execute([uuid_bin($sheetId)]);
     $rows = $stmt->fetchAll();
     $found = [];
-    foreach ($rows as $row) $found[$row['type']] = map_sales_document($row, $user);
+    foreach ($rows as $row) $found[$row['type']] = map_sales_document($row, $user, $sheet);
     $estimateAvailable = !empty($found['FINAL_ESTIMATE']['available']);
     if (!$estimateAvailable && isset($found['WARRANTY'])) {
         $found['WARRANTY']['available'] = false;
@@ -379,6 +408,8 @@ function generate_sales_document_record(string $sheetId, string $type, array $bo
         throw new RuntimeException('Certificatul a rămas în așteptare până la actualizarea explicită a devizului final.');
     }
 
+    $agreementStatus = strtoupper((string)($body['agreementStatus'] ?? $existing['agreement_status'] ?? 'ACCEPTED'));
+    if (!in_array($agreementStatus, ['ACCEPTED','REFUSED'], true)) fail('Starea acordului nu este validă.', 422);
     if ($type === 'WARRANTY') {
         $estimateSnapshot = is_array($estimate['snapshot'] ?? null) ? $estimate['snapshot'] : [];
         $partsSource = $estimateSnapshot['parts'] ?? [];
@@ -394,6 +425,13 @@ function generate_sales_document_record(string $sheetId, string $type, array $bo
     $labor = service_document_items($laborSource, $laborFallback, (float)($sheet['deliveryPrice'] ?? 0), 0);
     foreach ($labor as &$laborItem) unset($laborItem['directCost']);
     unset($laborItem);
+    if ($type === 'FINAL_ESTIMATE' && $agreementStatus === 'ACCEPTED' && strtoupper((string)($existing['agreement_status'] ?? '')) === 'ACCEPTED' && !sales_document_pricing_matches_sheet($sheet, $parts, $labor)) {
+        $storedParts = service_document_items($existingSnapshot['parts'] ?? null, '', 0, 0);
+        $storedLabor = service_document_items($existingSnapshot['labor'] ?? null, '', 0, 0);
+        $usesUnchangedStoredPricing = sales_document_items_fingerprint($parts) === sales_document_items_fingerprint($storedParts)
+            && sales_document_items_fingerprint($labor) === sales_document_items_fingerprint($storedLabor);
+        if ($usesUnchangedStoredPricing) fail('Fișa are valori mai noi decât devizul. Redeschide devizul pentru a prelua automat valorile actuale.', 409, ['code'=>'STALE_FINAL_ESTIMATE_PRICING']);
+    }
     $summary = $type === 'WARRANTY' && is_array($estimate['snapshot']['summary'] ?? null) ? $estimate['snapshot']['summary'] : sales_document_summary($sheet, $parts, $labor);
     $summary['receivedAmount'] = round(max(0, (float)($sheet['receivedAmount'] ?? 0)), 2);
     $summary['remainingDue'] = round(max(0, (float)($summary['totalPrice'] ?? 0) - (float)$summary['receivedAmount']), 2);
@@ -403,8 +441,6 @@ function generate_sales_document_record(string $sheetId, string $type, array $bo
     $number = (string)($existing['number'] ?? sales_document_number($definition['prefix'], (string)$sheet['number']));
     $documentAt = service_document_db_date($body['documentAt'] ?? null, (string)($existing['document_at'] ?? $now));
     $agreementAt = service_document_db_date($body['agreementAt'] ?? null, (string)($existing['agreement_at'] ?? $documentAt));
-    $agreementStatus = strtoupper((string)($body['agreementStatus'] ?? $existing['agreement_status'] ?? 'ACCEPTED'));
-    if (!in_array($agreementStatus, ['ACCEPTED','REFUSED'], true)) fail('Starea acordului nu este validă.', 422);
     $canonicalSheetPrices = $type === 'FINAL_ESTIMATE' && $agreementStatus === 'ACCEPTED' && $syncCanonicalPrices
         ? sales_document_canonical_sheet_prices($sheet, $summary)
         : null;
