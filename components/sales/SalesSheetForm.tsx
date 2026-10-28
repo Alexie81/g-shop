@@ -24,6 +24,14 @@ const numberValue = (value: string) => {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 };
 const money = (value: number, currency = 'RON') => new Intl.NumberFormat('ro-RO', { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+const sameMoney = (left: number, right: number) => Math.abs(left - right) <= 0.009;
+const sameDate = (left?: string, right?: string) => {
+  if (!left && !right) return true;
+  if (!left || !right) return false;
+  const leftTime = new Date(left).getTime();
+  const rightTime = new Date(right).getTime();
+  return Number.isFinite(leftTime) && Number.isFinite(rightTime) && Math.abs(leftTime - rightTime) < 60_000;
+};
 type ExpenseDraft = { id: string; name: string; quantity: string; amount: string };
 
 export function SalesSheetForm({ initialSheet }: { initialSheet?: SalesSheet }) {
@@ -90,6 +98,15 @@ export function SalesSheetForm({ initialSheet }: { initialSheet?: SalesSheet }) 
       let saved = initialSheet
         ? await salesSheetRepository.update(initialSheet.id, payload)
         : await salesSheetRepository.create(payload);
+      if (initialSheet && (
+        !sameMoney(saved.quantity, payload.quantity)
+        || !sameMoney(saved.productUnitPrice, payload.productUnitPrice)
+        || !sameMoney(saved.deliveryPrice, payload.deliveryPrice)
+        || !sameMoney(saved.receivedAmount, totals.collected)
+        || saved.paymentStatus !== payload.paymentStatus
+        || saved.currencyCode !== payload.currencyCode
+        || !sameDate(saved.dueAt, payload.dueAt)
+      )) throw new Error('Serverul nu a confirmat toate valorile și scadența introduse. Reîncarcă fișa și încearcă din nou.');
       if (initialSheet && signature) saved = await salesSheetRepository.saveSignature(initialSheet.id, signature);
       showToast(initialSheet ? 'Fișa și PDF-ul au fost actualizate.' : 'Fișa de vânzare și PDF-ul au fost emise.', 'success');
       router.replace(`/shop/sales-sheets/${saved.id}` as never);
