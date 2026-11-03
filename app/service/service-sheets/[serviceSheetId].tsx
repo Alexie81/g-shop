@@ -223,8 +223,8 @@ export default function ServiceSheetDetails() {
         const active = status === sheet.status;
         return <View key={status} style={[styles.step, mobile && styles.stepMobile]}>
           <View style={[styles.rail, mobile && styles.railMobile]}>
-            <View style={[styles.dot, { backgroundColor: done ? palette.electric : colors.surfaceMuted, borderColor: done ? palette.electric : colors.border }]}>{done ? <Ionicons name="checkmark" size={13} color="#fff" /> : null}</View>
-            {index < statusOrder.length - 1 ? <View style={[styles.line, mobile && styles.lineMobile, { backgroundColor: index < currentStatusIndex ? palette.electric : colors.border }]} /> : null}
+            <View style={[styles.dot, { backgroundColor: done ? colors.brandAccent : colors.surfaceMuted, borderColor: done ? colors.brandAccent : colors.border }]}>{done ? <Ionicons name="checkmark" size={13} color="#fff" /> : null}</View>
+            {index < statusOrder.length - 1 ? <View style={[styles.line, mobile && styles.lineMobile, { backgroundColor: index < currentStatusIndex ? colors.brandAccent : colors.border }]} /> : null}
           </View>
           <View style={[styles.stepCopy, mobile && styles.stepCopyMobile]}>
             <AppText variant="caption" style={{ color: done ? colors.text : colors.textMuted, fontWeight: done ? '800' : '500' }}>{SERVICE_STATUS_LABELS[status]}</AppText>

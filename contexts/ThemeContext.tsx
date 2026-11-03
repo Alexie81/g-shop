@@ -1,4 +1,6 @@
-import { darkColors, lightColors, ThemeColors } from '@/theme/tokens';
+import { cleaningDarkColors, cleaningLightColors, darkColors, lightColors, ThemeColors } from '@/theme/tokens';
+import { useProperty } from '@/contexts/PropertyContext';
+import { isCleaningProperty } from '@/utils/property';
 import { preferenceStorage } from '@/services/storage';
 import { ThemePreference } from '@/types';
 import * as SystemUI from 'expo-system-ui';
@@ -9,6 +11,7 @@ type ThemeContextValue = {
   preference: ThemePreference;
   setPreference: (value: ThemePreference) => Promise<void>;
   isDark: boolean;
+  isCleaning: boolean;
   colors: ThemeColors;
   ready: boolean;
 };
@@ -16,11 +19,13 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: PropsWithChildren) {
+  const { activeProperty } = useProperty();
   const systemScheme = useColorScheme();
   const [preference, setPreferenceState] = useState<ThemePreference>('system');
   const [ready, setReady] = useState(false);
   const isDark = preference === 'system' ? systemScheme === 'dark' : preference === 'dark';
-  const colors = isDark ? darkColors : lightColors;
+  const isCleaning = isCleaningProperty(activeProperty);
+  const colors = isCleaning ? (isDark ? cleaningDarkColors : cleaningLightColors) : (isDark ? darkColors : lightColors);
 
   useEffect(() => {
     preferenceStorage.get('theme').then((saved) => {
@@ -35,13 +40,14 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   const value = useMemo<ThemeContextValue>(() => ({
     preference,
     isDark,
+    isCleaning,
     colors,
     ready,
     setPreference: async (next) => {
       setPreferenceState(next);
       await preferenceStorage.set('theme', next);
     },
-  }), [colors, isDark, preference, ready]);
+  }), [colors, isCleaning, isDark, preference, ready]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

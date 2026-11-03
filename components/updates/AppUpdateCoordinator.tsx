@@ -14,7 +14,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 export function AppUpdateCoordinator() {
-  const { colors, isDark } = useAppTheme();
+  const { colors, isDark, isCleaning } = useAppTheme();
   const updates = Updates.useUpdates();
   const checked = useRef(false);
   const [visible, setVisible] = useState(false);
@@ -73,10 +73,10 @@ export function AppUpdateCoordinator() {
     <ModalSafeBottom style={[styles.overlay, { backgroundColor: colors.overlay }]}>
       <Pressable style={StyleSheet.absoluteFill} onPress={() => setVisible(false)} />
       <View style={[styles.card, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
-        <LinearGradient colors={isDark ? ['#32146F', '#075CFF'] : ['#6937E6', '#075CFF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+        <LinearGradient colors={isCleaning ? colors.brandGradient : isDark ? ['#32146F', '#075CFF'] : ['#6937E6', '#075CFF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
           <View pointerEvents="none" style={styles.glow} />
           <View style={styles.updateIcon}><Ionicons name="cloud-download-outline" size={31} color="#FFFFFF" /></View>
-          <View style={styles.heroCopy}><AppText variant="caption" style={styles.eyebrow}>ACTUALIZARE G-SHOP</AppText><AppText variant="title" style={styles.heroTitle}>O versiune nouă este gata</AppText><AppText style={styles.heroText}>Este disponibilă o versiune nouă a aplicației Android.</AppText></View>
+          <View style={styles.heroCopy}><AppText variant="caption" style={[styles.eyebrow, isCleaning && { color: colors.brandText }]}>ACTUALIZARE G-SHOP</AppText><AppText variant="title" style={styles.heroTitle}>O versiune nouă este gata</AppText><AppText style={[styles.heroText, isCleaning && { color: colors.brandText }]}>Este disponibilă o versiune nouă a aplicației Android.</AppText></View>
           <Pressable accessibilityLabel="Mai târziu" onPress={() => setVisible(false)} style={styles.close}><Ionicons name="close" size={22} color="#FFFFFF" /></Pressable>
         </LinearGradient>
 

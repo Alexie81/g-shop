@@ -17,7 +17,7 @@ import { Modal, Pressable, StyleSheet, useWindowDimensions, View } from 'react-n
 type Item = { label: string; description: string; icon: keyof typeof Ionicons.glyphMap; color: string; route?: string; permission?: Permission; adminOnly?: boolean; action?: () => void };
 
 export default function MoreScreen() {
-  const { colors, isDark } = useAppTheme();
+  const { colors, isDark, isCleaning } = useAppTheme();
   const { user, logout, hasPermission } = useAuth();
   const { activeProperty } = useProperty();
   const { width } = useWindowDimensions();
@@ -31,12 +31,12 @@ export default function MoreScreen() {
     { label: 'Mesaje WhatsApp', description: 'Mesajele rapide ale contului tău', icon: 'logo-whatsapp', color: '#18B95D', route: '/service/whatsapp-messages', permission: 'clients.view' },
     { label: 'Utilizatori', description: 'Roluri, parole și permisiuni', icon: 'people-outline', color: palette.purple, route: '/service/users', permission: 'users.view' },
     { label: 'Rapoarte', description: 'Venituri, costuri și performanță', icon: 'bar-chart-outline', color: palette.success, route: '/service/reports', permission: 'reports.view' },
-    { label: 'Registru', description: 'Fișe de intrare, devize și ieșiri', icon: 'library-outline', color: palette.electric, route: '/service/register', permission: 'service_sheets.view' },
-    { label: 'Istoric modificări', description: 'Audit complet asociat utilizatorilor', icon: 'time-outline', color: palette.electric, route: '/service/audit', permission: 'audit.view' },
+    { label: 'Registru', description: 'Fișe de intrare, devize și ieșiri', icon: 'library-outline', color: colors.brandAccent, route: '/service/register', permission: 'service_sheets.view' },
+    { label: 'Istoric modificări', description: 'Audit complet asociat utilizatorilor', icon: 'time-outline', color: colors.brandAccent, route: '/service/audit', permission: 'audit.view' },
     { label: 'Datele firmei', description: 'Date juridice, bancare și ștampilă', icon: 'business-outline', color: palette.warning, route: '/company-details', permission: 'settings.manage', adminOnly: true },
     { label: 'Actualizare aplicație', description: 'Verifică și descarcă ultima versiune', icon: 'cloud-download-outline', color: palette.cyan, route: '/app-update' },
     { label: 'Setări', description: 'Temă, securitate și aplicație', icon: 'settings-outline', color: '#64748B', route: '/settings' },
-    { label: 'Profil', description: 'Contul și proprietățile tale', icon: 'person-circle-outline', color: palette.electric, route: '/profile' },
+    { label: 'Profil', description: 'Contul și proprietățile tale', icon: 'person-circle-outline', color: colors.brandAccent, route: '/profile' },
     { label: 'Schimbă proprietatea', description: 'Service sau magazin online', icon: 'swap-horizontal-outline', color: palette.purple, route: '/select-property?manual=1' },
     { label: 'Deconectare', description: 'Închide sesiunea curentă', icon: 'log-out-outline', color: palette.danger, action: () => setLogoutOpen(true) },
   ];
@@ -58,7 +58,7 @@ export default function MoreScreen() {
       <View style={styles.stack}>
         <View style={styles.heading}>
           <View style={styles.titleRow}><View><AppText variant="title">Administrare</AppText><AppText variant="caption" muted>{items.length} module disponibile</AppText></View><Pressable accessibilityRole="button" accessibilityLabel="Informații despre modulele disponibile" accessibilityState={{ expanded: infoOpen }} onPress={() => setInfoOpen((value) => !value)} style={({ pressed }) => [styles.infoButton, { backgroundColor: colors.primarySoft, opacity: pressed ? 0.7 : 1 }]}><Ionicons name={infoOpen ? 'close' : 'information-circle-outline'} size={20} color={colors.primary} /></Pressable></View>
-          {infoOpen ? <View accessibilityRole="alert" style={[styles.tooltip, { backgroundColor: isDark ? '#102B4C' : '#EAF2FF', borderColor: `${colors.primary}60` }]}><View style={[styles.tooltipIcon, { backgroundColor: colors.primary }]}><Ionicons name="apps-outline" size={17} color="#fff" /></View><View style={styles.tooltipCopy}><AppText variant="label">Modulele proprietății</AppText><AppText variant="caption" muted>Modulele disponibile pentru {activeProperty?.name ?? 'proprietatea activă'}.</AppText></View></View> : null}
+          {infoOpen ? <View accessibilityRole="alert" style={[styles.tooltip, { backgroundColor: isCleaning ? colors.primarySoft : isDark ? '#102B4C' : '#EAF2FF', borderColor: `${colors.primary}60` }]}><View style={[styles.tooltipIcon, { backgroundColor: colors.primary }]}><Ionicons name="apps-outline" size={17} color="#fff" /></View><View style={styles.tooltipCopy}><AppText variant="label">Modulele proprietății</AppText><AppText variant="caption" muted>Modulele disponibile pentru {activeProperty?.name ?? 'proprietatea activă'}.</AppText></View></View> : null}
         </View>
         <View style={styles.grid}>{items.map((item) => <Pressable key={item.label} accessibilityRole="button" android_ripple={{ color: 'transparent' }} onPress={() => openItem(item)} style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, shadowColor: colors.shadow, shadowOpacity: isDark ? 0.12 : 0.07 }]}><View style={[styles.icon, { backgroundColor: `${item.color}18` }]}><Ionicons name={item.icon} size={24} color={item.color} /></View><View style={styles.itemCopy}><AppText variant="heading">{item.label}</AppText><AppText variant="caption" muted>{item.description}</AppText></View><View style={[styles.arrow, { backgroundColor: colors.surfaceMuted }]}><Ionicons name="chevron-forward" size={18} color={colors.textMuted} /></View></Pressable>)}</View>
       </View>

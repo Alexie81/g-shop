@@ -15,7 +15,7 @@ export function LoadingExperience({
   title?: string;
   message?: string;
 }) {
-  const { colors, isDark } = useAppTheme();
+  const { colors, isDark, isCleaning } = useAppTheme();
   const { width } = useWindowDimensions();
   const compact = width < 430;
   const pulse = useRef(new Animated.Value(0)).current;
@@ -41,7 +41,7 @@ export function LoadingExperience({
   }, [progress, pulse]);
 
   const content = <LinearGradient
-    colors={isDark ? ['#0C1D35', '#07152D'] : ['#FFFFFF', '#F1F6FF']}
+    colors={isCleaning ? [colors.surfaceElevated, colors.surfaceMuted] : isDark ? ['#0C1D35', '#07152D'] : ['#FFFFFF', '#F1F6FF']}
     start={{ x: 0, y: 0 }}
     end={{ x: 1, y: 1 }}
     style={[
@@ -51,7 +51,7 @@ export function LoadingExperience({
       { borderColor: colors.border, shadowColor: colors.shadow },
     ]}
   >
-    <View style={styles.cardGlow} />
+    <View style={[styles.cardGlow, isCleaning && { backgroundColor: `${colors.brandAccent}12` }]} />
     <View style={styles.logoStage}>
       <Animated.View style={[
         styles.logoHalo,
@@ -89,11 +89,11 @@ export function LoadingExperience({
 
   if (!fullScreen) return content;
   return <LinearGradient
-    colors={isDark ? ['#040C1A', '#07152D'] : ['#F8FAFF', '#EAF1FF']}
+    colors={isCleaning ? [colors.background, colors.surfaceMuted] : isDark ? ['#040C1A', '#07152D'] : ['#F8FAFF', '#EAF1FF']}
     style={styles.screen}
   >
     <View style={[styles.orb, styles.orbOne, { backgroundColor: `${colors.primary}16` }]} />
-    <View style={[styles.orb, styles.orbTwo, { backgroundColor: `${palette.purple}12` }]} />
+    <View style={[styles.orb, styles.orbTwo, { backgroundColor: `${isCleaning ? colors.brandAccent : palette.purple}12` }]} />
     {content}
   </LinearGradient>;
 }

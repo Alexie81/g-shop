@@ -34,7 +34,8 @@ export function ClientCard({ client, index = 0, onWhatsApp, onDeleteRequest }: C
   const compact = width < 390;
   const translateX = useRef(new Animated.Value(0)).current;
   const swipeStarted = useRef(false);
-  const accent = avatarColors[index % avatarColors.length];
+  const avatarColor = avatarColors[index % avatarColors.length];
+  const accent = avatarColor === palette.electric ? colors.brandAccent : avatarColor;
   const finalized = client.status === 'FINALIZED';
   const statusColor = finalized ? palette.success : palette.danger;
 

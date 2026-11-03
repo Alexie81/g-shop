@@ -5,8 +5,8 @@ import { ErrorState } from '@/components/ui/States';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProperty } from '@/contexts/PropertyContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
-import { palette, radius, spacing } from '@/theme/tokens';
-import { propertyAlias, propertyIcon, propertyModuleLabel } from '@/utils/property';
+import { cleaningDarkColors, cleaningLightColors, darkColors, lightColors, palette, radius, spacing } from '@/theme/tokens';
+import { isCleaningProperty, propertyAlias, propertyIcon, propertyModuleLabel } from '@/utils/property';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,6 +20,8 @@ export default function SelectPropertyScreen() {
   const { properties, activeProperty, loading, error, selectProperty, reload } = useProperty();
   const { manual } = useLocalSearchParams<{ manual?: string }>();
   const { colors, isDark } = useAppTheme();
+  const defaultColors = isDark ? darkColors : lightColors;
+  const cleaningColors = isDark ? cleaningDarkColors : cleaningLightColors;
   const [selecting, setSelecting] = useState('');
   const entrance = useRef(new Animated.Value(0)).current;
   const floating = useRef(new Animated.Value(0)).current;
@@ -74,7 +76,8 @@ export default function SelectPropertyScreen() {
 
           {error ? <ErrorState message={error} onRetry={() => void reload()} /> : <View style={styles.list}>{properties.map((property, index) => {
             const service = property.type === 'SERVICE';
-            const accent = service ? colors.primary : palette.purple;
+            const cleaning = isCleaningProperty(property);
+            const accent = cleaning ? cleaningColors.primary : service ? defaultColors.primary : palette.purple;
             const cardOpacity = entrance.interpolate({ inputRange: [0, Math.min(0.88, 0.42 + index * 0.12), 1], outputRange: [0, 0, 1], extrapolate: 'clamp' });
             const cardTranslate = entrance.interpolate({ inputRange: [0, 1], outputRange: [30 + index * 7, 0] });
             return <Animated.View key={property.id} style={{ opacity: cardOpacity, transform: [{ translateY: cardTranslate }] }}>
@@ -86,7 +89,7 @@ export default function SelectPropertyScreen() {
                 style={({ pressed }) => [styles.card, { backgroundColor: isDark ? 'rgba(7,21,45,0.94)' : 'rgba(255,255,255,0.94)', borderColor: pressed ? accent : colors.border, shadowColor: colors.shadow, opacity: selecting && selecting !== property.id ? 0.55 : 1, transform: [{ scale: pressed ? 0.985 : 1 }] }]}
               >
                 <View style={[styles.accentLine, { backgroundColor: accent }]} />
-                <LinearGradient colors={service ? ['#3387FF', '#075CFF'] : ['#9B5BFF', '#6D28D9']} style={styles.propertyIcon}><Ionicons name={propertyIcon(property)} size={26} color="#fff" /></LinearGradient>
+                <LinearGradient colors={cleaning ? cleaningColors.brandGradient : service ? ['#3387FF', '#075CFF'] : ['#9B5BFF', '#6D28D9']} style={styles.propertyIcon}><Ionicons name={propertyIcon(property)} size={26} color="#fff" /></LinearGradient>
                 <View style={styles.info}>
                   <AppText variant="heading" numberOfLines={2}>{property.name}</AppText>
                   <AppText variant="caption" muted numberOfLines={1}>{propertyAlias(property)} · {property.domain}</AppText>

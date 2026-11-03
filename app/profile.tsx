@@ -26,7 +26,7 @@ export default function ProfileScreen() {
   useBackToAdministration();
   const { user, logout, updateProfile } = useAuth();
   const { properties, activeProperty } = useProperty();
-  const { colors, isDark } = useAppTheme();
+  const { colors, isDark, isCleaning } = useAppTheme();
   const { showToast } = useToast();
   const { width } = useWindowDimensions();
   const compact = width < 620;
@@ -91,27 +91,27 @@ export default function ProfileScreen() {
   return <>
     <Screen header={<AppHeader title="Profil" back onBack={() => router.replace('/service/more')} />}>
       <View style={styles.stack}>
-        <LinearGradient colors={isDark ? ['#092668', '#075CFF'] : ['#123DAB', '#0875FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+        <LinearGradient colors={isCleaning ? colors.brandGradient : isDark ? ['#092668', '#075CFF'] : ['#123DAB', '#0875FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, isCleaning && { shadowColor: colors.primary }]}>
           <View pointerEvents="none" style={styles.heroOrbLarge} />
           <View pointerEvents="none" style={styles.heroOrbSmall} />
           <View style={[styles.heroContent, compact && styles.heroContentCompact]}>
             <View style={styles.avatarShell}>
               <AppText variant="display" style={styles.avatarText}>{initials(user.firstName, user.lastName)}</AppText>
-              <View style={styles.onlineIndicator} />
+              <View style={[styles.onlineIndicator, isCleaning && { borderColor: colors.primary }]} />
             </View>
             <View style={styles.heroCopy}>
               <View style={styles.heroTitleRow}>
                 <AppText variant="title" style={styles.heroTitle}>{user.firstName} {user.lastName}</AppText>
                 <View style={styles.roleBadge}><Ionicons name="shield-checkmark" size={14} color="#FFFFFF" /><AppText variant="caption" style={styles.roleText}>{ROLE_LABELS[user.role]}</AppText></View>
               </View>
-              <AppText style={styles.heroUsername}>@{user.username}</AppText>
-              <AppText variant="caption" style={styles.heroEmail}>{user.email || 'Cont G-Shop securizat'}</AppText>
+              <AppText style={[styles.heroUsername, isCleaning && { color: colors.brandText }]}>@{user.username}</AppText>
+              <AppText variant="caption" style={[styles.heroEmail, isCleaning && { color: colors.brandText }]}>{user.email || 'Cont G-Shop securizat'}</AppText>
             </View>
           </View>
-          <View style={styles.heroStats}>
-            <View style={styles.heroStat}><Ionicons name="business-outline" size={18} color="#FFFFFF" /><View><AppText variant="label" style={styles.heroStatValue}>{properties.length}</AppText><AppText variant="caption" style={styles.heroStatLabel}>proprietăți</AppText></View></View>
+          <View style={[styles.heroStats, isCleaning && { backgroundColor: 'rgba(67,26,12,0.20)' }]}>
+            <View style={styles.heroStat}><Ionicons name="business-outline" size={18} color="#FFFFFF" /><View><AppText variant="label" style={styles.heroStatValue}>{properties.length}</AppText><AppText variant="caption" style={[styles.heroStatLabel, isCleaning && { color: colors.brandText }]}>proprietăți</AppText></View></View>
             <View style={styles.heroDivider} />
-            <View style={styles.heroStat}><Ionicons name="key-outline" size={18} color="#FFFFFF" /><View><AppText variant="label" style={styles.heroStatValue}>{permissionCount}</AppText><AppText variant="caption" style={styles.heroStatLabel}>permisiuni</AppText></View></View>
+            <View style={styles.heroStat}><Ionicons name="key-outline" size={18} color="#FFFFFF" /><View><AppText variant="label" style={styles.heroStatValue}>{permissionCount}</AppText><AppText variant="caption" style={[styles.heroStatLabel, isCleaning && { color: colors.brandText }]}>permisiuni</AppText></View></View>
           </View>
         </LinearGradient>
 

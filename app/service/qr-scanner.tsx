@@ -33,7 +33,7 @@ export default function QRScannerScreen() {
   const [signatureOpen, setSignatureOpen] = useState(false);
   const [signatureSaving, setSignatureSaving] = useState(false);
   const { hasPermission } = useAuth();
-  const { colors, isDark } = useAppTheme();
+  const { colors, isDark, isCleaning } = useAppTheme();
   const { activeProperty } = useProperty();
   const { showToast } = useToast();
   const { width } = useWindowDimensions();
@@ -137,11 +137,11 @@ export default function QRScannerScreen() {
   return <Screen header={<AppHeader title="Scanare" />} scroll={false} bottomInset={false} style={styles.screenContent}>
     <View style={styles.root}>
       <View style={[styles.heroLayer, mobile && styles.heroLayerMobile]}>
-        <LinearGradient onLayout={(event) => { const nextHeight = event.nativeEvent.layout.height; if (Math.abs(nextHeight - heroHeight) > 1) setHeroHeight(nextHeight); }} colors={isDark ? ['#0B3280', '#075CFF'] : ['#123D9D', '#1477FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, mobile && styles.heroMobile]}>
+        <LinearGradient onLayout={(event) => { const nextHeight = event.nativeEvent.layout.height; if (Math.abs(nextHeight - heroHeight) > 1) setHeroHeight(nextHeight); }} colors={isCleaning ? colors.brandGradient : isDark ? ['#0B3280', '#075CFF'] : ['#123D9D', '#1477FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, mobile && styles.heroMobile]}>
           <View style={styles.heroGlowLarge} />
           <View style={styles.heroGlowSmall} />
           <View style={styles.heroIcon}><Ionicons name="qr-code-outline" size={30} color="#fff" /></View>
-          <View style={styles.heroCopy}><View style={styles.eyebrow}><View style={styles.liveDot} /><AppText variant="caption" style={styles.eyebrowText}>CAMERĂ PREGĂTITĂ</AppText></View><AppText variant="title" style={styles.heroTitle}>Scanează codul clientului</AppText><AppText variant="caption" style={styles.heroSubtitle}>Încadrează codul în chenar. Fișa rapidă se deschide automat.</AppText></View>
+          <View style={styles.heroCopy}><View style={styles.eyebrow}><View style={styles.liveDot} /><AppText variant="caption" style={[styles.eyebrowText, isCleaning && { color: colors.brandText }]}>CAMERĂ PREGĂTITĂ</AppText></View><AppText variant="title" style={styles.heroTitle}>Scanează codul clientului</AppText><AppText variant="caption" style={[styles.heroSubtitle, isCleaning && { color: colors.brandText }]}>Încadrează codul în chenar. Fișa rapidă se deschide automat.</AppText></View>
         </LinearGradient>
       </View>
 
@@ -153,11 +153,11 @@ export default function QRScannerScreen() {
               <View style={[styles.cameraWrap, { aspectRatio: mobile ? 0.78 : 1.48 }]}>
                 <CameraView style={StyleSheet.absoluteFill} facing="back" barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onBarcodeScanned={scanned ? undefined : (result) => void handleScan(result)}>
                   <LinearGradient colors={['rgba(2,8,20,0.28)', 'rgba(2,8,20,0.03)', 'rgba(2,8,20,0.64)']} style={styles.cameraOverlay}>
-                    <View style={styles.cameraStatus}><View style={[styles.statusDot, busy && styles.statusDotBusy]} /><AppText variant="caption" style={styles.statusText}>{busy ? 'Se validează codul…' : 'Scanare activă'}</AppText></View>
+                    <View style={styles.cameraStatus}><View style={[styles.statusDot, busy && styles.statusDotBusy, busy && isCleaning && { backgroundColor: colors.brandDecoration }]} /><AppText variant="caption" style={styles.statusText}>{busy ? 'Se validează codul…' : 'Scanare activă'}</AppText></View>
                     <View style={[styles.guide, { width: mobile ? '74%' : '56%' }]}>
                       <Corner position="tl" /><Corner position="tr" /><Corner position="bl" /><Corner position="br" />
                       <View style={styles.guideCenter}><Ionicons name="qr-code-outline" size={30} color="rgba(255,255,255,0.48)" /></View>
-                      {!scanned ? <Animated.View style={[styles.scanLine, { transform: [{ translateY: scanTranslate }] }]}><View style={styles.scanLineGlow} /></Animated.View> : null}
+                      {!scanned ? <Animated.View style={[styles.scanLine, isCleaning && { backgroundColor: colors.brandAccent, shadowColor: colors.brandAccent }, { transform: [{ translateY: scanTranslate }] }]}><View style={[styles.scanLineGlow, isCleaning && { backgroundColor: `${colors.brandAccent}7A` }]} /></Animated.View> : null}
                     </View>
                     <View style={styles.cameraLabel}><Ionicons name={busy ? 'sync-outline' : 'scan-outline'} size={20} color="#fff" /><View><AppText variant="label" style={styles.cameraLabelTitle}>{busy ? 'Verificăm codul' : 'Ține telefonul nemișcat'}</AppText><AppText variant="caption" style={styles.cameraLabelCaption}>{busy ? 'Durează doar o clipă' : 'Detectarea este automată'}</AppText></View></View>
                   </LinearGradient>
@@ -207,10 +207,11 @@ export default function QRScannerScreen() {
 }
 
 function Corner({ position }: { position: 'tl' | 'tr' | 'bl' | 'br' }) {
+  const { colors, isCleaning } = useAppTheme();
   const rotation = { tl: '0deg', tr: '90deg', br: '180deg', bl: '270deg' }[position];
   const vertical = position.startsWith('t') ? { top: 0 } : { bottom: 0 };
   const horizontal = position.endsWith('l') ? { left: 0 } : { right: 0 };
-  return <View style={[styles.corner, vertical, horizontal, { transform: [{ rotate: rotation }] }]} />;
+  return <View style={[styles.corner, vertical, horizontal, isCleaning && { shadowColor: colors.brandAccent }, { transform: [{ rotate: rotation }] }]} />;
 }
 
 const styles = StyleSheet.create({

@@ -21,5 +21,5 @@ function Navigation() {
 }
 
 export default function RootLayout() {
-  return <SafeAreaProvider><ThemeProvider><AuthProvider><PropertyProvider><ToastProvider><AppUpdateCoordinator /><Navigation /></ToastProvider></PropertyProvider></AuthProvider></ThemeProvider></SafeAreaProvider>;
+  return <SafeAreaProvider><AuthProvider><PropertyProvider><ThemeProvider><ToastProvider><AppUpdateCoordinator /><Navigation /></ToastProvider></ThemeProvider></PropertyProvider></AuthProvider></SafeAreaProvider>;
 }

@@ -24,7 +24,7 @@ import { RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } fro
 
 export default function DashboardScreen() {
   const { user, hasPermission } = useAuth(); const { activeProperty } = useProperty(); const propertyId = activeProperty?.id ?? '';
-  const { colors } = useAppTheme();
+  const { colors, isCleaning } = useAppTheme();
   const [financeOpen, setFinanceOpen] = useState(false);
   const [heroHeight, setHeroHeight] = useState(164);
   const [localHour, setLocalHour] = useState(() => new Date().getHours());
@@ -61,14 +61,14 @@ export default function DashboardScreen() {
   const { metrics, sheets } = state.data;
   return <Screen header={<AppHeader />} scroll={false} bottomInset={false} style={styles.screen}>
     <View style={styles.dashboardRoot}>
-      <LinearGradient onLayout={(event) => { const nextHeight = event.nativeEvent.layout.height; if (Math.abs(nextHeight - heroHeight) > 1) setHeroHeight(nextHeight); }} colors={['#082376', '#075CFF', '#0D78FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, styles.fixedHero]}><View style={styles.heroCopy}><AppText variant="title" style={{ color: '#fff' }}>{greeting}, {user?.firstName}! <AppText variant="title" style={styles.wave}>👋</AppText></AppText><AppText style={{ color: '#DDE8FF' }}>Ai control complet asupra activității din {activeProperty?.name}.</AppText></View><View style={styles.heroGraphic}><Ionicons name="analytics" size={74} color="#8CB7FF" /></View></LinearGradient>
+      <LinearGradient onLayout={(event) => { const nextHeight = event.nativeEvent.layout.height; if (Math.abs(nextHeight - heroHeight) > 1) setHeroHeight(nextHeight); }} colors={isCleaning ? colors.brandGradient : ['#082376', '#075CFF', '#0D78FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, styles.fixedHero]}><View style={styles.heroCopy}><AppText variant="title" style={{ color: '#fff' }}>{greeting}, {user?.firstName}! <AppText variant="title" style={styles.wave}>👋</AppText></AppText><AppText style={{ color: isCleaning ? colors.brandText : '#DDE8FF' }}>Ai control complet asupra activității din {activeProperty?.name}.</AppText></View><View style={styles.heroGraphic}><Ionicons name="analytics" size={74} color={isCleaning ? colors.brandDecoration : '#8CB7FF'} /></View></LinearGradient>
       <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, { paddingTop: heroHeight + spacing.xs }]} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={state.refreshing} onRefresh={() => void state.reload(true)} tintColor={colors.primary} />}>
         <View style={[styles.dashboardSheet, { backgroundColor: colors.background, shadowColor: colors.shadow }]}>
           <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
     <View style={[styles.section, styles.firstSection]}>
       <DashboardSectionTitle title="Privire de ansamblu" subtitle="Indicatorii esențiali ai proprietății" icon="grid-outline" />
       <View style={styles.stats}>
-        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Total clienți" value={metrics.clientsTotal} icon="people-outline" color={palette.electric} helper={`+${metrics.clientsNew} noi`} />
+        <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Total clienți" value={metrics.clientsTotal} icon="people-outline" color={colors.brandAccent} helper={`+${metrics.clientsNew} noi`} />
         <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Clienți în așteptare" value={metrics.clientsWaiting} icon="time-outline" color={palette.warning} />
         {canViewFinancials ? <><StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="G-Shop Net" value={formatCurrency(metrics.gshopNet)} icon="wallet-outline" color={palette.purple} />
         <StatCard style={{ flexGrow: 1, flexBasis: statCardBasis }} label="Venituri on hold" value={formatCurrency(metrics.revenueOnHold)} icon="hourglass-outline" color={palette.warning} />
@@ -97,7 +97,7 @@ export default function DashboardScreen() {
     </View>
     <View style={[styles.columns, styles.lowerSection]}>
       <Card style={styles.panel}><SectionHeader title="Activitate QR azi" action={canViewClients ? 'Vezi clienții' : undefined} onAction={canViewClients ? () => router.push('/service/clients') : undefined} /><QRChart generated={metrics.qrGenerated} used={metrics.qrUsed} /><AppText variant="caption" style={{ color: palette.success, textAlign: 'right' }}>↗ actualizat în timp real</AppText></Card>
-      {canViewSheets ? <Card style={styles.panel}><SectionHeader title="Fișe de service recente" action="Vezi toate" onAction={() => router.push('/service/service-sheets')} />{sheets.length ? sheets.map((sheet) => <View key={sheet.id} style={styles.sheetRow}><View style={{ flex: 1 }}><AppText variant="label">{sheet.number} · {sheet.equipment}</AppText><AppText variant="caption" muted>{sheet.client ? `${sheet.client.firstName} ${sheet.client.lastName}` : 'Client'} · {formatDate(sheet.receivedAt)}</AppText></View><AppText variant="label" style={{ color: palette.electric }}>{formatCurrency(sheet.totalCost)}</AppText></View>) : <AppText muted>Nu există fișe recente.</AppText>}</Card> : null}
+      {canViewSheets ? <Card style={styles.panel}><SectionHeader title="Fișe de service recente" action="Vezi toate" onAction={() => router.push('/service/service-sheets')} />{sheets.length ? sheets.map((sheet) => <View key={sheet.id} style={styles.sheetRow}><View style={{ flex: 1 }}><AppText variant="label">{sheet.number} · {sheet.equipment}</AppText><AppText variant="caption" muted>{sheet.client ? `${sheet.client.firstName} ${sheet.client.lastName}` : 'Client'} · {formatDate(sheet.receivedAt)}</AppText></View><AppText variant="label" style={{ color: colors.brandAccent }}>{formatCurrency(sheet.totalCost)}</AppText></View>) : <AppText muted>Nu există fișe recente.</AppText>}</Card> : null}
     </View>
         </View>
       </ScrollView>
@@ -107,15 +107,15 @@ export default function DashboardScreen() {
 }
 
 function DashboardSkeleton() {
-  const { colors } = useAppTheme();
+  const { colors, isCleaning } = useAppTheme();
   return <Screen header={<AppHeader />} scroll={false} bottomInset={false} style={styles.screen}>
     <View style={styles.dashboardRoot}>
-      <LinearGradient colors={['#082376', '#075CFF', '#0D78FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, styles.fixedHero]}>
+      <LinearGradient colors={isCleaning ? colors.brandGradient : ['#082376', '#075CFF', '#0D78FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, styles.fixedHero]}>
         <View style={styles.skeletonHeroCopy}>
           <View style={styles.skeletonHeroTitle} />
           <View style={styles.skeletonHeroSubtitle} />
         </View>
-        <View style={styles.skeletonHeroGraphic}><Ionicons name="analytics-outline" size={52} color="#A8C7FF" /></View>
+        <View style={styles.skeletonHeroGraphic}><Ionicons name="analytics-outline" size={52} color={isCleaning ? colors.brandDecoration : '#A8C7FF'} /></View>
       </LinearGradient>
       <View style={[styles.skeletonSheet, { backgroundColor: colors.background }]}>
         <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />

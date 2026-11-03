@@ -92,7 +92,7 @@ export default function CollaboratorsScreen() {
   useBackToAdministration();
   const { activeProperty } = useProperty();
   const { hasPermission } = useAuth();
-  const { colors, isDark } = useAppTheme();
+  const { colors, isDark, isCleaning } = useAppTheme();
   const { showToast } = useToast();
   const { width } = useWindowDimensions();
   const propertyId = activeProperty?.id ?? '';
@@ -222,7 +222,7 @@ export default function CollaboratorsScreen() {
         const nextHeight = event.nativeEvent.layout.height;
         if (Math.abs(nextHeight - heroHeight) > 1) setHeroHeight(nextHeight);
       }}
-      colors={isDark ? ['#0A2261', '#075CFF'] : ['#092A8A', '#0878FF']}
+      colors={isCleaning ? colors.brandGradient : isDark ? ['#0A2261', '#075CFF'] : ['#092A8A', '#0878FF']}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={[styles.hero, styles.fixedHero]}
@@ -231,11 +231,11 @@ export default function CollaboratorsScreen() {
       <View style={styles.heroDecorationTwo} />
       <View style={styles.heroCopy}>
         <View style={styles.eyebrow}>
-          <Ionicons name="people" size={15} color="#BFD7FF" />
-          <AppText variant="label" style={styles.eyebrowText}>ECHIPĂ SERVICE COMUNĂ</AppText>
+          <Ionicons name="people" size={15} color={isCleaning ? colors.brandText : '#BFD7FF'} />
+          <AppText variant="label" style={[styles.eyebrowText, isCleaning && { color: colors.brandText }]}>ECHIPĂ SERVICE COMUNĂ</AppText>
         </View>
         <AppText variant="display" style={styles.heroTitle}>Colaboratori și comisioane</AppText>
-        <AppText style={styles.heroSubtitle}>Aceeași listă apare în Calculatoare și Trotinete; comisioanele și situația clienților rămân separate pe proprietate.</AppText>
+        <AppText style={[styles.heroSubtitle, isCleaning && { color: colors.brandText }]}>Aceeași listă apare în Calculatoare și Trotinete; comisioanele și situația clienților rămân separate pe proprietate.</AppText>
       </View>
       <View style={styles.heroTeamIcon}>
         <Ionicons name="people-outline" size={32} color="#FFFFFF" />
@@ -253,7 +253,7 @@ export default function CollaboratorsScreen() {
         <View style={[styles.pageSheetHandle, { backgroundColor: colors.border }]} />
 
     <View style={styles.summaryGrid}>
-      <SummaryCard icon="people-outline" color={palette.electric} label="Colaboratori activi" value={String(state.data?.collaborators.length ?? 0)} />
+      <SummaryCard icon="people-outline" color={colors.brandAccent} label="Colaboratori activi" value={String(state.data?.collaborators.length ?? 0)} />
       <SummaryCard icon="person-circle-outline" color={palette.cyan} label="Clienți atribuiți" value={String(assignedClients)} />
       <SummaryCard icon="checkmark-circle-outline" color={palette.success} label="Achitat" value={formatCurrency(state.data?.finance.paid ?? 0)} />
       <SummaryCard icon="time-outline" color={palette.warning} label="De achitat" value={formatCurrency(state.data?.finance.due ?? 0)} />
@@ -291,7 +291,7 @@ export default function CollaboratorsScreen() {
         accessibilityRole="button"
         accessibilityLabel="Adaugă colaborator"
         onPress={() => openEditor('new')}
-        style={({ pressed }) => [styles.addCollaboratorButton, { backgroundColor: colors.primary, opacity: pressed ? 0.78 : 1, transform: [{ scale: pressed ? 0.96 : 1 }] }]}
+        style={({ pressed }) => [styles.addCollaboratorButton, { shadowColor: colors.brandAccent, backgroundColor: colors.primary, opacity: pressed ? 0.78 : 1, transform: [{ scale: pressed ? 0.96 : 1 }] }]}
       >
         <Ionicons name="add" size={25} color="#FFFFFF" />
       </Pressable> : null}
@@ -314,7 +314,7 @@ export default function CollaboratorsScreen() {
         key={item.id}
         collaborator={item}
         finance={financeByCollaborator.get(item.id)}
-        accent={[palette.electric, palette.cyan, palette.purple, palette.warning][index % 4]}
+        accent={[colors.brandAccent, palette.cyan, palette.purple, palette.warning][index % 4]}
         basis={cardBasis}
         selected={actionsFor?.id === item.id}
         onFinance={() => setFinanceFor(item)}

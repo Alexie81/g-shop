@@ -15,8 +15,9 @@ const steps = [
 
 function useSteps() {
   const { activeProperty } = useProperty();
+  const { colors } = useAppTheme();
   return isCleaningProperty(activeProperty) ? [
-    { ...steps[0], title: 'Fișa de intrare', description: 'Client, articole, servicii și acceptare' },
+    { ...steps[0], color: colors.primary, title: 'Fișa de intrare', description: 'Client, articole, servicii și acceptare' },
     { ...steps[1], title: 'Organizarea comenzii', description: 'Constatări, materiale și valori financiare' },
     { ...steps[2], title: 'Fișa de ieșire', description: 'Servicii efectuate, plată și confirmare' },
   ] : steps;

@@ -70,7 +70,7 @@ const dateInputPattern = /^\d{4}-\d{2}-\d{2}$/;
 export default function ReportsScreen() {
   useBackToAdministration();
   const { activeProperty } = useProperty();
-  const { colors, isDark } = useAppTheme();
+  const { colors, isDark, isCleaning } = useAppTheme();
   const { width } = useWindowDimensions();
   const mobile = width < 620;
   const [heroHeight, setHeroHeight] = useState(154);
@@ -164,16 +164,16 @@ export default function ReportsScreen() {
           const nextHeight = event.nativeEvent.layout.height;
           if (Math.abs(nextHeight - heroHeight) > 1) setHeroHeight(nextHeight);
         }}
-        colors={isDark ? ['#08265C', '#075CFF'] : ['#10399B', '#1478FF']}
+        colors={isCleaning ? colors.brandGradient : isDark ? ['#08265C', '#075CFF'] : ['#10399B', '#1478FF']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[styles.hero, styles.fixedHero, mobile && styles.fixedHeroMobile]}
       >
         <View style={styles.heroGlow} />
         <View style={styles.heroCopy}>
-          <AppText variant="caption" style={styles.eyebrow}>RAPORT ÎN TIMP REAL</AppText>
+          <AppText variant="caption" style={[styles.eyebrow, isCleaning && { color: colors.brandText }]}>RAPORT ÎN TIMP REAL</AppText>
           <AppText variant="title" style={styles.heroTitle}>Performanța proprietății</AppText>
-          <AppText style={styles.heroText}>{activeProperty?.name}</AppText>
+          <AppText style={[styles.heroText, isCleaning && { color: colors.brandText }]}>{activeProperty?.name}</AppText>
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Actualizează rapoartele" disabled={state.refreshing} onPress={() => void state.reload(true)} style={({ pressed }) => [styles.refresh, { opacity: pressed ? 0.72 : 1 }]}>
           <AnimatedRefreshIcon refreshing={state.refreshing} color="#fff" size={23} />
@@ -208,7 +208,7 @@ export default function ReportsScreen() {
 
           <SectionTitle icon="grid-outline" title="Analiză date" description="Indicatorii financiari recalculați pentru intervalul ales" />
           <View style={styles.stats}>
-            <StatCard style={{ flexGrow: 1, flexBasis: cardBasis }} label="Total clienți" value={report.metrics.clientsTotal} icon="people-outline" color={palette.electric} />
+            <StatCard style={{ flexGrow: 1, flexBasis: cardBasis }} label="Total clienți" value={report.metrics.clientsTotal} icon="people-outline" color={colors.brandAccent} />
             <StatCard style={{ flexGrow: 1, flexBasis: cardBasis }} label="Clienți în așteptare" value={report.metrics.clientsWaiting} icon="time-outline" color={palette.warning} />
             <StatCard style={{ flexGrow: 1, flexBasis: cardBasis }} label="G-Shop Net" value={formatCurrency(report.metrics.gshopNet)} icon="wallet-outline" color={palette.purple} />
             <StatCard style={{ flexGrow: 1, flexBasis: cardBasis }} label="Venituri on hold" value={formatCurrency(report.metrics.revenueOnHold)} icon="hourglass-outline" color={palette.warning} />
@@ -428,7 +428,7 @@ function hourlyClientSeries(data: ReportSeriesPoint[], period: ReportPeriod, cli
 }
 
 function ActivityBars({ data, period }: { data: ReportSeriesPoint[]; period: ReportPeriod }) {
-  const { colors } = useAppTheme();
+  const { colors, isCleaning } = useAppTheme();
   const scrollRef = useRef<ScrollViewInstance>(null);
   const points = data.length ? data : [{ label: '—', revenue: 0, costs: 0, net: 0, clients: 0 }];
   const max = Math.max(1, ...points.map((item) => item.clients));
@@ -462,7 +462,7 @@ function ActivityBars({ data, period }: { data: ReportSeriesPoint[]; period: Rep
       const selectedBar = index === safeSelectedIndex;
       const currentBar = index === currentIndex;
       return <Pressable key={`${item.label}-${index}`} accessibilityRole="button" accessibilityState={{ selected: selectedBar }} accessibilityLabel={`${item.label}: ${item.clients} clienți noi${currentBar ? ', perioada curentă' : ''}`} onPress={() => { setSelectedIndex(index); centerIndex(index, true); void Haptics.selectionAsync().catch(() => undefined); }} style={({ pressed }) => [styles.activityColumn, { opacity: pressed ? 0.72 : 1 }]}>
-        <View style={[styles.activityTrack, { backgroundColor: colors.surfaceMuted, borderColor: selectedBar ? colors.primary : 'transparent' }]}><LinearGradient colors={['#38C9E8', '#075CFF']} style={[styles.activityBar, { height: `${Math.max(8, item.clients / max * 100)}%` }]} /></View>
+        <View style={[styles.activityTrack, { backgroundColor: colors.surfaceMuted, borderColor: selectedBar ? colors.primary : 'transparent' }]}><LinearGradient colors={isCleaning ? colors.brandGradient : ['#38C9E8', '#075CFF']} style={[styles.activityBar, { height: `${Math.max(8, item.clients / max * 100)}%` }]} /></View>
         <View style={styles.activityLabel}><AppText variant="caption" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} style={{ color: selectedBar ? colors.primary : colors.textMuted, fontWeight: selectedBar ? '800' : '400' }}>{item.label}</AppText>{currentBar ? <View style={[styles.currentDot, { backgroundColor: colors.primary }]} /> : null}</View>
       </Pressable>;
     })}</ScrollView>

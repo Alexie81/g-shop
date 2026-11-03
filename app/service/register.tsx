@@ -44,7 +44,9 @@ const documentColumns: RegisterDocument[] = [
 const cleaningColumns = documentColumns.filter((column) => column.sheetName === 'Fișe de intrare' || column.sheetName === 'Fișe de ieșire');
 function useDocumentColumns() {
   const { activeProperty } = useProperty();
-  return isCleaningProperty(activeProperty) ? cleaningColumns : documentColumns;
+  const { colors } = useAppTheme();
+  const cleaning = isCleaningProperty(activeProperty);
+  return useMemo(() => cleaning ? cleaningColumns.map((column) => column.color === palette.electric ? { ...column, color: colors.brandAccent } : column) : documentColumns, [cleaning, colors.brandAccent]);
 }
 
 const filters: { key: RegisterFilter; label: string }[] = [
@@ -59,7 +61,7 @@ export default function RegisterScreen() {
   const documentColumns = useDocumentColumns();
   useBackToAdministration();
   const { activeProperty } = useProperty();
-  const { colors, isDark } = useAppTheme();
+  const { colors, isDark, isCleaning } = useAppTheme();
   const { showToast } = useToast();
   const { width } = useWindowDimensions();
   const compact = width < 760;
@@ -129,15 +131,15 @@ export default function RegisterScreen() {
 
   return <Screen header={<AppHeader title="Registru" back onBack={backToMore} />} refreshing={state.refreshing} onRefresh={() => void state.reload(true)}>
     <View style={styles.stack}>
-      <LinearGradient colors={isDark ? ['#0A2655', '#075CFF'] : ['#103DA8', '#0879FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, compact && styles.heroCompact]}>
+      <LinearGradient colors={isCleaning ? colors.brandGradient : isDark ? ['#0A2655', '#075CFF'] : ['#103DA8', '#0879FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, compact && styles.heroCompact]}>
         <View pointerEvents="none" style={styles.heroOrb} />
         <View style={styles.heroTop}>
           <View style={styles.heroHeading}>
             <View style={styles.heroIcon}><Ionicons name="library-outline" size={25} color="#FFFFFF" /></View>
             <View style={styles.heroCopy}>
-              <AppText variant="caption" style={styles.eyebrow}>REGISTRU DOCUMENTE SERVICE</AppText>
+              <AppText variant="caption" style={[styles.eyebrow, isCleaning && { color: colors.brandText }]}>REGISTRU DOCUMENTE SERVICE</AppText>
               <AppText variant="title" style={styles.heroTitle}>O reparație, toate documentele</AppText>
-              <AppText variant="caption" style={styles.heroSubtitle} numberOfLines={1}>{activeProperty?.name}</AppText>
+              <AppText variant="caption" style={[styles.heroSubtitle, isCleaning && { color: colors.brandText }]} numberOfLines={1}>{activeProperty?.name}</AppText>
             </View>
           </View>
           {!compact ? <Button label="Exportă .xlsx" icon="download-outline" compact loading={exporting} disabled={!rows.length} onPress={() => void exportRegister()} style={styles.heroExport} /> : null}
@@ -278,7 +280,8 @@ function MobileDocumentRow({ document, row }: { document: RegisterDocument; row:
 }
 
 function HeroMetric({ icon, value, label }: { icon: keyof typeof Ionicons.glyphMap; value: number; label: string }) {
-  return <View style={styles.heroMetric}><Ionicons name={icon} size={18} color="#FFFFFF" /><View><AppText variant="heading" style={styles.heroMetricValue}>{value}</AppText><AppText variant="caption" style={styles.heroMetricLabel}>{label}</AppText></View></View>;
+  const { colors, isCleaning } = useAppTheme();
+  return <View style={styles.heroMetric}><Ionicons name={icon} size={18} color="#FFFFFF" /><View><AppText variant="heading" style={styles.heroMetricValue}>{value}</AppText><AppText variant="caption" style={[styles.heroMetricLabel, isCleaning && { color: colors.brandText }]}>{label}</AppText></View></View>;
 }
 
 function hasDocument(number?: string, at?: string) {

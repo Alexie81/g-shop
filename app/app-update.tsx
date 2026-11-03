@@ -20,7 +20,7 @@ import { Linking, Platform, RefreshControl, ScrollView, StyleSheet, View } from 
 
 export default function AppUpdateScreen() {
   useBackToAdministration();
-  const { colors } = useAppTheme();
+  const { colors, isCleaning } = useAppTheme();
   const { showToast } = useToast();
   const updates = Updates.useUpdates();
   const [installing, setInstalling] = useState(false);
@@ -67,10 +67,10 @@ export default function AppUpdateScreen() {
 
   return <Screen header={<AppHeader title="Actualizare aplicație" back onBack={() => router.replace('/service/more')} />} scroll={false} bottomInset={false} style={styles.screen}>
     <View style={styles.root}>
-      <LinearGradient onLayout={(event) => setHeroHeight(event.nativeEvent.layout.height)} colors={updateAvailable ? ['#5B21B6', '#075CFF'] : ['#075CFF', '#08A7C7']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, styles.fixedHero]}>
+      <LinearGradient onLayout={(event) => setHeroHeight(event.nativeEvent.layout.height)} colors={isCleaning ? colors.brandGradient : updateAvailable ? ['#5B21B6', '#075CFF'] : ['#075CFF', '#08A7C7']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, styles.fixedHero]}>
         <View pointerEvents="none" style={styles.orb} />
         <View style={styles.appIcon}><Ionicons name="cloud-download-outline" size={38} color="#FFFFFF" /></View>
-        <View style={styles.heroCopy}><AppText variant="caption" style={styles.eyebrow}>G-SHOP PENTRU ANDROID</AppText><AppText variant="title" style={styles.heroTitle}>{updateAvailable ? 'Este disponibilă o versiune nouă' : 'Aplicația este actualizată'}</AppText><AppText style={styles.heroSubtitle}>{updateAvailable ? `Poți trece acum de la versiunea ${currentVersion} la ${latest}.` : `Folosești versiunea ${currentVersion}, cea mai nouă versiune publicată.`}</AppText></View>
+        <View style={styles.heroCopy}><AppText variant="caption" style={[styles.eyebrow, isCleaning && { color: colors.brandText }]}>G-SHOP PENTRU ANDROID</AppText><AppText variant="title" style={styles.heroTitle}>{updateAvailable ? 'Este disponibilă o versiune nouă' : 'Aplicația este actualizată'}</AppText><AppText style={[styles.heroSubtitle, isCleaning && { color: colors.brandText }]}>{updateAvailable ? `Poți trece acum de la versiunea ${currentVersion} la ${latest}.` : `Folosești versiunea ${currentVersion}, cea mai nouă versiune publicată.`}</AppText></View>
       </LinearGradient>
 
       <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, { paddingTop: heroHeight + spacing.xs }]} refreshControl={<RefreshControl refreshing={state.refreshing} onRefresh={() => void state.reload(true)} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>

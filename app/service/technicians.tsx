@@ -30,7 +30,7 @@ export default function TechniciansScreen() {
   useBackToAdministration();
   const { activeProperty } = useProperty();
   const { hasPermission } = useAuth();
-  const { colors, isDark } = useAppTheme();
+  const { colors, isDark, isCleaning } = useAppTheme();
   const { showToast } = useToast();
   const { width } = useWindowDimensions();
   const mobile = width < 620;
@@ -73,11 +73,11 @@ export default function TechniciansScreen() {
   return <>
     <Screen header={<AppHeader title="Tehnicieni" back onBack={() => router.replace('/service/more')} />} scroll={false} bottomInset={false} style={styles.screen}>
       <View style={styles.root}>
-        <LinearGradient onLayout={(event) => setHeroHeight(event.nativeEvent.layout.height)} colors={isDark ? ['#32146F', '#075CFF'] : ['#6937E6', '#075CFF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, styles.fixedHero, mobile && styles.fixedHeroMobile, mobile && styles.heroMobile]}>
+        <LinearGradient onLayout={(event) => setHeroHeight(event.nativeEvent.layout.height)} colors={isCleaning ? colors.brandGradient : isDark ? ['#32146F', '#075CFF'] : ['#6937E6', '#075CFF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, styles.fixedHero, mobile && styles.fixedHeroMobile, mobile && styles.heroMobile]}>
           <View pointerEvents="none" style={styles.heroGlow} />
           <View style={styles.heroIcon}><Ionicons name="construct-outline" size={34} color="#FFFFFF" /></View>
-          <View style={styles.heroCopy}><AppText variant="caption" style={styles.eyebrow}>ECHIPA SERVICE COMUNĂ</AppText><AppText variant="title" style={styles.heroTitle}>Tehnicienii tăi, gata de selectat</AppText><AppText style={styles.heroText}>Adaugă echipa o singură dată și folosește aceeași listă în Calculatoare și Trotinete.</AppText></View>
-          <View style={styles.count}><AppText variant="title" style={styles.countValue}>{state.data?.length ?? 0}</AppText><AppText variant="caption" style={styles.countLabel}>ACTIVI</AppText></View>
+          <View style={styles.heroCopy}><AppText variant="caption" style={[styles.eyebrow, isCleaning && { color: colors.brandText }]}>ECHIPA SERVICE COMUNĂ</AppText><AppText variant="title" style={styles.heroTitle}>Tehnicienii tăi, gata de selectat</AppText><AppText style={[styles.heroText, isCleaning && { color: colors.brandText }]}>Adaugă echipa o singură dată și folosește aceeași listă în Calculatoare și Trotinete.</AppText></View>
+          <View style={styles.count}><AppText variant="title" style={styles.countValue}>{state.data?.length ?? 0}</AppText><AppText variant="caption" style={[styles.countLabel, isCleaning && { color: colors.brandText }]}>ACTIVI</AppText></View>
         </LinearGradient>
 
         <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, { paddingTop: heroHeight + spacing.xs }]} refreshControl={<RefreshControl refreshing={state.refreshing} onRefresh={() => void state.reload(true)} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>
@@ -89,7 +89,7 @@ export default function TechniciansScreen() {
           {canCreate ? <Button compact label="Adaugă" icon="person-add-outline" onPress={() => open()} /> : null}
         </View>
 
-        <Card style={[styles.tip, { backgroundColor: isDark ? '#17274A' : '#EDF4FF', borderColor: isDark ? '#2B4E88' : '#C9DCFF' }]}>
+        <Card style={[styles.tip, { backgroundColor: isCleaning ? colors.primarySoft : isDark ? '#17274A' : '#EDF4FF', borderColor: isCleaning ? `${colors.primary}45` : isDark ? '#2B4E88' : '#C9DCFF' }]}>
           <Ionicons name="flash-outline" size={22} color={colors.primary} />
           <View style={styles.tipCopy}><AppText variant="label">Adăugare rapidă din fișă</AppText><AppText variant="caption" muted>Dacă lipsește cineva, îl poți adăuga direct din câmpul Tehnician; va fi disponibil automat în ambele service-uri.</AppText></View>
         </Card>
@@ -107,7 +107,7 @@ export default function TechniciansScreen() {
 
 function TechnicianCard({ item, index, canUpdate, onEdit, onDelete }: { item: Technician; index: number; canUpdate: boolean; onEdit: () => void; onDelete: () => void }) {
   const { colors, isDark } = useAppTheme();
-  const accents = [palette.purple, palette.electric, palette.cyan, palette.success];
+  const accents = [palette.purple, colors.brandAccent, palette.cyan, palette.success];
   const accent = accents[index % accents.length];
   const initials = item.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('');
   return <Card style={styles.card} elevated>

@@ -15,8 +15,9 @@ const qrConfig: Record<QRStatus, { label: string; color: string; soft: string }>
 };
 
 export function StatusBadge({ status, label }: { status?: QRStatus; label?: string }) {
-  const { isDark } = useAppTheme();
-  const config = status ? qrConfig[status] : { label: label ?? 'Activ', color: palette.electric, soft: palette.electricLight };
+  const { colors, isDark, isCleaning } = useAppTheme();
+  const base = status ? qrConfig[status] : { label: label ?? 'Activ', color: palette.electric, soft: palette.electricLight };
+  const config = isCleaning && base.color === palette.electric ? { ...base, color: colors.primary, soft: colors.primarySoft } : base;
   return <View style={[styles.badge, { backgroundColor: isDark ? `${config.color}24` : config.soft }]}><View style={[styles.dot, { backgroundColor: config.color }]} /><AppText variant="caption" style={{ color: config.color, fontWeight: '800' }}>{label ?? config.label}</AppText></View>;
 }
 

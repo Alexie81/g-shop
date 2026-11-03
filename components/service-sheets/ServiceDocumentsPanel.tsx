@@ -45,7 +45,7 @@ export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style, 
   const financialState = useAsyncData(() => canViewFinancials ? clientRepository.getFinancials(sheet.clientId) : Promise.resolve(null), [canViewFinancials, sheet.clientId]);
   useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);
 
-  const definitions = cleaning ? DOCUMENTS.filter((item) => item.type === 'INTAKE' || item.type === 'EXIT').map((item) => ({ ...item, description: item.type === 'INTAKE' ? 'Articole, servicii, preț și acceptare' : 'Servicii efectuate, plată și confirmare' })) : DOCUMENTS;
+  const definitions = cleaning ? DOCUMENTS.filter((item) => item.type === 'INTAKE' || item.type === 'EXIT').map((item) => ({ ...item, color: item.type === 'INTAKE' ? colors.primary : item.color, description: item.type === 'INTAKE' ? 'Articole, servicii, preț și acceptare' : 'Servicii efectuate, plată și confirmare' })) : DOCUMENTS;
   const slots = definitions.map((definition) => ({ definition, document: state.data?.find((item) => item.type === definition.type) }));
   const available = slots.filter((slot) => slot.document?.available && slot.document.url);
   const missing = state.data ? slots.filter((slot) => !slot.document?.available || !slot.document.url) : [];

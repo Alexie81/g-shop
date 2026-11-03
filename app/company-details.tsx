@@ -35,7 +35,7 @@ export default function CompanyDetailsScreen() {
   useBackToAdministration();
   const { user, hasPermission } = useAuth();
   const { properties, activeProperty, selectProperty } = useProperty();
-  const { colors, isDark } = useAppTheme();
+  const { colors, isDark, isCleaning } = useAppTheme();
   const { showToast } = useToast();
   const { width } = useWindowDimensions();
   const compact = width < 680;
@@ -159,10 +159,10 @@ export default function CompanyDetailsScreen() {
 
   return <Screen header={<AppHeader title="Datele firmei" back onBack={() => router.replace(backRoute)} />} refreshing={state.refreshing} onRefresh={() => void state.reload(true)}>
     <View style={styles.stack}>
-      <LinearGradient colors={isDark ? ['#102A69', '#075CFF'] : ['#123EA9', '#0878FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+      <LinearGradient colors={isCleaning ? colors.brandGradient : isDark ? ['#102A69', '#075CFF'] : ['#123EA9', '#0878FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
         <View pointerEvents="none" style={styles.heroOrb} />
         <View style={styles.heroIcon}><Ionicons name="business" size={28} color="#FFFFFF" /></View>
-        <View style={styles.heroCopy}><AppText variant="title" style={styles.heroTitle}>Datele firmelor</AppText><AppText style={styles.heroSubtitle}>Pagină comună pentru toate proprietățile. Alege aliasul, apoi administrează firma și ștampila folosite numai în acel context.</AppText></View>
+        <View style={styles.heroCopy}><AppText variant="title" style={styles.heroTitle}>Datele firmelor</AppText><AppText style={[styles.heroSubtitle, isCleaning && { color: colors.brandText }]}>Pagină comună pentru toate proprietățile. Alege aliasul, apoi administrează firma și ștampila folosite numai în acel context.</AppText></View>
         <View style={styles.heroBadge}><Ionicons name="shield-checkmark" size={15} color="#FFFFFF" /><AppText variant="caption" style={styles.heroBadgeText}>{activeAlias.toLocaleUpperCase('ro-RO')} · ADMIN</AppText></View>
       </LinearGradient>
 
