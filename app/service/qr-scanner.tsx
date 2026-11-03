@@ -15,11 +15,10 @@ import { propertyApiRequest } from '@/services/api';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { ServiceDocument, ServiceDocumentType, ServiceSheet, UUID } from '@/types';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router/react-navigation';
 import { BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Platform, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 

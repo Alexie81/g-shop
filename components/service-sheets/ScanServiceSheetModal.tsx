@@ -489,7 +489,7 @@ export function QuickSignatureModal({ visible, clientName, saving, onClose, onCo
 
   const signatureWebStyle = '.m-signature-pad { box-shadow: none; border: none; background: #fff; } .m-signature-pad--body { border: none; background: #fff; } .m-signature-pad--footer { display: none; } body,html { background: transparent; }';
 
-  return <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => !saving && onClose()}>
+  return <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => { if (!saving) onClose(); }}>
     <ModalSafeBottom style={[styles.signatureOverlay, { backgroundColor: colors.overlay }]}>
       <Pressable accessibilityLabel="Închide semnătura" disabled={saving} style={StyleSheet.absoluteFill} onPress={onClose} />
       <View style={[styles.signatureModal, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>

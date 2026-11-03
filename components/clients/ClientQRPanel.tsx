@@ -13,13 +13,13 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import { router } from 'expo-router';
 import { useRef } from 'react';
-import { Linking, Platform, StyleSheet, View } from 'react-native';
+import { Linking, Platform, StyleSheet, View, ViewInstance } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { captureRef } from 'react-native-view-shot';
 
 const messageFor = (link: string) => `Bună ziua! Puteți urmări statusul reparației dumneavoastră în G-Shop accesând acest link privat: ${link}`;
 export function ClientQRPanel({ client }: { client: Client }) {
-  const { colors } = useAppTheme(); const { hasPermission } = useAuth(); const { showToast } = useToast(); const qrRef = useRef<View>(null); const qr = client.qr; const link = qr?.publicUrl ?? '';
+  const { colors } = useAppTheme(); const { hasPermission } = useAuth(); const { showToast } = useToast(); const qrRef = useRef<ViewInstance>(null); const qr = client.qr; const link = qr?.publicUrl ?? '';
   const record = async (method: string) => { try { await clientRepository.recordQrShare(client.id, method); } catch { /* Share action is still useful if analytics fail. */ } };
   const openWhatsApp = async () => { if (!link) return; const phone = normalizePhoneForWhatsApp(client.phone); if (!phone) return showToast('Clientul nu are un număr de telefon valid.', 'error'); const url = `https://wa.me/${phone}?text=${encodeURIComponent(messageFor(link))}`; const supported = await Linking.canOpenURL(url); if (!supported) return showToast('WhatsApp nu este disponibil pe acest dispozitiv.', 'error'); await Linking.openURL(url); await record('WHATSAPP'); };
   const save = async () => {

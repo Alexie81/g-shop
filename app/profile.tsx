@@ -158,7 +158,7 @@ export default function ProfileScreen() {
       </View>
     </Screen>
 
-    <Modal visible={logoutOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={() => !logoutLoading && setLogoutOpen(false)}>
+    <Modal visible={logoutOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={() => { if (!logoutLoading) setLogoutOpen(false); }}>
       <ModalSafeBottom style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={() => !logoutLoading && setLogoutOpen(false)} />
         <View style={[styles.logoutModal, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>

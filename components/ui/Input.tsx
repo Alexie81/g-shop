@@ -3,10 +3,10 @@ import { useAppTheme } from '@/contexts/ThemeContext';
 import { radius, spacing } from '@/theme/tokens';
 import { Ionicons } from '@expo/vector-icons';
 import { ComponentProps, forwardRef, useState } from 'react';
-import { Pressable, StyleSheet, TextInput, TextInputProps, View } from 'react-native';
+import { Pressable, StyleSheet, TextInput, TextInputInstance, TextInputProps, View } from 'react-native';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
-export const Input = forwardRef<TextInput, TextInputProps & { label?: string; error?: string; icon?: IconName }>(function Input({ label, error, icon, secureTextEntry, style, ...props }, ref) {
+export const Input = forwardRef<TextInputInstance, TextInputProps & { label?: string; error?: string; icon?: IconName }>(function Input({ label, error, icon, secureTextEntry, style, ...props }, ref) {
   const { colors } = useAppTheme();
   const [visible, setVisible] = useState(false);
   return (

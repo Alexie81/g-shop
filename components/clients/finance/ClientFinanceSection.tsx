@@ -271,7 +271,7 @@ export function ClientFinanceSection({
 
     <CurrencyPickerModal visible={currencyOpen} value={currency.code} onClose={() => setCurrencyOpen(false)} onSelect={(code) => onChange({ ...normalizedValue, currencyCode: code, exchangeRateToRon: code === DEFAULT_CURRENCY_CODE ? 1 : normalizedValue.currencyCode === DEFAULT_CURRENCY_CODE ? 0 : normalizedValue.exchangeRateToRon })} />
     <ExpenseEditorModal visible={expenseOpen} currencyCode={currency.code} expense={editingExpense} onClose={() => { setExpenseOpen(false); setEditingExpense(null); }} onSubmit={submitExpense} />
-    <Modal visible={Boolean(deletingExpense)} transparent animationType="fade" statusBarTranslucent onRequestClose={() => !expenseDeleting && setDeletingExpense(null)}>
+    <Modal visible={Boolean(deletingExpense)} transparent animationType="fade" statusBarTranslucent onRequestClose={() => { if (!expenseDeleting) setDeletingExpense(null); }}>
       <ModalSafeBottom style={[styles.deleteOverlay, { backgroundColor: colors.overlay }]}>
         <Pressable accessibilityLabel="Închide confirmarea" disabled={expenseDeleting} style={StyleSheet.absoluteFill} onPress={() => setDeletingExpense(null)} />
         {deletingExpense ? <View style={[styles.deleteCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>

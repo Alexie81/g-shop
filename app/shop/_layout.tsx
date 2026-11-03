@@ -23,13 +23,14 @@ export default function ShopLayout() {
   return <Tabs screenOptions={({ route }) => ({
     headerShown: false, tabBarActiveTintColor: colors.primary, tabBarInactiveTintColor: colors.textMuted,
     tabBarStyle: { backgroundColor: colors.tabBar, borderTopColor: colors.border, height: 62 + tabBarBottomPadding, paddingTop: 6, paddingBottom: tabBarBottomPadding },
-    tabBarLabelStyle: { fontSize: 10.5, fontWeight: '700' }, tabBarIcon: ({ color, size }) => <Ionicons name={icons[route.name] ?? 'ellipse-outline'} size={size} color={color} />,
+    tabBarLabelStyle: { fontSize: 10.5, fontWeight: '700' }, tabBarIcon: ({ size, focused }) => <Ionicons name={icons[route.name] ?? 'ellipse-outline'} size={size} color={focused ? colors.primary : colors.textMuted} />,
   })}>
     <Tabs.Screen name="home" options={{ title: 'Acasă' }} />
     <Tabs.Screen name="sales-sheets" options={{ title: 'Fișe vânzări', href: hasPermission('sales_sheets.view') ? undefined : null }} />
     <Tabs.Screen name="orders" options={{ title: 'Comenzi' }} />
-    <Tabs.Screen name="products" options={{ href: null }} />
-    <Tabs.Screen name="stocks" options={{ href: null }} />
+    {/* SDK 58 redirects href:null routes. These pages still need direct navigation. */}
+    <Tabs.Screen name="products" options={{ tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+    <Tabs.Screen name="stocks" options={{ tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
     <Tabs.Screen name="more" options={{ title: 'Mai mult' }} />
   </Tabs>;
 }

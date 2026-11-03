@@ -6,6 +6,7 @@ import {
   NativeSyntheticEvent,
   Platform,
   ScrollView,
+  ScrollViewInstance,
   ScrollViewProps,
   UIManager,
   View,
@@ -24,7 +25,7 @@ type Props = ScrollViewProps & {
  * Măsurarea se face în coordonatele ferestrei, deci funcționează și în bottom-sheet-uri,
  * nu doar în ecranele care ocupă întreaga înălțime.
  */
-export const KeyboardAwareScrollView = forwardRef<ScrollView, Props>(function KeyboardAwareScrollView({
+export const KeyboardAwareScrollView = forwardRef<ScrollViewInstance, Props>(function KeyboardAwareScrollView({
   automaticallyAdjustKeyboardInsets,
   children,
   contentContainerStyle,
@@ -36,13 +37,13 @@ export const KeyboardAwareScrollView = forwardRef<ScrollView, Props>(function Ke
   scrollEventThrottle,
   ...props
 }, forwardedRef) {
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const focusedTargetRef = useRef<number | null>(null);
   const scrollYRef = useRef(0);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const [keyboardInset, setKeyboardInset] = useState(0);
 
-  useImperativeHandle(forwardedRef, () => scrollRef.current as ScrollView, []);
+  useImperativeHandle(forwardedRef, () => scrollRef.current as ScrollViewInstance, []);
 
   const clearTimers = useCallback(() => {
     timersRef.current.forEach(clearTimeout);

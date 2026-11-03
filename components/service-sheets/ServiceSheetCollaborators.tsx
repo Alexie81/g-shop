@@ -167,7 +167,7 @@ export function ServiceSheetCollaborators({ propertyId, clientId, overview, hasS
       onSetPaid={() => undefined}
     />}
 
-    <Modal visible={editorOpen} transparent animationType="slide" statusBarTranslucent onRequestClose={() => !saving && setEditorOpen(false)}>
+    <Modal visible={editorOpen} transparent animationType="slide" statusBarTranslucent onRequestClose={() => { if (!saving) setEditorOpen(false); }}>
       <ModalSafeBottom style={{ backgroundColor: colors.overlay }}>
       <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Pressable accessibilityLabel="Închide editorul" style={StyleSheet.absoluteFill} onPress={() => !saving && setEditorOpen(false)} />

@@ -286,7 +286,7 @@ export default function UserDetails() {
       </Card> : null}
     </Screen>
 
-    <Modal visible={statusOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={() => !statusSaving && setStatusOpen(false)}>
+    <Modal visible={statusOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={() => { if (!statusSaving) setStatusOpen(false); }}>
       <ModalSafeBottom style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
         <Pressable style={StyleSheet.absoluteFill} disabled={statusSaving} onPress={() => setStatusOpen(false)} />
         <View style={[styles.deleteModal, compact && styles.deleteModalCompact, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>
@@ -298,7 +298,7 @@ export default function UserDetails() {
       </ModalSafeBottom>
     </Modal>
 
-    <Modal visible={deleteOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={() => !deleting && setDeleteOpen(false)}>
+    <Modal visible={deleteOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={() => { if (!deleting) setDeleteOpen(false); }}>
       <ModalSafeBottom style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
         <Pressable style={StyleSheet.absoluteFill} disabled={deleting} onPress={() => setDeleteOpen(false)} />
         <View style={[styles.deleteModal, compact && styles.deleteModalCompact, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}>

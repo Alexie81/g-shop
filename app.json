@@ -2,7 +2,7 @@
   "expo": {
     "name": "G-Shop",
     "slug": "g-shop",
-    "version": "1.1.31",
+    "version": "1.1.32",
     "orientation": "default",
     "icon": "./logo/app-icon-v2.png",
     "scheme": "gshop",
@@ -80,7 +80,7 @@
       "typedRoutes": true
     },
     "extra": {
-      "releaseVersion": "1.1.31.2",
+      "releaseVersion": "1.1.32",
       "router": {},
       "eas": {
         "projectId": "2fe0de49-704b-49f7-a4ef-0f78c8195e08"

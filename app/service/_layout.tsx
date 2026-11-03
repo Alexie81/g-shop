@@ -58,19 +58,20 @@ export default function ServiceLayout() {
         router.replace(route.name === 'clients' ? '/service/clients' : '/service/service-sheets');
       }
     } })}
-    screenOptions={({ route }) => { const icon = icons[route.name] ?? 'ellipse-outline'; return { headerShown: false, tabBarActiveTintColor: colors.primary, tabBarInactiveTintColor: colors.textMuted, tabBarStyle: { backgroundColor: colors.tabBar, borderTopColor: colors.border, height: 62 + tabBarBottomPadding, paddingTop: 6, paddingBottom: tabBarBottomPadding }, tabBarLabelStyle: { fontSize: 10.5, fontWeight: '700' }, tabBarIcon: ({ color, size, focused }) => <Ionicons name={focused ? (icon.replace('-outline', '') as keyof typeof Ionicons.glyphMap) : icon} size={focused ? size + 1 : size} color={color} /> }; }}
+    screenOptions={({ route }) => { const icon = icons[route.name] ?? 'ellipse-outline'; return { headerShown: false, tabBarActiveTintColor: colors.primary, tabBarInactiveTintColor: colors.textMuted, tabBarStyle: { backgroundColor: colors.tabBar, borderTopColor: colors.border, height: 62 + tabBarBottomPadding, paddingTop: 6, paddingBottom: tabBarBottomPadding }, tabBarLabelStyle: { fontSize: 10.5, fontWeight: '700' }, tabBarIcon: ({ size, focused }) => <Ionicons name={focused ? (icon.replace('-outline', '') as keyof typeof Ionicons.glyphMap) : icon} size={focused ? size + 1 : size} color={focused ? colors.primary : colors.textMuted} /> }; }}
   >
     <Tabs.Screen name="dashboard" options={{ title: 'Acasă', href: hasPermission('dashboard.view') ? undefined : null }} />
     <Tabs.Screen name="clients" options={{ title: 'Clienți', href: hasPermission('clients.view') ? undefined : null }} />
     <Tabs.Screen name="service-sheets" options={{ title: 'Fișe', href: hasPermission('service_sheets.view') ? undefined : null }} />
     <Tabs.Screen name="qr-scanner" options={{ title: 'Scanare', href: hasPermission('qr.scan') ? undefined : null }} />
     <Tabs.Screen name="more" options={{ title: '•••', tabBarAccessibilityLabel: 'Mai mult' }} />
-    <Tabs.Screen name="collaborators" options={{ href: null }} />
-    <Tabs.Screen name="technicians" options={{ href: null }} />
-    <Tabs.Screen name="users" options={{ href: null }} />
-    <Tabs.Screen name="reports" options={{ href: null }} />
-    <Tabs.Screen name="register" options={{ href: null }} />
-    <Tabs.Screen name="audit" options={{ href: null }} />
-    <Tabs.Screen name="whatsapp-messages" options={{ href: null }} />
+    {/* SDK 58 redirects href:null routes. Hide only the buttons so these pages remain accessible. */}
+    <Tabs.Screen name="collaborators" options={{ tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+    <Tabs.Screen name="technicians" options={{ tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+    <Tabs.Screen name="users" options={{ tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+    <Tabs.Screen name="reports" options={{ tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+    <Tabs.Screen name="register" options={{ tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+    <Tabs.Screen name="audit" options={{ tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
+    <Tabs.Screen name="whatsapp-messages" options={{ tabBarButton: () => null, tabBarItemStyle: { display: 'none' } }} />
   </Tabs>;
 }

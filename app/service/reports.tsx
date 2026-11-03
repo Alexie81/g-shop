@@ -26,7 +26,7 @@ import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { ComponentProps, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Platform, Pressable, RefreshControl, ScrollView, ScrollViewInstance, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, Line, Polyline } from 'react-native-svg';
 
 type ReportPeriod = 'TODAY' | '7D' | '1M' | '1Y' | 'TOTAL' | 'CUSTOM';
@@ -429,7 +429,7 @@ function hourlyClientSeries(data: ReportSeriesPoint[], period: ReportPeriod, cli
 
 function ActivityBars({ data, period }: { data: ReportSeriesPoint[]; period: ReportPeriod }) {
   const { colors } = useAppTheme();
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const points = data.length ? data : [{ label: '—', revenue: 0, costs: 0, net: 0, clients: 0 }];
   const max = Math.max(1, ...points.map((item) => item.clients));
   const currentIndex = currentSeriesIndex(points, period);
