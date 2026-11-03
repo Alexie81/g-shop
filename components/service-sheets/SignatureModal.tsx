@@ -8,7 +8,7 @@ import { radius, spacing } from '@/theme/tokens';
 import { ServiceSheet } from '@/types';
 import { useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
-import SignatureScreen, { SignatureViewRef } from 'react-native-signature-canvas';
+import SignatureScreen, { SignaturePadHandle as SignatureViewRef } from './SignaturePad';
 
 export function SignatureModal({ sheet, visible, onClose, onSaved }: { sheet: ServiceSheet; visible: boolean; onClose: () => void; onSaved: (sheet: ServiceSheet) => void }) {
   const { colors } = useAppTheme(); const { showToast } = useToast(); const ref = useRef<SignatureViewRef>(null); const [saving, setSaving] = useState(false);

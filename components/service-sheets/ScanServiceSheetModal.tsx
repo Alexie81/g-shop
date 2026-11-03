@@ -28,7 +28,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import SignatureScreen, { SignatureViewRef } from 'react-native-signature-canvas';
+import SignatureScreen, { SignaturePadHandle as SignatureViewRef } from './SignaturePad';
 
 type QuickSheetForm = {
   equipment: string;
