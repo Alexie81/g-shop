@@ -1355,7 +1355,8 @@ function generate_service_document_pdf(
     $stampPath = gshop_document_safe_source($stampPath);
 
     $templateRoot = __DIR__ . '/../assets/service-document-templates';
-    $templates = match ($normalizedType) {
+    $cleaning = is_array($snapshot['cleaning'] ?? null);
+    $templates = $cleaning ? ['brand' => __DIR__ . '/../assets/cleaning/logo.png'] : match ($normalizedType) {
         'INTAKE' => ['intake' => $templateRoot . '/intake.pdf'],
         'FINAL_ESTIMATE' => [
             'intro' => $templateRoot . '/final-estimate-intro.pdf',
@@ -1388,6 +1389,7 @@ function generate_service_document_pdf(
         'signature' => gshop_pdf_source_identity($signaturePath),
         'stamp' => gshop_pdf_source_identity($stampPath),
         'templates' => $templateIdentities,
+        'cleaningRenderer' => $cleaning ? hash_file('sha256', __DIR__.'/cleaning_document_pdf.php') : null,
     ]));
     $identity = gshop_pdf_string($document['id'] ?? $document['number'] ?? 'document');
     $safeIdentity = trim((string)preg_replace('/[^A-Za-z0-9_-]+/', '-', $identity), '-_') ?: 'document';
@@ -1430,7 +1432,11 @@ function generate_service_document_pdf(
             $pdf->AddFont('DejaVu', '', 'DejaVuSans.ttf', true);
             $pdf->AddFont('DejaVu', 'B', 'DejaVuSans-Bold.ttf', true);
 
-            if ($normalizedType === 'INTAKE') {
+            if ($cleaning) {
+                require_once __DIR__ . '/cleaning_document_pdf.php';
+                $pdf->SetTitle(($normalizedType === 'INTAKE' ? 'Fișă de intrare a comenzii ' : 'Fișă de ieșire a comenzii ') . ($document['number'] ?? ''), true);
+                gshop_cleaning_render($pdf, $normalizedType, $document, $snapshot, $signature);
+            } elseif ($normalizedType === 'INTAKE') {
                 gshop_document_add_template($pdf, $templates['intake'], 1);
                 gshop_document_overlay_service_template_brand($pdf, $snapshot, 'INTAKE');
                 gshop_document_overlay_intake($pdf, 1, $document, $snapshot, $signature, $stamp);

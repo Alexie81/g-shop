@@ -69,6 +69,7 @@ function gshop_missing_document_records(string $propertyId): array {
     $sql='SELECT '.uuid_sql('s.id').' service_sheet_id,s.number service_sheet_number,TRIM(CONCAT(c.first_name,\' \',c.last_name)) client_name,MAX(CASE WHEN d.type=\'INTAKE\' THEN 1 ELSE 0 END) has_intake,MAX(CASE WHEN d.type=\'FINAL_ESTIMATE\' THEN 1 ELSE 0 END) has_final_estimate,MAX(CASE WHEN d.type=\'EXIT\' THEN 1 ELSE 0 END) has_exit,MAX(CASE WHEN d.type=\'WARRANTY\' THEN 1 ELSE 0 END) has_warranty FROM service_sheets s JOIN clients c ON c.id=s.client_id AND c.is_active=1 LEFT JOIN service_documents d ON d.service_sheet_id=s.id AND d.is_active=1 AND d.status=\'PUBLISHED\' WHERE s.property_id=? AND s.is_active=1 GROUP BY s.id,s.number,c.first_name,c.last_name ORDER BY s.received_at DESC,s.created_at DESC LIMIT 500';
     $stmt=db()->prepare($sql);$stmt->execute([uuid_bin($propertyId)]);$items=[];
     $labels=['has_intake'=>'Fișa de intrare','has_final_estimate'=>'Devizul final','has_exit'=>'Fișa de ieșire','has_warranty'=>'Certificatul de garanție'];
+    if(is_cleaning_property($propertyId))$labels=array_intersect_key($labels,array_flip(['has_intake','has_exit']));
     foreach($stmt->fetchAll() as $row){$missing=[];foreach($labels as$key=>$label)if((int)$row[$key]!==1)$missing[]=$label;if(!$missing)continue;$items[]=['serviceSheetId'=>$row['service_sheet_id'],'serviceSheetNumber'=>$row['service_sheet_number'],'clientName'=>$row['client_name'],'missing'=>$missing];}
     return $items;
 }

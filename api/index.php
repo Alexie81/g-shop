@@ -3,6 +3,7 @@ declare(strict_types=1);
 require __DIR__ . '/src/bootstrap.php';
 require __DIR__ . '/src/push_notifications.php';
 require __DIR__ . '/src/sales_documents.php';
+require __DIR__ . '/src/cleaning_orders.php';
 
 $allowedOrigins = array_map('trim', explode(',', env_value('CORS_ORIGINS', '*')));
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '*';
@@ -949,13 +950,15 @@ function company_for_service_sheet(array $sheet): array {
     $company['propertyName']=(string)property_record((string)$sheet['propertyId'])['name'];return$company;
 }
 
-function service_document_definitions(): array {
-    return [
+function service_document_definitions(?string $propertyId = null): array {
+    $definitions = [
         'INTAKE'=>['label'=>'Fișă de intrare','slug'=>'intake','prefix'=>'IN'],
         'FINAL_ESTIMATE'=>['label'=>'Deviz final','slug'=>'final-estimate','prefix'=>'DV'],
         'EXIT'=>['label'=>'Fișă de ieșire','slug'=>'exit','prefix'=>'OUT'],
         'WARRANTY'=>['label'=>'Certificat de garanție','slug'=>'warranty','prefix'=>'GAR'],
     ];
+    return $propertyId !== null && is_cleaning_property($propertyId)
+        ? array_intersect_key($definitions, array_flip(['INTAKE','EXIT'])) : $definitions;
 }
 function validated_service_document_type(mixed $value): string {
     $normalized=strtoupper(str_replace('-','_',trim((string)$value)));
@@ -993,6 +996,8 @@ function validated_service_document_estimated_costs(mixed $value, array $base): 
 }
 function map_service_document(array $row, ?string $publicToken = null, bool $public = false): array {
     $item=entity_base($row);$definition=service_document_definitions()[$item['type']];
+    $cleaningSnapshot=json_decode((string)($row['snapshot_json']??''),true);
+    if(is_array($cleaningSnapshot['cleaning']??null))$item['cleaning']=$cleaningSnapshot['cleaning'];
     $item['documentAt']=iso_date($row['document_at']??null);$item['agreementAt']=iso_date($row['agreement_at']??null);$item['generatedAt']=iso_date($row['generated_at']??null);
     $item['estimatedRepairDays']=$item['estimatedRepairDays']!==null?(int)$item['estimatedRepairDays']:null;
     $item['parts']=json_decode((string)($row['parts_json']??'[]'),true)?:[];$item['labor']=json_decode((string)($row['labor_json']??'[]'),true)?:[];
@@ -1010,7 +1015,7 @@ function service_document_record(string $sheetId, string $type, bool $required =
 function service_document_slots(string $sheetId, ?string $publicToken = null, bool $public = false): array {
     ensure_service_documents_table(db());$stmt=db()->prepare(service_document_select().' WHERE d.service_sheet_id=? AND d.is_active=1');$stmt->execute([uuid_bin($sheetId)]);$found=[];foreach($stmt->fetchAll()as$row)$found[$row['type']]=map_service_document($row,$publicToken,$public);
     if($public)return array_values(array_filter($found,fn($document)=>!empty($document['available'])));
-    $slots=[];foreach(service_document_definitions()as$type=>$definition){$missing=['type'=>$type,'label'=>$definition['label'],'status'=>'MISSING','available'=>false,'parts'=>[],'labor'=>[],'url'=>null];if(!$public)$missing['serviceSheetId']=$sheetId;$slots[]=$found[$type]??$missing;}return$slots;
+    $sheet=get_sheet($sheetId);$slots=[];foreach(service_document_definitions((string)$sheet['propertyId'])as$type=>$definition){$missing=['type'=>$type,'label'=>$definition['label'],'status'=>'MISSING','available'=>false,'parts'=>[],'labor'=>[],'url'=>null];if(!$public)$missing['serviceSheetId']=$sheetId;$slots[]=$found[$type]??$missing;}return$slots;
 }
 function service_document_db_date(mixed $value, string $fallback): string {
     $raw=trim((string)($value??''));if($raw==='')return$fallback;$timestamp=strtotime($raw);if($timestamp===false)fail('Data documentului nu este validă.',422);return gmdate('Y-m-d H:i:s',$timestamp);
@@ -1149,6 +1154,8 @@ function sync_final_document_financials(array $sheet, array $parts, array $labor
     return get_sheet((string)$sheet['id']);
 }
 function generate_service_document_record(string $sheetId, string $type, array $body, array $user, bool $syncFinalFinancials = true): array {
+    $cleaningSheet=get_sheet($sheetId);
+    if(is_cleaning_property((string)$cleaningSheet['propertyId']))return generate_cleaning_document_record($cleaningSheet,$type,$body,$user);
     $type=validated_service_document_type($type);ensure_service_documents_table(db());$sheet=get_sheet($sheetId);ensure_property((string)$sheet['propertyId'],$user);$existing=service_document_existing_row($sheetId,$type);$existingSnapshot=$existing?json_decode((string)$existing['snapshot_json'],true):null;$now=now_utc();
     if($type!=='INTAKE'&&array_key_exists('estimatedCosts',$body))fail('Costurile estimative pot fi modificate numai în fișa de intrare.',422);if($type==='INTAKE'&&$existing&&!is_array($existingSnapshot))throw new RuntimeException('Snapshotul fișei de intrare nu este valid.');
     $client=get_client((string)$sheet['clientId']);$bundle=client_financial_bundle($client);$expenseTotal=round(array_sum(array_map(fn($expense)=>(float)$expense['amount'],$bundle['expenses'])),2);$fallbackActualParts=!empty($bundle['financials']['persisted'])?(float)$bundle['financials']['actualPartsCost']:max(0,(float)($sheet['directCosts']??0)-$expenseTotal);
@@ -1650,11 +1657,17 @@ function client_participant_users(array $client): array {
     foreach($stmt->fetchAll()as$row){$item=entity_base($row);$item['isAssigned']=(bool)$item['isAssigned'];$data[]=$item;}return $data;
 }
 
+if (defined('GSHOP_API_LIBRARY_ONLY') && GSHOP_API_LIBRARY_ONLY) return;
+
 $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 $path = route_path();
 $params = [];
 
 try {
+    if ($method === 'POST' && $path === '/admin/properties/cleaning') {
+        $user=require_permission('settings.manage');
+        respond(ensure_cleaning_property($user));
+    }
     if ($method === 'GET' && $path === '/') respond(['name' => 'G-Shop API', 'status' => 'online', 'version' => '1.0.0', 'time' => gmdate('c')]);
     if ($method === 'GET' && $path === '/app-update') {
         $notes = array_values(array_filter(array_map('trim', explode('|', env_value('APP_ANDROID_RELEASE_NOTES', 'Prima versiune stabilă G-Shop')))));
@@ -2140,6 +2153,7 @@ try {
 
         respond([
             'propertyName'=>$qr['property_name'],
+            'propertyDomain'=>$qr['property_domain'],
             'contact'=>[
                 'phone'=>$contactPhone?:null,
                 'email'=>$contactEmail?:null,
