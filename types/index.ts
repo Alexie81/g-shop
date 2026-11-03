@@ -467,6 +467,24 @@ export interface ServiceSheetPdf {
 export type ServiceDocumentType = 'INTAKE' | 'FINAL_ESTIMATE' | 'EXIT' | 'WARRANTY';
 export type ServiceDocumentStatus = 'MISSING' | 'PUBLISHED';
 
+export interface CleaningOrderItem {
+  article: string;
+  service: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice?: number;
+}
+
+export interface CleaningOrderDetails {
+  items: CleaningOrderItem[];
+  serviceAddress: string;
+  interventionAt: ISODate;
+  technicianName: string;
+  notes: string;
+  paymentMethod: string;
+  costs: EstimatedCosts;
+}
+
 export interface ServiceDocumentItem {
   name: string;
   quantity: number;
@@ -490,6 +508,7 @@ export interface EstimatedCosts {
 }
 
 export interface ServiceDocument {
+  cleaning?: CleaningOrderDetails;
   id?: UUID;
   serviceSheetId: UUID;
   type: ServiceDocumentType;
@@ -517,6 +536,9 @@ export interface ServiceDocument {
 }
 
 export interface GenerateServiceDocumentInput {
+  cleaning?: CleaningOrderDetails;
+  syncCleaningFinancials?: boolean;
+  financialUpdatedAt?: string | null;
   documentAt?: ISODate;
   agreementAt?: ISODate;
   agreementStatus?: 'ACCEPTED' | 'REFUSED';

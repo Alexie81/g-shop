@@ -4,6 +4,7 @@ import { secureSessionStorage } from '@/services/storage';
 const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'https://reparatiicalculatoare-bucuresti.ro/app-api').replace(/\/$/, '');
 const SHOP_API_URL = (process.env.EXPO_PUBLIC_SHOP_API_URL ?? 'https://calculatoareprofesionale.ro/app-api').replace(/\/$/, '');
 const SCOOTER_API_URL = (process.env.EXPO_PUBLIC_SCOOTER_API_URL ?? 'https://gshop-trotinete.ro/app-api').replace(/\/$/, '');
+const CLEANING_API_URL = (process.env.EXPO_PUBLIC_CLEANING_API_URL ?? 'https://curatatorie-canapele.ro/app-api').replace(/\/$/, '');
 let currentSession: AuthSession | null = null;
 let persistSession = false;
 let refreshing: Promise<AuthSession | null> | null = null;
@@ -93,6 +94,7 @@ export function shopApiRequest<T>(path: string, options: RequestOptions = {}): P
 
 export function apiUrlForProperty(property: Pick<Property, 'domain' | 'type'> | null) {
   const domain = property?.domain.trim().toLocaleLowerCase('ro-RO') ?? '';
+  if (domain === 'curatatorie-canapele.ro' || domain.endsWith('.curatatorie-canapele.ro')) return CLEANING_API_URL;
   return domain === 'gshop-trotinete.ro' || domain.endsWith('.gshop-trotinete.ro')
     ? SCOOTER_API_URL
     : property?.type === 'SHOP'
@@ -108,4 +110,4 @@ export function propertyApiRequest<T>(path: string, options: RequestOptions = {}
   return requestFrom<T>(activePropertyApiUrl, path, options);
 }
 
-export { API_URL, SHOP_API_URL, SCOOTER_API_URL };
+export { API_URL, SHOP_API_URL, SCOOTER_API_URL, CLEANING_API_URL };

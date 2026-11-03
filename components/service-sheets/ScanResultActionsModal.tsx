@@ -1,4 +1,6 @@
 import { AppText } from '@/components/ui/AppText';
+import { useProperty } from '@/contexts/PropertyContext';
+import { isCleaningProperty } from '@/utils/property';
 import { Button } from '@/components/ui/Button';
 import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { useAppTheme } from '@/contexts/ThemeContext';
@@ -44,6 +46,8 @@ export function ScanResultActionsModal({
   onCancel,
 }: Props) {
   const { colors } = useAppTheme();
+  const { activeProperty } = useProperty();
+  const cleaning = isCleaningProperty(activeProperty);
   const [missingStep, setMissingStep] = useState<MissingStep>(null);
 
   useEffect(() => { if (visible) setMissingStep(null); }, [clientName, visible]);
@@ -53,6 +57,7 @@ export function ScanResultActionsModal({
     onFinalEstimate();
   };
   const chooseExit = () => {
+    if (cleaning && hasSheet) return onExit();
     if (!hasSheet || !hasIntake) return setMissingStep('INTAKE');
     if (!hasFinalEstimate) return setMissingStep('FINAL_ESTIMATE');
     onExit();
@@ -94,7 +99,7 @@ export function ScanResultActionsModal({
           <View style={styles.grid}>
             <ActionTile label="Arată clientul" status="Profil" icon="person-outline" color={colors.primary} ready onPress={onClient} />
             <ActionTile label="Fișă de intrare" status={hasIntake ? 'Creată' : 'De creat'} icon="enter-outline" color={palette.cyan} ready={hasIntake} onPress={onIntake} />
-            <ActionTile label="Deviz final" status={hasFinalEstimate ? 'Creat' : 'De creat'} icon="receipt-outline" color={palette.purple} ready={hasFinalEstimate} onPress={chooseFinalEstimate} />
+            {!cleaning ? <ActionTile label="Deviz final" status={hasFinalEstimate ? 'Creat' : 'De creat'} icon="receipt-outline" color={palette.purple} ready={hasFinalEstimate} onPress={chooseFinalEstimate} /> : null}
             <ActionTile label="Fișă de ieșire" status={hasExit ? 'Creată' : 'De creat'} icon="exit-outline" color={palette.success} ready={hasExit} onPress={chooseExit} />
             {canSign ? <ActionTile label="Semnează clientul" status={hasSignature ? 'Semnat' : 'De semnat'} icon="pencil-outline" color={palette.purple} ready={hasSignature} onPress={onSignature} /> : null}
           </View>

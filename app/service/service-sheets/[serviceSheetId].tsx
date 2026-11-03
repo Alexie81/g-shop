@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card';
 import { Screen } from '@/components/ui/Screen';
 import { ErrorState, LoadingState } from '@/components/ui/States';
 import { useAuth } from '@/contexts/AuthContext';
+import { useProperty } from '@/contexts/PropertyContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
@@ -17,6 +18,7 @@ import { palette, radius, spacing } from '@/theme/tokens';
 import { ClientFinancialOverview, ServiceDocumentType, ServiceSheet, ServiceSheetStatus as Status } from '@/types';
 import { formatFinanceMoney } from '@/utils/client-finance';
 import { formatDate, normalizePhoneForWhatsApp } from '@/utils/format';
+import { isCleaningProperty } from '@/utils/property';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -29,6 +31,8 @@ const selectableStatuses: Status[] = [...statusOrder, 'CANCELLED'];
 export default function ServiceSheetDetails() {
   const { serviceSheetId, document } = useLocalSearchParams<{ serviceSheetId: string; document?: string }>();
   const { colors, isDark } = useAppTheme();
+  const { activeProperty } = useProperty();
+  const cleaning = isCleaningProperty(activeProperty);
   const { width } = useWindowDimensions();
   const { hasPermission } = useAuth();
   const { showToast } = useToast();
@@ -51,7 +55,7 @@ export default function ServiceSheetDetails() {
   }, [canViewFinancials, serviceSheetId]);
   useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);
 
-  const header = <AppHeader title="Fișă service" back onBack={returnToServiceSheets} />;
+  const header = <AppHeader title={cleaning ? 'Fișă comandă' : 'Fișă service'} back onBack={returnToServiceSheets} />;
   if (state.loading) return <Screen header={header}><LoadingState rows={5} /></Screen>;
   if (state.error || !state.data) return <Screen header={header}><ErrorState message={state.error?.message ?? 'Fișa nu există.'} onRetry={() => void state.reload()} /></Screen>;
 
@@ -76,7 +80,7 @@ export default function ServiceSheetDetails() {
         return;
       }
       const phone = normalizePhoneForWhatsApp(sheet.client?.phone ?? '');
-      const message = `Bună ziua! Vă trimitem fișa de service ${sheet.number}, generată din datele actualizate: ${generated.url}`;
+      const message = `Bună ziua! Vă trimitem ${cleaning ? 'fișa comenzii' : 'fișa de service'} ${sheet.number}, generată din datele actualizate: ${generated.url}`;
       await Linking.openURL(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Fișa PDF nu a putut fi generată.', 'error');
@@ -146,7 +150,7 @@ export default function ServiceSheetDetails() {
       </View>
       <View style={styles.companyPreferenceCopy}>
         <AppText variant="label">{sheet.companyName || 'Firma documentului'}</AppText>
-        <AppText variant="caption" muted>Datele firmei au fost fixate la crearea fișei și apar automat în PDF.</AppText>
+        <AppText variant="caption" muted>{cleaning ? 'Fișele comenzii folosesc sigla Curatatorie Canapele și semnătura clientului.' : 'Datele firmei au fost fixate la crearea fișei și apar automat în PDF.'}</AppText>
       </View>
       <Ionicons name="checkmark-circle" size={24} color={palette.success} />
     </Card>
@@ -184,22 +188,22 @@ export default function ServiceSheetDetails() {
 
     <View style={[styles.columns, mobile && styles.columnsMobile]}>
       <Card style={[styles.panel, mobile && styles.cardMobile]}>
-        <SectionTitle icon="construct-outline" title="Problemă și lucrare" />
+        <SectionTitle icon={cleaning ? 'sparkles-outline' : 'construct-outline'} title={cleaning ? 'Articole și lucrare' : 'Problemă și lucrare'} />
         <View style={styles.compactDetails}>
-          <DataRow label="Serie" value={sheet.serialNumber} />
-          <DataRow label="Accesorii" value={sheet.accessories} />
+          <DataRow label={cleaning ? 'Identificare articol' : 'Serie'} value={sheet.serialNumber} />
+          <DataRow label={cleaning ? 'Suprafețe incluse' : 'Accesorii'} value={sheet.accessories} />
         </View>
-        <Narrative icon="alert-circle-outline" label="Problemă declarată" value={sheet.reportedIssue} />
+        <Narrative icon="alert-circle-outline" label={cleaning ? 'Servicii solicitate' : 'Problemă declarată'} value={sheet.reportedIssue} />
         <Narrative icon="search-outline" label="Constatare" value={sheet.technicalAssessment} />
         <Narrative icon="checkmark-done-outline" label="Lucrări efectuate" value={sheet.workPerformed} />
-        <Narrative icon="hardware-chip-outline" label="Piese folosite" value={sheet.partsUsed} />
+        <Narrative icon="hardware-chip-outline" label={cleaning ? 'Produse / materiale folosite' : 'Piese folosite'} value={sheet.partsUsed} />
       </Card>
 
       <Card style={[styles.panel, mobile && styles.cardMobile]}>
         <SectionTitle icon="cash-outline" title="Valori și termene" />
         {canViewFinancials ? <View style={styles.moneyGrid}>
-          <MoneyMetric label="Piese" value={formatCurrency(sheet.partsCost)} color={palette.cyan} />
-          <MoneyMetric label="Manoperă" value={formatCurrency(sheet.laborCost)} color={palette.purple} />
+          <MoneyMetric label={cleaning ? 'Materiale' : 'Piese'} value={formatCurrency(sheet.partsCost)} color={palette.cyan} />
+          <MoneyMetric label={cleaning ? 'Servicii' : 'Manoperă'} value={formatCurrency(sheet.laborCost)} color={palette.purple} />
           <MoneyMetric label="Total fișă" value={formatCurrency(sheet.totalCost)} color={colors.primary} />
           <MoneyMetric label="Cost intern" value={formatCurrency(sheet.directCosts)} color={palette.warning} />
           <MoneyMetric label="Net intern" value={formatCurrency(sheet.netValue)} color={sheet.netValue >= 0 ? palette.success : palette.danger} />

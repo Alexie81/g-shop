@@ -1,4 +1,7 @@
 import { ServiceDocumentEditorModal } from '@/components/service-sheets/ServiceDocumentEditorModal';
+import { CleaningDocumentEditorModal } from '@/components/service-sheets/CleaningDocumentEditorModal';
+import { useProperty } from '@/contexts/PropertyContext';
+import { isCleaningProperty } from '@/utils/property';
 import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
 import { AppText } from '@/components/ui/AppText';
 import { Button } from '@/components/ui/Button';
@@ -27,6 +30,8 @@ const DOCUMENTS: { type: ServiceDocumentType; label: string; description: string
 ];
 
 export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style, onGenerated }: Props) {
+  const { activeProperty } = useProperty();
+  const cleaning = isCleaningProperty(activeProperty);
   const { colors, isDark } = useAppTheme();
   const { hasPermission } = useAuth();
   const { showToast } = useToast();
@@ -40,7 +45,8 @@ export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style, 
   const financialState = useAsyncData(() => canViewFinancials ? clientRepository.getFinancials(sheet.clientId) : Promise.resolve(null), [canViewFinancials, sheet.clientId]);
   useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);
 
-  const slots = DOCUMENTS.map((definition) => ({ definition, document: state.data?.find((item) => item.type === definition.type) }));
+  const definitions = cleaning ? DOCUMENTS.filter((item) => item.type === 'INTAKE' || item.type === 'EXIT').map((item) => ({ ...item, description: item.type === 'INTAKE' ? 'Articole, servicii, preț și acceptare' : 'Servicii efectuate, plată și confirmare' })) : DOCUMENTS;
+  const slots = definitions.map((definition) => ({ definition, document: state.data?.find((item) => item.type === definition.type) }));
   const available = slots.filter((slot) => slot.document?.available && slot.document.url);
   const missing = state.data ? slots.filter((slot) => !slot.document?.available || !slot.document.url) : [];
   const normalizedPhone = normalizePhoneForWhatsApp(sheet.client?.phone ?? '');
@@ -48,6 +54,11 @@ export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style, 
   const allReady = state.data !== null && missing.length === 0;
   const selectedDocument = editorType ? state.data?.find((item) => item.type === editorType) : undefined;
   const openEditor = (type: ServiceDocumentType, document?: ServiceDocument) => {
+    if (cleaning && !financialState.data) {
+      showToast('Se încarcă valorile financiare. Reîncarcă dosarul dacă încărcarea nu se încheie.', 'info');
+      void financialState.reload(true);
+      return;
+    }
     if (type === 'FINAL_ESTIMATE' && !document?.available && canViewFinancials && !financialState.data) {
       showToast(financialState.loading ? 'Se încarcă costurile interne ale pieselor. Încearcă din nou imediat.' : 'Costurile interne nu au putut fi încărcate. Reîncarcă dosarul înainte de deviz.', 'error');
       return;
@@ -65,7 +76,7 @@ export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style, 
     const generated = await serviceSheetRepository.generateDocument(sheet.id, type, input);
     await Promise.all([
       state.reload(true),
-      type === 'FINAL_ESTIMATE' && canViewFinancials ? financialState.reload(true) : Promise.resolve(null),
+      (cleaning || type === 'FINAL_ESTIMATE') && canViewFinancials ? financialState.reload(true) : Promise.resolve(null),
     ]);
     await onGenerated?.(type);
     showToast(`Documentul „${generated.label}” a fost generat.`, 'success');
@@ -95,7 +106,7 @@ export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style, 
 
   const sendOne = async (document: ServiceDocument) => {
     if (!phone || !document.available || !document.url) return;
-    const message = `Bună ziua! Vă trimitem ${document.label.toLocaleLowerCase('ro-RO')} pentru reparația ${sheet.number}: ${document.url}`;
+    const message = `Bună ziua! Vă trimitem ${document.label.toLocaleLowerCase('ro-RO')} pentru ${cleaning ? 'comanda' : 'reparația'} ${sheet.number}: ${document.url}`;
     try { await Linking.openURL(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`); }
     catch { showToast('WhatsApp nu a putut fi deschis.', 'error'); }
   };
@@ -107,7 +118,7 @@ export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style, 
     }
     if (!phone) return;
     const lines = available.map(({ definition, document }) => `• ${document?.label || definition.label}: ${document?.url}`);
-    const message = `Bună ziua! Vă trimitem dosarul complet al reparației ${sheet.number}:\n\n${lines.join('\n')}`;
+    const message = `Bună ziua! Vă trimitem dosarul complet al ${cleaning ? 'comenzii' : 'reparației'} ${sheet.number}:\n\n${lines.join('\n')}`;
     try { await Linking.openURL(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`); }
     catch { showToast('WhatsApp nu a putut fi deschis.', 'error'); }
   };
@@ -116,7 +127,7 @@ export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style, 
     <Card style={[styles.panel, style]} elevated>
       <View style={styles.header}>
         <View style={[styles.headerIcon, { backgroundColor: isDark ? `${colors.primary}25` : colors.primarySoft }]}><Ionicons name="folder-open-outline" size={23} color={colors.primary} /></View>
-        <View style={styles.headerCopy}><AppText variant="heading">Documentele reparației</AppText><AppText variant="caption" muted>Fiecare document poate fi emis, actualizat sau șters independent.</AppText></View>
+        <View style={styles.headerCopy}><AppText variant="heading">{cleaning ? 'Documentele comenzii' : 'Documentele reparației'}</AppText><AppText variant="caption" muted>Fiecare document poate fi emis, actualizat sau șters independent.</AppText></View>
         <Pressable accessibilityRole="button" accessibilityLabel="Reîncarcă documentele" disabled={state.loading || state.refreshing} onPress={() => void state.reload(true)} style={[styles.refresh, { backgroundColor: colors.surfaceMuted }]}>{state.loading || state.refreshing ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="refresh-outline" size={20} color={colors.primary} />}</Pressable>
       </View>
 
@@ -160,13 +171,22 @@ export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style, 
             style={styles.whatsappAction}
           />;
         })}</View>
-        <Button label="Trimite toate cele 4 documente" icon="logo-whatsapp" disabled={!phone || !state.data} onPress={() => void sendAll()} />
-        {!allReady ? <AppText variant="caption" muted style={styles.whatsappHint}>„Trimite toate” devine disponibil numai după generarea tuturor celor patru documente. Niciun document lipsă nu va fi prezentat ca trimis.</AppText> : null}
+        <Button label={`Trimite toate cele ${definitions.length} documente`} icon="logo-whatsapp" disabled={!phone || !state.data} onPress={() => void sendAll()} />
+        {!allReady ? <AppText variant="caption" muted style={styles.whatsappHint}>Generează toate cele {definitions.length} documente pentru trimiterea dosarului complet sau trimite individual documentele disponibile.</AppText> : null}
       </View>
       </> : null}
     </Card>
 
-    <ServiceDocumentEditorModal
+    {cleaning ? <CleaningDocumentEditorModal
+      visible={editorType !== null}
+      type={editorType === 'EXIT' ? 'EXIT' : 'INTAKE'}
+      sheet={sheet}
+      document={selectedDocument}
+      intake={state.data?.find((item) => item.type === 'INTAKE')}
+      financialOverview={financialState.data ?? undefined}
+      onClose={() => setEditorType(null)}
+      onGenerate={(input) => generate(editorType === 'EXIT' ? 'EXIT' : 'INTAKE', input)}
+    /> : <ServiceDocumentEditorModal
       visible={editorType !== null}
       type={editorType ?? 'INTAKE'}
       sheet={sheet}
@@ -174,7 +194,7 @@ export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style, 
       financialOverview={financialState.data ?? undefined}
       onClose={() => setEditorType(null)}
       onGenerate={(input) => generate(editorType ?? 'INTAKE', input)}
-    />
+    />}
 
     <Modal visible={deleteTarget !== null} transparent animationType="fade" statusBarTranslucent onRequestClose={() => { if (!deleting) setDeleteTarget(null); }}>
       <ModalSafeBottom style={[styles.deleteOverlay, { backgroundColor: colors.overlay }]}>

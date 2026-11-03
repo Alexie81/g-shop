@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/Card';
 import { Screen } from '@/components/ui/Screen';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/States';
 import { useProperty } from '@/contexts/PropertyContext';
+import { isCleaningProperty } from '@/utils/property';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { useAsyncData } from '@/hooks/useAsyncData';
@@ -40,6 +41,12 @@ const documentColumns: RegisterDocument[] = [
   { sheetName: 'Certificate garanție', label: 'Garanție', icon: 'shield-checkmark-outline', color: palette.cyan, number: (row) => row.warrantyNumber, at: (row) => row.warrantyAt },
 ];
 
+const cleaningColumns = documentColumns.filter((column) => column.sheetName === 'Fișe de intrare' || column.sheetName === 'Fișe de ieșire');
+function useDocumentColumns() {
+  const { activeProperty } = useProperty();
+  return isCleaningProperty(activeProperty) ? cleaningColumns : documentColumns;
+}
+
 const filters: { key: RegisterFilter; label: string }[] = [
   { key: 'ALL', label: 'Toate' },
   { key: 'COMPLETE', label: 'Complete' },
@@ -49,6 +56,7 @@ const filters: { key: RegisterFilter; label: string }[] = [
 const excelMimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 export default function RegisterScreen() {
+  const documentColumns = useDocumentColumns();
   useBackToAdministration();
   const { activeProperty } = useProperty();
   const { colors, isDark } = useAppTheme();
@@ -64,13 +72,13 @@ export default function RegisterScreen() {
   useRefreshOnFocus(() => state.reload(true), state.loading || state.refreshing);
 
   const allRows = useMemo(() => state.data ?? [], [state.data]);
-  const completeCount = useMemo(() => allRows.filter(isComplete).length, [allRows]);
-  const documentsCount = useMemo(() => allRows.reduce((total, row) => total + countDocuments(row), 0), [allRows]);
+  const completeCount = useMemo(() => allRows.filter((row) => isComplete(row, documentColumns)).length, [allRows, documentColumns]);
+  const documentsCount = useMemo(() => allRows.reduce((total, row) => total + countDocuments(row, documentColumns), 0), [allRows, documentColumns]);
   const rows = useMemo(() => {
     const needle = normalizeSearch(query.trim());
     return allRows.filter((row) => {
-      if (filter === 'COMPLETE' && !isComplete(row)) return false;
-      if (filter === 'INCOMPLETE' && isComplete(row)) return false;
+      if (filter === 'COMPLETE' && !isComplete(row, documentColumns)) return false;
+      if (filter === 'INCOMPLETE' && isComplete(row, documentColumns)) return false;
       if (!needle) return true;
       return normalizeSearch([
         row.serviceSheetNumber,
@@ -84,13 +92,13 @@ export default function RegisterScreen() {
         row.warrantyNumber,
       ].filter(Boolean).join(' ')).includes(needle);
     });
-  }, [allRows, filter, query]);
+  }, [allRows, filter, query, documentColumns]);
 
   const exportRegister = async () => {
     if (!rows.length) return showToast('Nu există înregistrări de exportat pentru filtrul curent.', 'info');
     setExporting(true);
     try {
-      const workbook = buildWorkbook(rows);
+      const workbook = buildWorkbook(rows, documentColumns);
       const fileName = `registru-service-${dateFilePart(new Date())}.xlsx`;
       if (Platform.OS === 'web') {
         downloadWorkbookOnWeb(workbook, fileName);
@@ -181,13 +189,14 @@ export default function RegisterScreen() {
 
       {!state.loading && !state.error && rows.length ? <View style={[styles.exportHint, { backgroundColor: colors.surfaceMuted, borderColor: colors.border }]}>
         <Ionicons name="information-circle-outline" size={19} color={colors.primary} />
-        <AppText variant="caption" muted style={styles.exportHintText}>Exportul include filtrarea curentă într-un singur fișier Excel, cu foi separate pentru intrări, devize, ieșiri și certificate de garanție.</AppText>
+        <AppText variant="caption" muted style={styles.exportHintText}>Exportul include filtrarea curentă într-un singur fișier Excel, cu foi separate pentru documentele acestei proprietăți.</AppText>
       </View> : null}
     </View>
   </Screen>;
 }
 
 function RegisterTable({ rows, onOpen }: { rows: ServiceDocumentRegisterRow[]; onOpen: (row: ServiceDocumentRegisterRow) => void }) {
+  const documentColumns = useDocumentColumns();
   const { colors } = useAppTheme();
   return <Card style={styles.tableCard} elevated>
     <View style={[styles.tableHeader, { backgroundColor: colors.surfaceMuted, borderBottomColor: colors.border }]}>
@@ -234,14 +243,15 @@ function DocumentCell({ document, row }: { document: RegisterDocument; row: Serv
 }
 
 function MobileRegisterCard({ row, onPress }: { row: ServiceDocumentRegisterRow; onPress: () => void }) {
+  const documentColumns = useDocumentColumns();
   const { colors } = useAppTheme();
-  const completed = isComplete(row);
+  const completed = isComplete(row, documentColumns);
   return <Pressable accessibilityRole="button" accessibilityLabel={`Deschide reparația ${row.serviceSheetNumber}`} onPress={onPress} style={({ pressed }) => ({ opacity: pressed ? 0.76 : 1 })}>
     <Card elevated style={styles.mobileCard}>
       <View style={styles.mobileTop}>
         <View style={[styles.mobileRepairIcon, { backgroundColor: colors.primarySoft }]}><Ionicons name="construct-outline" size={20} color={colors.primary} /></View>
         <View style={styles.mobileHeading}>
-          <View style={styles.mobileNumberLine}><AppText variant="heading" numberOfLines={1}>{row.serviceSheetNumber}</AppText><View style={[styles.completionBadge, { backgroundColor: completed ? palette.successSoft : palette.warningSoft }]}><Ionicons name={completed ? 'checkmark-circle' : 'time-outline'} size={14} color={completed ? palette.success : palette.warning} /><AppText variant="caption" style={{ color: completed ? palette.success : '#B56A00', fontWeight: '800' }}>{completed ? 'Complet' : `${documentColumns.length - countDocuments(row)} lipsă`}</AppText></View></View>
+          <View style={styles.mobileNumberLine}><AppText variant="heading" numberOfLines={1}>{row.serviceSheetNumber}</AppText><View style={[styles.completionBadge, { backgroundColor: completed ? palette.successSoft : palette.warningSoft }]}><Ionicons name={completed ? 'checkmark-circle' : 'time-outline'} size={14} color={completed ? palette.success : palette.warning} /><AppText variant="caption" style={{ color: completed ? palette.success : '#B56A00', fontWeight: '800' }}>{completed ? 'Complet' : `${documentColumns.length - countDocuments(row, documentColumns)} lipsă`}</AppText></View></View>
           <AppText variant="label" numberOfLines={1}>{row.clientName || 'Client nespecificat'}</AppText>
           <AppText variant="caption" muted numberOfLines={1}>{equipmentLabel(row)}</AppText>
         </View>
@@ -275,12 +285,12 @@ function hasDocument(number?: string, at?: string) {
   return Boolean(number?.trim() || at);
 }
 
-function countDocuments(row: ServiceDocumentRegisterRow) {
-  return documentColumns.reduce((total, document) => total + (hasDocument(document.number(row), document.at(row)) ? 1 : 0), 0);
+function countDocuments(row: ServiceDocumentRegisterRow, columns: RegisterDocument[] = documentColumns) {
+  return columns.reduce((total, document) => total + (hasDocument(document.number(row), document.at(row)) ? 1 : 0), 0);
 }
 
-function isComplete(row: ServiceDocumentRegisterRow) {
-  return countDocuments(row) === documentColumns.length;
+function isComplete(row: ServiceDocumentRegisterRow, columns: RegisterDocument[] = documentColumns) {
+  return countDocuments(row, columns) === columns.length;
 }
 
 function normalizeSearch(value: string) {
@@ -319,7 +329,7 @@ function statusLabel(row: ServiceDocumentRegisterRow) {
   return row.status ? SERVICE_STATUS_LABELS[row.status] : '';
 }
 
-function buildWorkbook(rows: ServiceDocumentRegisterRow[]) {
+function buildWorkbook(rows: ServiceDocumentRegisterRow[], documentColumns: RegisterDocument[]) {
   const workbook = XLSX.utils.book_new();
   workbook.Props = { Title: 'Registru documente service', Subject: 'Fișe de intrare, devize finale, fișe de ieșire și certificate de garanție', Author: 'G-Shop', CreatedDate: new Date() };
   for (const document of documentColumns) {

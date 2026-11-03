@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Screen } from '@/components/ui/Screen';
 import { useProperty } from '@/contexts/PropertyContext';
+import { isCleaningProperty } from '@/utils/property';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -180,7 +181,13 @@ export default function QRScannerScreen() {
         hasSignature={Boolean(scanTarget.signatureUrl)}
         canSign={hasPermission('service_sheets.sign')}
         onClient={openClient}
-        onIntake={() => setIntakeOpen(true)}
+        onIntake={() => {
+          if (!isCleaningProperty(activeProperty)) return setIntakeOpen(true);
+          if (scanTarget?.existingSheet) return openDocument('INTAKE');
+          const clientId = scanTarget?.clientId;
+          setScanTarget(null);
+          if (clientId) router.replace(`/service/service-sheets/create?clientId=${clientId}`);
+        }}
         onFinalEstimate={() => openDocument('FINAL_ESTIMATE')}
         onExit={() => openDocument('EXIT')}
         onSignature={() => setSignatureOpen(true)}

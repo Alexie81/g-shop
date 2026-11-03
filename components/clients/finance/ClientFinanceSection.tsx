@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { DEFAULT_CURRENCY_CODE, findCurrency } from '@/constants/currencies';
 import { useAppTheme } from '@/contexts/ThemeContext';
+import { useProperty } from '@/contexts/PropertyContext';
+import { isCleaningProperty } from '@/utils/property';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { CommissionType } from '@/types';
 import {
@@ -55,6 +57,8 @@ export function ClientFinanceSection({
   onDeleteExpense,
 }: ClientFinanceSectionProps) {
   const { colors, isDark } = useAppTheme();
+  const { activeProperty } = useProperty();
+  const cleaning = isCleaningProperty(activeProperty);
   const { width } = useWindowDimensions();
   const mobile = width < 600;
   const normalizedValue = useMemo<ClientFinanceValue>(() => ({
@@ -189,7 +193,7 @@ export function ClientFinanceSection({
         /> : null}
         <View style={[styles.fieldGrid, mobile && styles.compactGap]}>
           <FinanceNumberField style={[styles.gridField, mobile && styles.gridFieldMobile]} label={`Preț lucrare (${currency.code})`} value={normalizedValue.workPrice} onChange={(next) => update('workPrice', next)} disabled={disabled} helper={mobile ? undefined : 'Valoarea principală a lucrării'} />
-          <FinanceNumberField style={[styles.gridField, mobile && styles.gridFieldMobile]} label={`Diagnosticare (${currency.code})`} value={normalizedValue.diagnosticFee} onChange={(next) => update('diagnosticFee', next)} disabled={disabled} />
+          <FinanceNumberField style={[styles.gridField, mobile && styles.gridFieldMobile]} label={`${cleaning ? 'Deplasare' : 'Diagnosticare'} (${currency.code})`} value={normalizedValue.diagnosticFee} onChange={(next) => update('diagnosticFee', next)} disabled={disabled} />
           <FinanceNumberField style={[styles.gridField, mobile && styles.gridFieldMobile]} label={`Avans încasat (${currency.code})`} value={normalizedValue.advancePaid} onChange={(next) => update('advancePaid', next)} disabled={disabled} helper={!mobile && normalizedValue.paymentStatus === 'PAID' ? 'Statusul Achitat marchează întregul total ca încasat' : undefined} />
           <FinanceNumberField style={[styles.gridField, mobile && styles.gridFieldMobile]} label="Reducere" value={normalizedValue.discountPercent} onChange={(next) => update('discountPercent', next)} disabled={disabled} percentage error={discountInvalid ? 'Reducerea trebuie să fie între 0 și 100%.' : undefined} />
         </View>
@@ -203,14 +207,14 @@ export function ClientFinanceSection({
 
       <Card style={[styles.formCard, !mobile && styles.formCardDesktop, mobile && styles.formCardMobile, mobile && styles.cardMobile]}>
         <SectionTitle icon="construct-outline" color={palette.purple} title="Costuri și defalcare" subtitle="Vizibil pentru echipă; costul efectiv rămâne intern" />
-        <FinanceNumberField label={`Cost efectiv piese (${currency.code})`} value={normalizedValue.actualPartsCost} onChange={(next) => update('actualPartsCost', next)} disabled={disabled} helper="Cost intern, scăzut din G-Shop Net" />
+        <FinanceNumberField label={`${cleaning ? 'Cost materiale / consumabile' : 'Cost efectiv piese'} (${currency.code})`} value={normalizedValue.actualPartsCost} onChange={(next) => update('actualPartsCost', next)} disabled={disabled} helper="Cost intern, scăzut din G-Shop Net" />
         <View style={[styles.internalDivider, { borderTopColor: colors.border }]}>
           <AppText variant="label">Defalcare afișată în fișa de service</AppText>
           <AppText variant="caption" muted>Informativă: nu se adună din nou la total.</AppText>
         </View>
         <View style={[styles.fieldGrid, mobile && styles.compactGap]}>
-          <FinanceNumberField style={[styles.gridField, mobile && styles.gridFieldMobile]} label={`Piese afișate (${currency.code})`} value={normalizedValue.displayedPartsCost} onChange={(next) => update('displayedPartsCost', next)} disabled={disabled} />
-          <FinanceNumberField style={[styles.gridField, mobile && styles.gridFieldMobile]} label={`Manoperă afișată (${currency.code})`} value={normalizedValue.displayedLaborCost} onChange={(next) => update('displayedLaborCost', next)} disabled={disabled} />
+          <FinanceNumberField style={[styles.gridField, mobile && styles.gridFieldMobile]} label={`${cleaning ? 'Materiale facturate' : 'Piese afișate'} (${currency.code})`} value={normalizedValue.displayedPartsCost} onChange={(next) => update('displayedPartsCost', next)} disabled={disabled} />
+          <FinanceNumberField style={[styles.gridField, mobile && styles.gridFieldMobile]} label={`${cleaning ? 'Servicii de curățare' : 'Manoperă afișată'} (${currency.code})`} value={normalizedValue.displayedLaborCost} onChange={(next) => update('displayedLaborCost', next)} disabled={disabled} />
         </View>
         {breakdownDiffers ? <View style={[styles.notice, { backgroundColor: `${palette.warning}13`, borderColor: `${palette.warning}50` }]}>
           <Ionicons name="information-circle-outline" size={20} color={palette.warning} />

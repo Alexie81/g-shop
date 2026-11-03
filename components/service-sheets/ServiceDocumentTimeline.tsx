@@ -1,4 +1,6 @@
 import { AppText } from '@/components/ui/AppText';
+import { useProperty } from '@/contexts/PropertyContext';
+import { isCleaningProperty } from '@/utils/property';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,8 +13,18 @@ const steps = [
   { number: 4, title: 'Garanție', description: 'Perioadă, certificat și confirmarea clientului', icon: 'shield-checkmark-outline' as const, color: palette.cyan },
 ];
 
+function useSteps() {
+  const { activeProperty } = useProperty();
+  return isCleaningProperty(activeProperty) ? [
+    { ...steps[0], title: 'Fișa de intrare', description: 'Client, articole, servicii și acceptare' },
+    { ...steps[1], title: 'Organizarea comenzii', description: 'Constatări, materiale și valori financiare' },
+    { ...steps[2], title: 'Fișa de ieșire', description: 'Servicii efectuate, plată și confirmare' },
+  ] : steps;
+}
+
 export function ServiceDocumentTimeline({ activeStep = 1 }: { activeStep?: 1 | 2 | 3 | 4 }) {
   const { colors } = useAppTheme();
+  const steps = useSteps();
   return <View style={[styles.timeline, { backgroundColor: colors.surface, borderColor: colors.border }]}>
     <View style={styles.titleRow}><Ionicons name="git-commit-outline" size={20} color={colors.primary} /><View style={styles.copy}><AppText variant="heading">Parcursul documentelor</AppText><AppText variant="caption" muted>Fiecare câmp este grupat după documentul în care va apărea.</AppText></View></View>
     <View style={styles.steps}>
@@ -33,7 +45,8 @@ export function ServiceDocumentTimeline({ activeStep = 1 }: { activeStep?: 1 | 2
 
 export function DocumentStageHeader({ step, title, description }: { step: 1 | 2 | 3 | 4; title: string; description: string }) {
   const { colors } = useAppTheme();
-  const definition = steps[step - 1];
+  const steps = useSteps();
+  const definition = steps[Math.min(step, steps.length) - 1];
   return <View style={styles.titleRow}>
     <View style={[styles.stageNumber, { backgroundColor: definition.color }]}><AppText variant="label" style={styles.stageNumberText}>{step}</AppText></View>
     <View style={styles.copy}><View style={styles.stageTitleLine}><AppText variant="heading">{title}</AppText><View style={[styles.documentBadge, { backgroundColor: `${definition.color}14` }]}><AppText variant="caption" style={{ color: definition.color, fontWeight: '900' }}>{definition.title}</AppText></View></View><AppText variant="caption" muted>{description}</AppText></View>
@@ -43,7 +56,8 @@ export function DocumentStageHeader({ step, title, description }: { step: 1 | 2 
 
 export function DocumentStageGroupHeader({ step }: { step: 1 | 2 | 3 | 4 }) {
   const { colors } = useAppTheme();
-  const definition = steps[step - 1];
+  const steps = useSteps();
+  const definition = steps[Math.min(step, steps.length) - 1];
   return <View style={[styles.groupHeader, { backgroundColor: `${definition.color}0D`, borderColor: `${definition.color}38` }]}>
     <View style={[styles.groupRail, { backgroundColor: definition.color }]} />
     <View style={[styles.groupIcon, { backgroundColor: `${definition.color}18` }]}><Ionicons name={definition.icon} size={22} color={definition.color} /></View>
