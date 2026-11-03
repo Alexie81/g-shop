@@ -5,58 +5,59 @@ import { useAppTheme } from '@/contexts/ThemeContext';
 import { appUpdateRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
 import { AppUpdateInfo } from '@/types';
+import { canOfferNativeUpdate, createUpdateCheckScheduler, findAvailableUpdate } from '@/utils/app-update-flow';
 import { isNativeUpdateAvailable, manifestReleaseVersion, releaseVersion } from '@/utils/app-version';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import * as Updates from 'expo-updates';
 import { useEffect, useRef, useState } from 'react';
-import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { AppState, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 export function AppUpdateCoordinator() {
   const { colors, isDark, isCleaning } = useAppTheme();
   const updates = Updates.useUpdates();
-  const checked = useRef(false);
+  const latestUpdates = useRef(updates);
+  latestUpdates.current = updates;
   const [visible, setVisible] = useState(false);
   const [published, setPublished] = useState<AppUpdateInfo | null>(null);
   const [otaReady, setOtaReady] = useState(false);
   const [otaVersion, setOtaVersion] = useState<string | null>(null);
 
   useEffect(() => {
-    if (checked.current || Platform.OS === 'web') return;
-    checked.current = true;
+    if (Platform.OS === 'web') return;
+    let disposed = false;
+    const scheduler = createUpdateCheckScheduler(async () => {
+      const result = await findAvailableUpdate({
+        getPublished: () => appUpdateRepository.get(),
+        nativeAvailable: (info) => canOfferNativeUpdate(Platform.OS, info, isNativeUpdateAvailable(info.latestBuildNumber, info.latestVersion)),
+        otaEnabled: Updates.isEnabled,
+        pendingOta: () => ({ available: latestUpdates.current.isUpdatePending, version: manifestReleaseVersion(latestUpdates.current.downloadedUpdate?.manifest) }),
+        checkOta: async () => {
+          const candidate = await Updates.checkForUpdateAsync();
+          return { available: candidate.isAvailable, version: candidate.isAvailable ? manifestReleaseVersion(candidate.manifest) : null };
+        },
+        fetchOta: () => Updates.fetchUpdateAsync(),
+      });
+      if (disposed || !result) return;
+      setPublished(result.published);
+      setOtaReady(result.kind === 'ota');
+      setOtaVersion(result.otaVersion);
+      setVisible(true);
+    });
+    scheduler.request(1200);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') scheduler.request();
+      else scheduler.cancelScheduled();
+    });
+    return () => {
+      disposed = true;
+      scheduler.dispose();
+      subscription.remove();
+    };
+  }, []);
 
-    const timer = setTimeout(() => {
-      void (async () => {
-        try {
-          const info = await appUpdateRepository.get();
-          const nativeUpdateAvailable = isNativeUpdateAvailable(info.latestBuildNumber, info.latestVersion);
-          let pendingOta = updates.isUpdatePending;
-          if (Updates.isEnabled && !updates.isUpdatePending) {
-            try {
-              const result = await Updates.checkForUpdateAsync();
-              if (result.isAvailable) {
-                setOtaVersion(manifestReleaseVersion(result.manifest));
-                await Updates.fetchUpdateAsync();
-                pendingOta = true;
-                setOtaReady(true);
-              }
-            }
-            catch { /* Verificarea versiunii native rămâne disponibilă fără serviciul OTA. */ }
-          }
-          if (!nativeUpdateAvailable && !pendingOta) return;
-          setPublished(info);
-          setVisible(true);
-        } catch {
-          // Pornirea aplicației nu trebuie blocată dacă verificarea nu este disponibilă.
-        }
-      })();
-    }, 1200);
-
-    return () => clearTimeout(timer);
-  }, [updates.isUpdatePending]);
-
-  const nativeUpdateAvailable = published ? isNativeUpdateAvailable(published.latestBuildNumber, published.latestVersion) : false;
+  const nativeUpdateAvailable = canOfferNativeUpdate(Platform.OS, published, published ? isNativeUpdateAvailable(published.latestBuildNumber, published.latestVersion) : false);
   const openNativeUpdate = () => {
     setVisible(false);
     if (!nativeUpdateAvailable && (otaReady || updates.isUpdatePending)) {
@@ -76,7 +77,7 @@ export function AppUpdateCoordinator() {
         <LinearGradient colors={isCleaning ? colors.brandGradient : isDark ? ['#32146F', '#075CFF'] : ['#6937E6', '#075CFF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
           <View pointerEvents="none" style={styles.glow} />
           <View style={styles.updateIcon}><Ionicons name="cloud-download-outline" size={31} color="#FFFFFF" /></View>
-          <View style={styles.heroCopy}><AppText variant="caption" style={[styles.eyebrow, isCleaning && { color: colors.brandText }]}>ACTUALIZARE G-SHOP</AppText><AppText variant="title" style={styles.heroTitle}>O versiune nouă este gata</AppText><AppText style={[styles.heroText, isCleaning && { color: colors.brandText }]}>Este disponibilă o versiune nouă a aplicației Android.</AppText></View>
+          <View style={styles.heroCopy}><AppText variant="caption" style={[styles.eyebrow, isCleaning && { color: colors.brandText }]}>ACTUALIZARE G-SHOP</AppText><AppText variant="title" style={styles.heroTitle}>O versiune nouă este gata</AppText><AppText style={[styles.heroText, isCleaning && { color: colors.brandText }]}>{nativeUpdateAvailable ? 'Este disponibilă o versiune nouă a aplicației Android.' : 'Actualizarea este pregătită. Repornește aplicația pentru a o aplica.'}</AppText></View>
           <Pressable accessibilityLabel="Mai târziu" onPress={() => setVisible(false)} style={styles.close}><Ionicons name="close" size={22} color="#FFFFFF" /></Pressable>
         </LinearGradient>
 

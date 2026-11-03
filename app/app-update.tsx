@@ -10,7 +10,8 @@ import { useAsyncData } from '@/hooks/useAsyncData';
 import { useBackToAdministration } from '@/hooks/useBackToAdministration';
 import { appUpdateRepository } from '@/repositories/api-repositories';
 import { palette, radius, spacing } from '@/theme/tokens';
-import { compareVersions, isNativeUpdateAvailable, releaseVersion } from '@/utils/app-version';
+import { canOfferNativeUpdate } from '@/utils/app-update-flow';
+import { compareVersions, isNativeUpdateAvailable, manifestReleaseVersion, releaseVersion } from '@/utils/app-version';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -28,8 +29,14 @@ export default function AppUpdateScreen() {
   const state = useAsyncData(() => appUpdateRepository.get(), []);
   const currentVersion = releaseVersion();
   const serverVersion = state.data?.latestVersion ?? currentVersion;
-  const updateAvailable = state.data ? isNativeUpdateAvailable(state.data.latestBuildNumber, state.data.latestVersion) || compareVersions(state.data.latestVersion, currentVersion) > 0 || updates.isUpdatePending : updates.isUpdatePending;
-  const latest = updateAvailable ? serverVersion : currentVersion;
+  const nativeUpdateAvailable = canOfferNativeUpdate(Platform.OS, state.data ?? null, state.data ? isNativeUpdateAvailable(state.data.latestBuildNumber, state.data.latestVersion) : false);
+  const downloadAvailable = nativeUpdateAvailable || (Platform.OS === 'web' && compareVersions(serverVersion, currentVersion) > 0);
+  const updateAvailable = downloadAvailable || updates.isUpdatePending;
+  const pendingOtaVersion = manifestReleaseVersion(updates.downloadedUpdate?.manifest);
+  const latest = downloadAvailable ? serverVersion : updates.isUpdatePending ? pendingOtaVersion ?? 'OTA disponibil' : currentVersion;
+  const versionDescription = updateAvailable
+    ? downloadAvailable || pendingOtaVersion ? `Poți trece acum de la versiunea ${currentVersion} la ${latest}.` : 'O actualizare OTA este pregătită. Repornește aplicația pentru a o aplica.'
+    : `Folosești versiunea ${currentVersion}, cea mai nouă versiune publicată.`;
 
   const download = async () => {
     const url = state.data?.downloadUrl?.trim();
@@ -41,6 +48,11 @@ export default function AppUpdateScreen() {
     if (installing) return;
     setInstalling(true);
     try {
+      // A new SDK/runtime requires the APK, even when an older OTA is ready.
+      if (nativeUpdateAvailable) {
+        await download();
+        return;
+      }
       if (Platform.OS !== 'web' && Updates.isEnabled) {
         if (updates.isUpdatePending) {
           showToast('Actualizarea este pregătită. Aplicația se va redeschide acum.', 'info');
@@ -55,10 +67,10 @@ export default function AppUpdateScreen() {
           return;
         }
       }
-      if (updateAvailable) await download();
+      if (downloadAvailable) await download();
       else showToast('Ai deja cea mai nouă versiune disponibilă.', 'success');
     } catch {
-      if (updateAvailable) await download();
+      if (downloadAvailable) await download();
       else showToast('Actualizarea nu a putut fi verificată acum.', 'error');
     } finally {
       setInstalling(false);
@@ -70,7 +82,7 @@ export default function AppUpdateScreen() {
       <LinearGradient onLayout={(event) => setHeroHeight(event.nativeEvent.layout.height)} colors={isCleaning ? colors.brandGradient : updateAvailable ? ['#5B21B6', '#075CFF'] : ['#075CFF', '#08A7C7']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.hero, styles.fixedHero]}>
         <View pointerEvents="none" style={styles.orb} />
         <View style={styles.appIcon}><Ionicons name="cloud-download-outline" size={38} color="#FFFFFF" /></View>
-        <View style={styles.heroCopy}><AppText variant="caption" style={[styles.eyebrow, isCleaning && { color: colors.brandText }]}>G-SHOP PENTRU ANDROID</AppText><AppText variant="title" style={styles.heroTitle}>{updateAvailable ? 'Este disponibilă o versiune nouă' : 'Aplicația este actualizată'}</AppText><AppText style={[styles.heroSubtitle, isCleaning && { color: colors.brandText }]}>{updateAvailable ? `Poți trece acum de la versiunea ${currentVersion} la ${latest}.` : `Folosești versiunea ${currentVersion}, cea mai nouă versiune publicată.`}</AppText></View>
+        <View style={styles.heroCopy}><AppText variant="caption" style={[styles.eyebrow, isCleaning && { color: colors.brandText }]}>G-SHOP PENTRU ANDROID</AppText><AppText variant="title" style={styles.heroTitle}>{updateAvailable ? 'Este disponibilă o versiune nouă' : 'Aplicația este actualizată'}</AppText><AppText style={[styles.heroSubtitle, isCleaning && { color: colors.brandText }]}>{versionDescription}</AppText></View>
       </LinearGradient>
 
       <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, { paddingTop: heroHeight + spacing.xs }]} refreshControl={<RefreshControl refreshing={state.refreshing} onRefresh={() => void state.reload(true)} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>
@@ -84,7 +96,7 @@ export default function AppUpdateScreen() {
         </Card>
 
         <Card style={styles.section} elevated>
-          <View style={styles.sectionHeader}><View style={[styles.sectionIcon, { backgroundColor: `${palette.purple}16` }]}><Ionicons name="sparkles-outline" size={22} color={palette.purple} /></View><View style={styles.sectionCopy}><AppText variant="heading">Ce este nou</AppText><AppText variant="caption" muted>Noutățile incluse în versiunea {latest}.</AppText></View></View>
+          <View style={styles.sectionHeader}><View style={[styles.sectionIcon, { backgroundColor: `${palette.purple}16` }]}><Ionicons name="sparkles-outline" size={22} color={palette.purple} /></View><View style={styles.sectionCopy}><AppText variant="heading">Ce este nou</AppText><AppText variant="caption" muted>{updates.isUpdatePending && !downloadAvailable && !pendingOtaVersion ? 'Actualizarea OTA este pregătită pentru instalare.' : `Noutățile incluse în versiunea ${latest}.`}</AppText></View></View>
           <View style={styles.notes}>{(state.data?.releaseNotes.length ? state.data.releaseNotes : ['Îmbunătățiri de stabilitate și experiență.']).map((note, index) => <View key={`${index}-${note}`} style={styles.note}><View style={[styles.noteIndex, { backgroundColor: colors.primarySoft }]}><AppText variant="caption" style={{ color: colors.primary, fontWeight: '800' }}>{index + 1}</AppText></View><AppText style={styles.noteText}>{note}</AppText></View>)}</View>
           {state.data?.publishedAt ? <AppText variant="caption" muted>Publicată la {state.data.publishedAt}</AppText> : null}
         </Card>
