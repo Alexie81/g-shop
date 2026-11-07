@@ -1,5 +1,7 @@
 import { ServiceDocumentEditorModal } from '@/components/service-sheets/ServiceDocumentEditorModal';
 import { CleaningDocumentEditorModal } from '@/components/service-sheets/CleaningDocumentEditorModal';
+import { CleaningBusinessCardPanel } from '@/components/cleaning/CleaningBusinessCardPanel';
+import { cleaningDossierUrl } from '@/services/cleaning-business-card';
 import { useProperty } from '@/contexts/PropertyContext';
 import { isCleaningProperty } from '@/utils/property';
 import { ModalSafeBottom } from '@/components/ui/ModalSafeBottom';
@@ -117,6 +119,14 @@ export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style, 
       return;
     }
     if (!phone) return;
+    if (cleaning) {
+      const url = cleaningDossierUrl(available[0]?.document?.url ?? '', sheet.id);
+      if (!url) { showToast('Linkul dosarului nu este disponibil. Reîncarcă documentele.', 'error'); return; }
+      const message = `Bună ziua! Vă trimitem dosarul complet al comenzii ${sheet.number}: fișa de intrare, fișa de ieșire și cartea noastră de vizită.\n\n${url}`;
+      try { await Linking.openURL(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`); }
+      catch { showToast('WhatsApp nu a putut fi deschis.', 'error'); }
+      return;
+    }
     const lines = available.map(({ definition, document }) => `• ${document?.label || definition.label}: ${document?.url}`);
     const message = `Bună ziua! Vă trimitem dosarul complet al ${cleaning ? 'comenzii' : 'reparației'} ${sheet.number}:\n\n${lines.join('\n')}`;
     try { await Linking.openURL(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`); }
@@ -171,10 +181,12 @@ export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style, 
             style={styles.whatsappAction}
           />;
         })}</View>
-        <Button label={`Trimite toate cele ${definitions.length} documente`} icon="logo-whatsapp" disabled={!phone || !state.data} onPress={() => void sendAll()} />
+        <Button label={cleaning ? 'Trimite dosarul complet' : `Trimite toate cele ${definitions.length} documente`} icon="logo-whatsapp" disabled={!phone || !state.data} onPress={() => void sendAll()} />
+        {cleaning && allReady ? <AppText variant="caption" muted>Un singur PDF: intrare, ieșire și carte de vizită.</AppText> : null}
         {!allReady ? <AppText variant="caption" muted style={styles.whatsappHint}>Generează toate cele {definitions.length} documente pentru trimiterea dosarului complet sau trimite individual documentele disponibile.</AppText> : null}
       </View>
       </> : null}
+      <CleaningBusinessCardPanel />
     </Card>
 
     {cleaning ? <CleaningDocumentEditorModal

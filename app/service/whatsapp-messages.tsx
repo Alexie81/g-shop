@@ -1,4 +1,5 @@
 import { AppHeader } from '@/components/layout/AppHeader';
+import { CleaningBusinessCardPanel } from '@/components/cleaning/CleaningBusinessCardPanel';
 import { AppText } from '@/components/ui/AppText';
 import { KeyboardAwareScrollView } from '@/components/ui/KeyboardAwareScrollView';
 import { Button } from '@/components/ui/Button';
@@ -86,6 +87,7 @@ export default function WhatsAppMessagesScreen() {
       <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, { paddingTop: heroHeight + spacing.xs }]} refreshControl={<RefreshControl refreshing={state.refreshing} onRefresh={() => void state.reload(true)} tintColor={colors.primary} />} showsVerticalScrollIndicator={false}>
         <View style={[styles.sheet, mobile && styles.sheetMobile, { backgroundColor: colors.background, shadowColor: colors.shadow }]}>
           <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+          <CleaningBusinessCardPanel />
           <View style={styles.sectionHeading}>
             <View style={[styles.sectionIcon, { backgroundColor: '#25D36618' }]}><Ionicons name="chatbubbles-outline" size={22} color="#12A653" /></View>
             <View style={styles.sectionCopy}><AppText variant="title">Mesajele contului tău</AppText><AppText variant="caption" muted>Private pentru utilizatorul conectat și disponibile în fiecare client</AppText></View>
