@@ -1,0 +1,9 @@
+<?php declare(strict_types=1); header('X-Content-Type-Options: nosniff'); ?>
+<!doctype html><html lang="ro"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Curatatorie Canapele · București și Ilfov</title>
+<meta name="description" content="Curățare profesională la domiciliu: canapele, saltele, fotolii, scaune tapițate, covoare și mochete. București și Ilfov. 0726 049 278.">
+<style>*{box-sizing:border-box}body{margin:0;padding:24px 16px;background:#f6f3ed;color:#18201d;font-family:system-ui,sans-serif}main{max-width:760px;margin:auto}img{display:block;width:100%;height:auto;border-radius:18px}nav{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin:20px 0}a{color:#a53800;font-weight:650}nav a{padding:12px 18px;background:#fff;border:1px solid #efded0;border-radius:12px;text-decoration:none}nav a:first-child{background:#ff5700;color:white}p{text-align:center;line-height:1.6}h1{font-size:22px;text-align:center}</style></head><body><main>
+<h1>Curățare profesională la domiciliu</h1>
+<img src="assets/cleaning/business-card.png" width="1055" height="1491" alt="Curatatorie Canapele — curățare canapele, saltele, fotolii, scaune, covoare și mochete, curățenie și menaj. București și Ilfov. Telefon 0726 049 278.">
+<nav aria-label="Contact și descărcare"><a href="tel:+40726049278">Sună: 0726 049 278</a><a href="https://wa.me/40726049278?text=Bun%C4%83%20ziua!%20Doresc%20o%20ofert%C4%83%20pentru%20cur%C4%83%C8%9Bare.">Cere o ofertă pe WhatsApp</a><a href="assets/cleaning/business-card.png" download="Curatatorie-Canapele.png">Descarcă imaginea</a><a href="index.php/public/cleaning-business-card.pdf">Deschide PDF</a></nav>
+<p><a href="https://curatatorie-canapele.ro">curatatorie-canapele.ro</a><br><a href="mailto:contact@curatatorie-canapele.ro">contact@curatatorie-canapele.ro</a></p>
+</main></body></html>

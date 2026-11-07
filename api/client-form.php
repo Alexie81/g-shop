@@ -64,6 +64,12 @@ $token = preg_replace('/[^a-fA-F0-9-]/', '', (string)($_GET['token'] ?? ''));
         </div>
       </section>
 
+      <section id="cleaningPromotion" class="card hidden" style="overflow:hidden;padding:0">
+        <a id="cleaningDossier" class="document-link hidden" target="_blank" rel="noopener"><span class="document-link-copy"><strong>Deschide dosarul complet</strong><small>Fișă de intrare, fișă de ieșire și carte de vizită · un singur PDF</small></span><span class="document-link-arrow">›</span></a>
+        <h2 style="font-size:18px;margin:20px">Curățare profesională la domiciliu</h2>
+        <a id="cleaningPromotionLink" target="_blank" rel="noopener"><img id="cleaningPromotionImage" loading="lazy" width="1055" height="1491" style="display:block;width:100%;height:auto" alt="Curatatorie Canapele — serviciile noastre în București și Ilfov. 0726 049 278."></a>
+      </section>
+
       <section class="status-card" id="statusCard"><div class="status-icon" id="statusIcon">●</div><div class="status-copy"><h2 class="status-title" id="statusLabel">Client înregistrat</h2><p class="status-description" id="statusDescription"></p></div></section>
 
       <section id="repairProgress">
@@ -110,6 +116,10 @@ $token = preg_replace('/[^a-fA-F0-9-]/', '', (string)($_GET['token'] ?? ''));
     function renderBase(data){const repair=data.repair;const current=repair?STATUS[repair.status]:STATUS.NEW;document.documentElement.style.setProperty('--status',current.color);document.documentElement.style.setProperty('--status-soft',current.soft);setText('propertyName',data.propertyName||'Urmărire reparație');document.title='Status reparație · '+(data.propertyName||'G-Shop');setText('sheetNumber',repair?.number||'În curs de creare');setText('equipment',repair?[repair.brand,repair.model,repair.equipment].filter(Boolean).join(' · ')||'Echipament înregistrat':'Fișa de service se pregătește');setText('receivedAt',formatDate(repair?.receivedAt));setText('updatedAt',formatDate(repair?.updatedAt||data.client.updatedAt,true));setText('statusIcon',current.icon);setText('statusLabel',current.label);setText('statusDescription',current.description);setText('eventDate',formatDate(repair?.updatedAt||data.client.updatedAt,true));setText('eventTitle',current.event);setText('eventDescription',current.description);renderDocuments(repair);renderProgress(repair?.status||'NEW');renderContact(data)}
     function render(data){
       const cleaning=data.propertyDomain==='curatatorie-canapele.ro';
+      const promotionImage=cleaning?safeDocumentUrl(data.promotion?.imageUrl):'';
+      if(promotionImage){$('cleaningPromotionImage').src=promotionImage;$('cleaningPromotionLink').href=safeDocumentUrl(data.promotion?.pageUrl);show('cleaningPromotion')}else hide('cleaningPromotion');
+      const dossier=cleaning?safeDocumentUrl(data.repair?.dossierUrl):'';
+      if(dossier){$('cleaningDossier').href=dossier;show('cleaningDossier')}else hide('cleaningDossier');
       if(cleaning){
         const descriptions={NEW:['Comanda a fost înregistrată.','Comandă înregistrată'],WAITING:['Lucrarea așteaptă programarea echipei.','În așteptare'],VERIFYING:['Echipa verifică articolele și suprafețele incluse.','Constatare inițială'],IN_PROGRESS:['Echipa efectuează serviciile de curățare.','Curățarea a început'],WAITING_PARTS:['Se pregătesc materialele necesare lucrării.','Pregătire materiale'],COMPLETED:['Serviciile de curățare au fost efectuate.','Lucrare finalizată'],DELIVERED:['Finalizarea lucrării a fost confirmată de client.','Lucrare confirmată'],CANCELLED:['Comanda a fost anulată.','Comandă anulată']};
         for(const [key,values] of Object.entries(descriptions)){STATUS[key].description=values[0];STATUS[key].event=values[1]}

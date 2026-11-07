@@ -4,6 +4,7 @@ require __DIR__ . '/src/bootstrap.php';
 require __DIR__ . '/src/push_notifications.php';
 require __DIR__ . '/src/sales_documents.php';
 require __DIR__ . '/src/cleaning_orders.php';
+require_once __DIR__ . '/src/cleaning_promotion.php';
 
 $allowedOrigins = array_map('trim', explode(',', env_value('CORS_ORIGINS', '*')));
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '*';
@@ -2122,6 +2123,8 @@ try {
     if ($method === 'POST' && path_match('/clients/{id}/qr/use', $path, $params)) { $user=require_permission('qr.generate');$client=get_client($params['id']);ensure_property($client['propertyId'],$user);if(empty($client['qr']))fail('QR inexistent.',404);$now=now_utc();db()->prepare("UPDATE client_qr SET status='USED',used_at=?,updated_at=?,updated_by=? WHERE id=?")->execute([$now,$now,uuid_bin($user['id']),uuid_bin($client['qr']['id'])]);audit_log('QR_MARKED_USED','qr','Cod QR marcat ca folosit','ClientQR',$client['qr']['id'],$client['propertyId'],null,null,$user);respond(client_for_user(get_client($client['id']),$user)); }
     if ($method === 'GET' && path_match('/clients/{id}/intake', $path, $params)) { $user=require_permission('clients.view');$client=get_client($params['id']);ensure_property($client['propertyId'],$user);$stmt=db()->prepare('SELECT payload FROM client_intakes WHERE client_id=? AND is_active=1 ORDER BY submitted_at DESC LIMIT 1');$stmt->execute([uuid_bin($client['id'])]);$payload=$stmt->fetchColumn();respond($payload?json_decode($payload,true):null); }
 
+    if ($method==='GET' && $path==='/public/cleaning-business-card.pdf')cleaning_stream_pdf(cleaning_package_pdf(),'Curatatorie-Canapele.pdf');
+    if ($method==='GET' && path_match('/public/client-form/{token}/dossier/{sheetId}', $path, $params))cleaning_public_dossier((string)$params['token'],(string)$params['sheetId']);
     if ($method==='GET' && path_match('/public/client-form/{token}/documents/{type}', $path, $params))stream_service_document_row(public_service_document_row((string)$params['token'],(string)$params['type']));
     if ($method==='GET' && path_match('/public/client-form/{token}/service-sheet', $path, $params))stream_service_document_row(public_service_document_row((string)$params['token'],'INTAKE'));
     if ($method==='GET' && path_match('/public/client-form/{token}', $path, $params)) {
@@ -2154,6 +2157,7 @@ try {
         respond([
             'propertyName'=>$qr['property_name'],
             'propertyDomain'=>$qr['property_domain'],
+            'promotion'=>$qr['property_domain']===CLEANING_DOMAIN?cleaning_promotion_links():null,
             'contact'=>[
                 'phone'=>$contactPhone?:null,
                 'email'=>$contactEmail?:null,
@@ -2177,6 +2181,7 @@ try {
                 'updatedAt'=>iso_date($sheet['updated_at']),
                 'documents'=>$documents,
                 'serviceSheetUrl'=>$intakeUrl,
+                'dossierUrl'=>$qr['property_domain']===CLEANING_DOMAIN && count(array_filter($documents,fn($d)=>in_array($d['type'],['INTAKE','EXIT'],true)&&!empty($d['available'])))===2?cleaning_dossier_url($token,(string)$sheet['id']):null,
             ]:null,
         ]);
     }

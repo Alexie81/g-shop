@@ -1356,7 +1356,7 @@ function generate_service_document_pdf(
 
     $templateRoot = __DIR__ . '/../assets/service-document-templates';
     $cleaning = is_array($snapshot['cleaning'] ?? null);
-    $templates = $cleaning ? ['brand' => __DIR__ . '/../assets/cleaning/logo.png'] : match ($normalizedType) {
+    $templates = $cleaning ? ['brand' => __DIR__ . '/../assets/cleaning/logo.png', 'businessCard' => __DIR__.'/../assets/cleaning/business-card.png'] : match ($normalizedType) {
         'INTAKE' => ['intake' => $templateRoot . '/intake.pdf'],
         'FINAL_ESTIMATE' => [
             'intro' => $templateRoot . '/final-estimate-intro.pdf',
@@ -1390,6 +1390,7 @@ function generate_service_document_pdf(
         'stamp' => gshop_pdf_source_identity($stampPath),
         'templates' => $templateIdentities,
         'cleaningRenderer' => $cleaning ? hash_file('sha256', __DIR__.'/cleaning_document_pdf.php') : null,
+        'cleaningPromotion' => $cleaning ? hash_file('sha256', __DIR__.'/cleaning_promotion.php') : null,
     ]));
     $identity = gshop_pdf_string($document['id'] ?? $document['number'] ?? 'document');
     $safeIdentity = trim((string)preg_replace('/[^A-Za-z0-9_-]+/', '-', $identity), '-_') ?: 'document';
@@ -1436,6 +1437,8 @@ function generate_service_document_pdf(
                 require_once __DIR__ . '/cleaning_document_pdf.php';
                 $pdf->SetTitle(($normalizedType === 'INTAKE' ? 'Fișă de intrare a comenzii ' : 'Fișă de ieșire a comenzii ') . ($document['number'] ?? ''), true);
                 gshop_cleaning_render($pdf, $normalizedType, $document, $snapshot, $signature);
+                require_once __DIR__ . '/cleaning_promotion.php';
+                cleaning_append_business_card($pdf);
             } elseif ($normalizedType === 'INTAKE') {
                 gshop_document_add_template($pdf, $templates['intake'], 1);
                 gshop_document_overlay_service_template_brand($pdf, $snapshot, 'INTAKE');

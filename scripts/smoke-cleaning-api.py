@@ -102,7 +102,33 @@ try:
     other=request('/clients?propertyId=11111111-1111-4111-8111-111111111111&query='+tag,base=MAIN)
     assert not other['data']
     checks.append('QR URL, scan resolution and property isolation')
+    # Derive the token from the document route without assuming the QR landing URL format.
+    token=intake['url'].split('/public/client-form/')[1].split('/')[0]
+    public=request('/public/client-form/'+token,auth=False)
+    assert public['promotion']['imageUrl'].startswith(BASE+'/assets/cleaning/business-card.png')
+    dossier=public['repair']['dossierUrl']
+    assert dossier.endswith('/dossier/'+sheet_id)
+    with urllib.request.urlopen(dossier,timeout=35) as response:
+        dossier_bytes=response.read();reader=PdfReader(io.BytesIO(dossier_bytes))
+        assert len(reader.pages)==3
+        assert 'FIȘĂ DE INTRARE A COMENZII' in reader.pages[0].extract_text()
+        assert 'FIȘĂ DE IEȘIRE A COMENZII' in reader.pages[1].extract_text()
+        assert len(reader.pages[-1]['/Annots'])==5
+        assert '396,00' in reader.pages[0].extract_text() and '486,00' in reader.pages[1].extract_text()
+        assert reader.pages[0].get_contents().get_data().count(b' Do') >= 2
+        (ROOT/'tmp/pdfs/cleaning-live-dossier.pdf').write_bytes(dossier_bytes)
+    request('/public/client-form/'+str(uuid.uuid4())+'/dossier/'+sheet_id,expected=404,auth=False)
+    request('/public/client-form/'+token+'/dossier/'+str(uuid.uuid4()),expected=404,auth=False)
+    with urllib.request.urlopen(BASE+'/index.php/public/cleaning-business-card.pdf',timeout=35) as response:
+        assert len(PdfReader(io.BytesIO(response.read())).pages)==1
+    for signed_doc in signed_docs:
+        with urllib.request.urlopen(signed_doc['url'],timeout=35) as response:
+            pages=PdfReader(io.BytesIO(response.read())).pages
+            assert len(pages)==2 and len(pages[-1]['/Annots'])==5
+    checks.append('public advert, two-page individual PDFs, three-page dossier, saved values, private token/order access')
     request('/service-sheets/'+sheet_id+'/documents/EXIT','DELETE')
+    request('/public/client-form/'+token+'/dossier/'+sheet_id,expected=404,auth=False)
+    assert request('/public/client-form/'+token,auth=False)['repair']['dossierUrl'] is None
     slots=request('/service-sheets/'+sheet_id+'/documents')
     assert not next(d for d in slots if d['type']=='EXIT')['available']
     assert next(d for d in slots if d['type']=='INTAKE')['available']
