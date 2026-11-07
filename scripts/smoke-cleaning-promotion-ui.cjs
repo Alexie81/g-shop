@@ -44,6 +44,24 @@ const root = path.resolve(__dirname, '..');
     await page.goto('https://curatatorie-canapele.ro/app-api/cleaning-business-card.php');
     assert.ok(await page.locator('img').evaluate((img) => img.complete && img.naturalWidth === 1055));
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    const testToken = '44444444-4444-4444-8444-444444444499';
+    const base = 'https://curatatorie-canapele.ro/app-api';
+    const dossier = `${base}/index.php/public/client-form/${testToken}/dossier/${testToken}`;
+    await page.route(`**/index.php/public/client-form/${testToken}`, (route) => route.fulfill({ json: { data: {
+      propertyName: 'Curatatorie Canapele', propertyDomain: 'curatatorie-canapele.ro', contact: { phone: '0726049278' },
+      client: { name: 'TEST PREVIZUALIZARE', updatedAt: '2026-11-07T10:00:00Z' },
+      promotion: { imageUrl: `${base}/assets/cleaning/business-card.png`, pageUrl: `${base}/cleaning-business-card.php` },
+      repair: { number: 'TEST-EXEMPLU', equipment: 'Canapea', status: 'COMPLETED', receivedAt: '2026-11-07T08:00:00Z', updatedAt: '2026-11-07T10:00:00Z', dossierUrl: dossier,
+        documents: ['INTAKE', 'EXIT'].map((type) => ({ type, available: true, url: `${base}/index.php/public/client-form/${testToken}/documents/${type.toLowerCase()}` })) },
+    } } }));
+    await page.goto(`${base}/client-form.php?token=${testToken}`);
+    await page.locator('#cleaningPromotion').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#cleaningDossier').getAttribute('href'), dossier);
+    assert.equal(await page.locator('#document-INTAKE').isVisible(), true);
+    assert.equal(await page.locator('#document-EXIT').isVisible(), true);
+    assert.equal(await page.locator('#document-WARRANTY').isVisible(), false);
+    assert.ok(await page.locator('#repairDocuments').evaluate((node) => Boolean(node.compareDocumentPosition(document.getElementById('cleaningPromotion')) & Node.DOCUMENT_POSITION_FOLLOWING)));
+    await page.screenshot({ path: path.join(root, 'tmp/pdfs/cleaning-public-documents.png'), fullPage: true });
     assert.deepEqual(errors, []);
     console.log('OK: mobile business-card UI, editable message, actual PNG + text payload, other-property isolation, public card page; no messages sent.');
   } catch (error) {
