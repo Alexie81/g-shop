@@ -108,7 +108,9 @@ function gshop_cleaning_render(GshopServiceDocumentPdf $pdf,string $type,array $
     $y=cleaning_table_header($pdf,$y,$currency);
     $widths=[27,123,176,39,73,93.2756];
     foreach($details['items'] as$i=>$item){
-        $values=[str_pad((string)($i+1),2,'0',STR_PAD_LEFT),$item['article'],$item['service'],rtrim(rtrim(number_format($item['quantity'],2,',',''),'0'),','),$money($item['unitPrice']),$money($item['totalPrice'])];
+        $unit=$money($item['unitPrice']);
+        if(abs(round((float)$item['unitPrice'],2)*(float)$item['quantity']-(float)$item['totalPrice'])>.004)$unit=rtrim(number_format((float)$item['unitPrice'],8,',','.'),'0');
+        $values=[str_pad((string)($i+1),2,'0',STR_PAD_LEFT),$item['article'],$item['service'],rtrim(rtrim(number_format($item['quantity'],2,',',''),'0'),','),$unit,$money($item['totalPrice'])];
         $lines=[];$height=30;
         foreach($values as$j=>$value){$lines[$j]=cleaning_wrap($pdf,$value,$widths[$j]-12,9.5);$height=max($height,count($lines[$j])*12+12);}
         if($y+$height>755){cleaning_header($pdf,$type,$document);cleaning_section($pdf,$pageTop,'02','ARTICOLE ȘI SERVICII - CONTINUARE');$y=cleaning_table_header($pdf,$pageTop+35,$currency);}

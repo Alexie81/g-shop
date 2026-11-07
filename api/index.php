@@ -996,6 +996,7 @@ function validated_service_document_estimated_costs(mixed $value, array $base): 
     return['diagnosticFee'=>$diagnostic,'partsCost'=>$parts,'laborCost'=>$labor,'advancePaid'=>$advance,'discountPercent'=>$discount,'currencyCode'=>$currency,'subtotal'=>$subtotal,'discountAmount'=>$discountAmount,'totalDue'=>$total,'receivedAmount'=>$received,'remainingDue'=>$remaining];
 }
 function map_service_document(array $row, ?string $publicToken = null, bool $public = false): array {
+    $row=refresh_cleaning_document_row($row);
     $item=entity_base($row);$definition=service_document_definitions()[$item['type']];
     $cleaningSnapshot=json_decode((string)($row['snapshot_json']??''),true);
     if(is_array($cleaningSnapshot['cleaning']??null))$item['cleaning']=$cleaningSnapshot['cleaning'];
@@ -1089,6 +1090,7 @@ function require_service_document_write(bool $existing = false): array {
     return$user;
 }
 function stream_service_document_row(array $row): void {
+    $row=refresh_cleaning_document_row($row);
     try {
         $snapshot=json_decode((string)($row['snapshot_json']??''),true);
         if(is_array($snapshot)&&!empty($row['service_sheet_id'])){
@@ -1139,6 +1141,7 @@ function rebalance_service_document_items(array $source, float $displayedTarget,
     unset($item);return$items;
 }
 function regenerate_client_final_estimates_from_financials(string $clientId, array $user): int {
+    if(is_cleaning_property((string)get_client($clientId)['propertyId']))return refresh_cleaning_documents_from_financials($clientId,$user);
     $client=get_client($clientId);$bundle=client_financial_bundle($client);$financial=$bundle['financials'];$stmt=db()->prepare('SELECT '.uuid_sql('id').' id FROM service_sheets WHERE client_id=? AND is_active=1');$stmt->execute([uuid_bin($clientId)]);$count=0;
     foreach($stmt->fetchAll()as$sheetRow){
         $sheetId=(string)$sheetRow['id'];$row=service_document_existing_row($sheetId,'FINAL_ESTIMATE');if(!$row)continue;$snapshot=json_decode((string)($row['snapshot_json']??''),true);if(!is_array($snapshot))throw new RuntimeException('Snapshotul devizului final nu este valid.');$sheet=get_sheet($sheetId);

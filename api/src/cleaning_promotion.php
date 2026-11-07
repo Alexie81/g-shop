@@ -29,8 +29,8 @@ function cleaning_append_business_card(GshopServiceDocumentPdf $pdf): void {
     ]as[$left,$top,$w,$h,$url])$pdf->Link($x+$width*$left,$y+$height*$top,$width*$w,$height*$h,$url);
 }
 
-/** Render the saved intake/exit snapshots, then append exactly one advert.
- * No financial data, numbers, dates or signatures are changed by sharing.
+/** Render intake/exit snapshots refreshed by the caller, then append one advert.
+ * Sharing never changes canonical finances, document numbers, dates or signatures.
  * The dossier is streamed, so deleted documents cannot survive in a public cache.
  */
 function cleaning_package_pdf(array $entries=[],?string $signaturePath=null): string {
@@ -76,11 +76,20 @@ function cleaning_public_dossier(string $token,string $sheetId): never {
     ensure_service_documents_table(db());$stmt=db()->prepare(service_document_select()." WHERE d.service_sheet_id=? AND d.property_id=? AND d.type IN ('INTAKE','EXIT') AND d.status='PUBLISHED' AND d.is_active=1 ORDER BY FIELD(d.type,'INTAKE','EXIT')");
     $stmt->execute([uuid_bin($sheetId),uuid_bin($sheet['property_id'])]);$rows=$stmt->fetchAll();
     if(count($rows)!==2)fail('Generează fișa de intrare și fișa de ieșire înainte de trimiterea dosarului complet.',404);
-    $entries=[];
-    foreach($rows as$row){
-        $snapshot=json_decode((string)$row['snapshot_json'],true);
-        if(!is_array($snapshot['cleaning']??null))fail('Dosarul nu este disponibil.',404);
-        $entries[]=['type'=>$row['type'],'snapshot'=>$snapshot,'document'=>['id'=>$row['id'],'number'=>$row['number'],'documentAt'=>iso_date($row['document_at']),'agreementAt'=>iso_date($row['agreement_at'])]];
-    }
+    $entries=[];$fileChanges=[];$pdo=db();$pdo->beginTransaction();
+    try{
+        // Both documents must use the same financial revision during concurrent saves.
+        $pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE')->execute([uuid_bin((string)$rows[0]['client_id'])]);
+        foreach($rows as$row){
+            $previousPath=$row['file_path'];
+            $row=refresh_cleaning_document_row($row);
+            if($previousPath!==$row['file_path'])$fileChanges[]=[$previousPath,$row['file_path']];
+            $snapshot=json_decode((string)$row['snapshot_json'],true);
+            if(!is_array($snapshot['cleaning']??null))throw new RuntimeException('Dosarul nu este disponibil.');
+            $entries[]=['type'=>$row['type'],'snapshot'=>$snapshot,'document'=>['id'=>$row['id'],'number'=>$row['number'],'documentAt'=>iso_date($row['document_at']),'agreementAt'=>iso_date($row['agreement_at'])]];
+        }
+        $pdo->commit();
+    }catch(Throwable$error){if($pdo->inTransaction())$pdo->rollBack();foreach($fileChanges as[$old,$new])remove_obsolete_service_document_file($new,$old);throw$error;}
+    foreach($fileChanges as[$old,$new])remove_obsolete_service_document_file($old,$new);
     cleaning_stream_pdf(cleaning_package_pdf($entries,service_document_signature_path($sheetId)),'dosar-comanda-'.$sheetId.'.pdf');
 }

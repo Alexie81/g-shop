@@ -62,7 +62,9 @@ function validated_cleaning_details(mixed $input, array $sheet, array $client, a
         $article = company_detail_text($position['article'] ?? '', 'Articolul / dimensiunile',180,true);
         $service = company_detail_text($position['service'] ?? '', 'Serviciul și suprafețele',600,true);
         $quantity = service_document_item_number($position['quantity'] ?? 1,'Cantitatea',100000,true);
-        $unit = service_document_item_number($position['unitPrice'] ?? 0,'Prețul unitar',999999999.99);
+        service_document_item_number($position['unitPrice'] ?? 0,'Prețul unitar',999999999.99);
+        // Automatic allocation of a changed service total can require fractions of a cent.
+        $unit = round((float)str_replace(',','.',(string)($position['unitPrice'] ?? 0)),8);
         $total = round($quantity * $unit,2);
         if ($total > 999999999.99) fail('Totalul articolului depășește limita permisă.',422);
         $services += $total;
@@ -95,6 +97,77 @@ function cleaning_default_details(array $sheet, array $client, array $bundle): a
         'interventionAt'=>$sheet['receivedAt'],'technicianName'=>$sheet['technicianName']??'',
         'notes'=>$sheet['handoverNotes']??'','paymentMethod'=>'','costs'=>$costs,
     ];
+}
+
+/** Keep descriptions and quantities while aligning every displayed amount with Finances. */
+function cleaning_details_from_financials(array $details, array $bundle): array {
+    $costs=service_document_estimated_costs_from_snapshot($bundle);
+    $target=round(max(0,(float)$bundle['financials']['workPrice']),2);
+    $costs['partsCost']=0.0;$costs['laborCost']=$target;
+    $items=$details['items'];
+    $amounts=array_map(fn($item)=>round((float)$item['quantity']*(float)$item['unitPrice'],2),$items);
+    $base=array_sum($amounts);
+    if(abs($base-$target)>.004){
+        $cumulative=0.0;$assigned=0.0;$last=count($items)-1;
+        foreach($items as$index=>&$item){
+            $cumulative+=$amounts[$index];
+            $through=$index===$last?$target:round($target*($base>0?$cumulative/$base:1),2);
+            // Eight decimals are sufficient even for the maximum quantity of 100,000.
+            $item['unitPrice']=round(max(0,$through-$assigned)/(float)$item['quantity'],8);
+            $item['totalPrice']=round((float)$item['quantity']*$item['unitPrice'],2);
+            $assigned=$through;
+        }
+        unset($item);
+    }
+    $details['items']=$items;$details['costs']=$costs;
+    return $details;
+}
+
+/** Repair stale PDFs on reads too, including links sent before a financial change. */
+function refresh_cleaning_document_row(array $row, ?array $user=null): array {
+    $snapshot=json_decode((string)($row['snapshot_json']??''),true);
+    if(!is_array($snapshot['cleaning']??null)||!is_cleaning_property((string)$row['property_id']))return$row;
+    $pdo=db();$ownsTransaction=!$pdo->inTransaction();$rendered=null;$previous=$row;
+    if($ownsTransaction)$pdo->beginTransaction();
+    try{
+        $pdo->prepare('SELECT id FROM clients WHERE id=? FOR UPDATE')->execute([uuid_bin((string)$row['client_id'])]);
+        $stmt=$pdo->prepare(service_document_select().' WHERE d.id=? AND d.is_active=1 AND d.status=\'PUBLISHED\' FOR UPDATE');
+        $stmt->execute([uuid_bin((string)$row['id'])]);$current=$stmt->fetch();
+        if(!$current){if($ownsTransaction)$pdo->rollBack();fail('Documentul nu mai este disponibil.',404);}
+        $previous=$current;$snapshot=json_decode((string)$current['snapshot_json'],true);
+        if(!is_array($snapshot['cleaning']??null))throw new RuntimeException('Datele documentului de curățare nu sunt valide.');
+        $client=get_client((string)$current['client_id']);$bundle=client_financial_bundle($client);
+        $next=$snapshot;$next['cleaning']=cleaning_details_from_financials($snapshot['cleaning'],$bundle);
+        $next['financials']=$next['cleaning']['costs'];$next['summary']=$next['cleaning']['costs'];
+        if($current['type']==='EXIT')$next['intake']=service_document_reference((string)$current['service_sheet_id'],'INTAKE');
+        if($next!=$snapshot){
+            $signaturePath=service_document_signature_path((string)$current['service_sheet_id']);
+            require_once __DIR__.'/service_document_pdf.php';
+            $rendered=generate_service_document_pdf((string)$current['type'],['id'=>$current['id'],'number'=>$current['number'],'documentAt'=>iso_date($current['document_at']),'agreementAt'=>iso_date($current['agreement_at'])],$next,$signaturePath,null);
+            $now=now_utc();$actor=$user['id']??$current['updated_by']??$current['created_by'];
+            $json=json_encode($next,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
+            $pdo->prepare('UPDATE service_documents SET snapshot_json=?,signature_path=?,file_path=?,file_sha256=?,generated_at=?,updated_at=?,updated_by=? WHERE id=?')
+                ->execute([$json,$signaturePath,$rendered['filePath'],$rendered['sha256'],$now,$now,uuid_bin($actor),uuid_bin((string)$current['id'])]);
+            $current=array_merge($current,['snapshot_json'=>$json,'signature_path'=>$signaturePath,'file_path'=>$rendered['filePath'],'file_sha256'=>$rendered['sha256'],'generated_at'=>$now,'updated_at'=>$now,'updated_by'=>$actor]);
+        }
+        if($ownsTransaction)$pdo->commit();
+    }catch(Throwable$error){
+        if($ownsTransaction&&$pdo->inTransaction())$pdo->rollBack();
+        if($rendered&&empty($rendered['cached']))remove_obsolete_service_document_file($rendered['filePath'],$previous['file_path']??null);
+        throw$error;
+    }
+    if($ownsTransaction&&$rendered)remove_obsolete_service_document_file($previous['file_path']??null,$rendered['filePath']);
+    return$current;
+}
+
+function refresh_cleaning_documents_from_financials(string $clientId, array $user): int {
+    $client=get_client($clientId);if(!is_cleaning_property((string)$client['propertyId']))return 0;
+    ensure_service_documents_table(db());
+    $stmt=db()->prepare(service_document_select()." JOIN service_sheets s ON s.id=d.service_sheet_id AND s.is_active=1 WHERE d.client_id=? AND d.property_id=? AND d.is_active=1 AND d.status='PUBLISHED' AND d.type IN ('INTAKE','EXIT') ORDER BY FIELD(d.type,'INTAKE','EXIT')");
+    $stmt->execute([uuid_bin($clientId),uuid_bin((string)$client['propertyId'])]);$count=0;
+    foreach($stmt->fetchAll()as$row){$next=refresh_cleaning_document_row($row,$user);if($next['file_sha256']!==$row['file_sha256'])$count++;}
+    if($count)audit_log('CLEANING_DOCUMENTS_REGENERATED_FROM_FINANCIALS','service_documents','Fișele de intrare și ieșire au fost actualizate din finanțele curente','Client',$clientId,$client['propertyId'],null,['documentsRegenerated'=>$count],$user);
+    return$count;
 }
 
 function generate_cleaning_document_record(array $sheet, string $type, array $body, array $user): array {
@@ -136,6 +209,7 @@ function generate_cleaning_document_record(array $sheet, string $type, array $bo
             $sheet=get_sheet((string)$sheet['id']);
             audit_log('CLEANING_FINANCIALS_UPDATED','financials','Valorile comenzii de curățare au fost actualizate','Client',$client['id'],$sheet['propertyId'],$current,$financial,$user);
         }
+        $details=cleaning_details_from_financials($details,client_financial_bundle($client));
         $snapshot=['company'=>$company,'client'=>$client,'sheet'=>$sheet,'cleaning'=>$details,'intake'=>service_document_reference((string)$sheet['id'],'INTAKE'),
             'financials'=>$details['costs'],'summary'=>$details['costs'],'parts'=>[],'labor'=>[]];
         $signaturePath=service_document_signature_path((string)$sheet['id']);
@@ -152,8 +226,7 @@ function generate_cleaning_document_record(array $sheet, string $type, array $bo
         throw $error;
     }
     remove_obsolete_service_document_file($existing['file_path']??null,$rendered['filePath']);
-    // An exit may be issued first. Once the intake exists (or its date changes),
-    // refresh just the reference in the exit, preserving its items and pricing.
-    if($type==='INTAKE' && service_document_existing_row((string)$sheet['id'],'EXIT')) generate_cleaning_document_record($sheet,'EXIT',[],$user);
+    // Existing documents follow the same saved finances; missing/deleted ones stay missing.
+    refresh_cleaning_documents_from_financials((string)$client['id'],$user);
     return service_document_record((string)$sheet['id'],$type,true);
 }
