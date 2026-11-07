@@ -7,9 +7,9 @@ import { CLEANING_CARD_IMAGE_URL, CLEANING_CARD_MESSAGE, PreparedCleaningCard, p
 import { isCleaningProperty } from '@/utils/property';
 import * as Clipboard from 'expo-clipboard';
 import { useEffect, useRef, useState } from 'react';
-import { Image, Linking, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Image, Linking, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
-export function CleaningBusinessCardPanel({ compact = false }: { compact?: boolean }) {
+export function CleaningBusinessCardPanel({ compact = false, phone }: { compact?: boolean; phone?: string }) {
   const { activeProperty } = useProperty();
   const cleaning = isCleaningProperty(activeProperty);
   const { colors } = useAppTheme();
@@ -30,7 +30,7 @@ export function CleaningBusinessCardPanel({ compact = false }: { compact?: boole
     setBusy(true);
     try {
       if (!prepared.current) { prepared.current = await prepareCleaningCard(); setReady(true); showToast('Imaginea este pregătită. Apasă din nou pentru trimitere.', 'info'); return; }
-      const result = await shareCleaningCard(prepared.current, message);
+      const result = await shareCleaningCard(prepared.current, message, phone);
       if (result === 'downloaded') showToast('Imaginea a fost descărcată. Atașeaz-o în WhatsApp și folosește „Copiază textul” pentru descriere.', 'info');
     } catch (error) { showToast(error instanceof Error ? error.message : 'Trimiterea nu a putut fi deschisă.', 'error'); }
     finally { setBusy(false); }
@@ -40,7 +40,7 @@ export function CleaningBusinessCardPanel({ compact = false }: { compact?: boole
       <Pressable accessibilityLabel="Mărește cartea de vizită" onPress={() => void Linking.openURL(CLEANING_CARD_IMAGE_URL).catch(() => showToast('Imaginea nu a putut fi deschisă.', 'error'))}>
         <Image source={{ uri: CLEANING_CARD_IMAGE_URL }} style={styles.image} resizeMode="contain" />
       </Pressable>
-      <View style={styles.copy}><AppText variant="heading">Trimite cartea de vizită</AppText><AppText variant="caption" muted>Imagine + mesaj de prezentare. Alege WhatsApp și destinatarul.</AppText></View>
+      <View style={styles.copy}><AppText variant="heading">Trimite cartea de vizită</AppText><AppText variant="caption" muted>{phone && Platform.OS === 'android' ? `Imagine + text în WhatsApp, către ${phone}. Verifică și confirmă trimiterea.` : 'Imagine + mesaj de prezentare. Alege WhatsApp și destinatarul.'}</AppText></View>
     </View>
     {expanded ? <TextInput accessibilityLabel="Textul cărții de vizită" multiline value={message} onChangeText={setMessage} style={[styles.input, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }]} /> : null}
     <View style={styles.actions}><Button compact variant="ghost" label={expanded ? 'Ascunde textul' : 'Vezi / editează textul'} icon="create-outline" onPress={() => setExpanded(!expanded)} /><Button compact variant="ghost" label="Copiază textul" icon="copy-outline" onPress={() => void Clipboard.setStringAsync(message).then(() => showToast('Text copiat.', 'success')).catch(() => showToast('Textul nu a putut fi copiat.', 'error'))} /></View>

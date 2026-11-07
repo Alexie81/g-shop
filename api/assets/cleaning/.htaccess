@@ -1,0 +1,5 @@
+<IfModule mod_headers.c>
+  <Files "business-card.png">
+    Header always set Access-Control-Allow-Origin "*"
+  </Files>
+</IfModule>

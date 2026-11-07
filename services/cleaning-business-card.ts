@@ -1,5 +1,6 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform, TurboModuleRegistry } from 'react-native';
+import type { ShareSingleOptions } from 'react-native-share';
 
 const BASE = (process.env.EXPO_PUBLIC_CLEANING_API_URL ?? 'https://curatatorie-canapele.ro/app-api').replace(/\/$/, '');
 export const CLEANING_CARD_IMAGE_URL = `${BASE}/assets/cleaning/business-card.png?v=approved-v9`;
@@ -52,7 +53,7 @@ export async function prepareCleaningCard(): Promise<PreparedCleaningCard> {
   return { uri };
 }
 
-export async function shareCleaningCard(card: PreparedCleaningCard, message: string): Promise<'opened' | 'cancelled' | 'downloaded'> {
+export async function shareCleaningCard(card: PreparedCleaningCard, message: string, recipientPhone?: string): Promise<'opened' | 'cancelled' | 'downloaded'> {
   if (!message.trim()) throw new Error('Completează textul care însoțește fotografia.');
   if ('file' in card) {
     const data = { files: [card.file], text: message, title: 'Curatatorie Canapele' };
@@ -69,7 +70,20 @@ export async function shareCleaningCard(card: PreparedCleaningCard, message: str
   }
   // Keep Expo Go/old APK previews safe: do not evaluate a missing native module.
   if (!TurboModuleRegistry.get('RNShare')) throw new Error('Instalează noul APK G-Shop pentru trimiterea imaginii împreună cu textul.');
-  const Share = (await import('react-native-share')).default;
+  const { default: Share, Social } = await import('react-native-share');
+  if (Platform.OS === 'android' && recipientPhone !== undefined) {
+    let phone = recipientPhone.replace(/\D/g, '');
+    if (phone.startsWith('00')) phone = phone.slice(2);
+    if (phone.startsWith('0')) phone = '40' + phone.slice(1);
+    if (!/^[1-9]\d{9,14}$/.test(phone)) throw new Error('Clientul nu are un număr WhatsApp valid. Corectează telefonul din profil.');
+    const regular = await Share.isPackageInstalled('com.whatsapp');
+    const business = regular.isInstalled ? false : (await Share.isPackageInstalled('com.whatsapp.w4b')).isInstalled;
+    if (!regular.isInstalled && !business) throw new Error('Instalează WhatsApp sau WhatsApp Business pe telefon.');
+    // The documented Android recipient is implemented natively but omitted by 12.x typings.
+    const options: ShareSingleOptions & { whatsAppNumber: string } = { social: business ? Social.Whatsappbusiness : Social.Whatsapp, whatsAppNumber: phone, url: card.uri, type: 'image/png', message, title: 'Curatatorie Canapele' };
+    await Share.shareSingle(options);
+    return 'opened';
+  }
   const result = await Share.open({ url: card.uri, type: 'image/png', message, title: 'Trimite cartea de vizită', failOnCancel: false, showAppsToView: false });
   return result.dismissedAction ? 'cancelled' : 'opened';
 }

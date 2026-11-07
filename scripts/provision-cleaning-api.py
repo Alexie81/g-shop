@@ -20,7 +20,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 FILES = ['index.php', 'client-form.php', 'src/cleaning_orders.php', 'src/cleaning_document_pdf.php',
          'src/service_document_pdf.php', 'src/push_notifications.php', 'assets/cleaning/logo.png',
-         'src/cleaning_promotion.php', 'cleaning-business-card.php', 'assets/cleaning/business-card.png']
+         'src/cleaning_promotion.php', 'cleaning-business-card.php', 'assets/cleaning/business-card.png', 'assets/cleaning/.htaccess']
 parser = argparse.ArgumentParser()
 parser.add_argument('--publish-shared', action='store_true')
 parser.add_argument('--insecure-ftps', action='store_true', help='For the hosting provider certificate mismatch only')

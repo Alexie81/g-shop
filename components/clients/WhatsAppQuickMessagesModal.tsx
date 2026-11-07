@@ -88,7 +88,7 @@ export function WhatsAppQuickMessagesModal({ visible, client, propertyName, mess
 
         <AppText variant="label">Alege unul dintre mesajele contului tău</AppText>
         <ScrollView style={styles.listScroll} contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
-          <CleaningBusinessCardPanel compact />
+          <CleaningBusinessCardPanel compact phone={client.phone} />
           {messages.map((item) => {
             const active = item.id === selectedId;
             return <Pressable key={item.id} accessibilityRole="radio" accessibilityState={{ checked: active }} onPress={() => choose(item.id)} style={({ pressed }) => [styles.option, { backgroundColor: active ? (isDark ? '#063B2A' : '#EAFBF2') : colors.surfaceMuted, borderColor: active ? '#25D366' : colors.border, opacity: pressed ? 0.78 : 1 }]}>

@@ -186,7 +186,7 @@ export function ServiceDocumentsPanel({ sheet, initialEditorType = null, style, 
         {!allReady ? <AppText variant="caption" muted style={styles.whatsappHint}>Generează toate cele {definitions.length} documente pentru trimiterea dosarului complet sau trimite individual documentele disponibile.</AppText> : null}
       </View>
       </> : null}
-      <CleaningBusinessCardPanel />
+      <CleaningBusinessCardPanel phone={sheet.client?.phone ?? ''} />
     </Card>
 
     {cleaning ? <CleaningDocumentEditorModal

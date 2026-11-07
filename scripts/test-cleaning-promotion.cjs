@@ -5,14 +5,15 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
-function load({ os = 'android', native = true, status = 200, cached = false, dismissed = false } = {}) {
+function load({ os = 'android', native = true, status = 200, cached = false, dismissed = false, installed = ['com.whatsapp'] } = {}) {
   const calls = [];
   const mocks = {
     'react-native': { Platform: { OS: os }, TurboModuleRegistry: { get: () => native ? {} : null } },
     'expo-file-system/legacy': { cacheDirectory: 'file:///cache/', getInfoAsync: async () => ({ exists: cached, size: cached ? 2000 : 0 }), downloadAsync: async (...args) => { calls.push(['download', ...args]); return { status }; }, deleteAsync: async (...args) => calls.push(['delete', ...args]) },
-    'react-native-share': { default: { open: async (options) => { calls.push(['share', options]); return { dismissedAction: dismissed }; } }, __esModule: true },
+    'react-native-share': { default: { Social: { WHATSAPP: 'whatsapp', WHATSAPPBUSINESS: 'whatsappbusiness' }, isPackageInstalled: async (name) => ({ isInstalled: installed.includes(name) }), shareSingle: async (options) => { calls.push(['direct', options]); return { success: true }; }, open: async (options) => { calls.push(['share', options]); return { dismissedAction: dismissed }; } }, __esModule: true },
   };
   const source = fs.readFileSync(path.join(__dirname, '../services/cleaning-business-card.ts'), 'utf8');
+  mocks['react-native-share'].Social = { Whatsapp: 'whatsapp', Whatsappbusiness: 'whatsappbusiness' };
   const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } });
   const module = { exports: {} };
   vm.runInNewContext(outputText, { module, exports: module.exports, URL, process: { env: {} }, require: (id) => mocks[id], setTimeout });
@@ -51,4 +52,22 @@ test('Expo Go/older APK does not import an absent native module', async () => {
   const app = load({ native: false });
   await assert.rejects(app.shareCleaningCard(await app.prepareCleaningCard(), 'Mesaj'), /noul APK/);
   assert.ok(!app.calls.find(([name]) => name === 'share'));
+});
+test('known client opens WhatsApp directly with normalized recipient, local image and text', async () => {
+  const app = load();
+  await app.shareCleaningCard(await app.prepareCleaningCard(), 'Text client', '0726 049 278');
+  const payload = app.calls.find(([name]) => name === 'direct')[1];
+  assert.equal(payload.whatsAppNumber, '40726049278'); assert.equal(payload.message, 'Text client');
+  assert.equal(payload.type, 'image/png'); assert.equal(payload.social, 'whatsapp');
+  assert.ok(payload.url.startsWith('file:///'));
+  assert.ok(!app.calls.find(([name]) => name === 'share'));
+});
+test('Business app is used if regular WhatsApp is absent; never opens store or recipient picker on invalid phone', async () => {
+  const app = load({ installed: ['com.whatsapp.w4b'] });
+  const card = await app.prepareCleaningCard();
+  await app.shareCleaningCard(card, 'Mesaj', '+40 726 049 278');
+  assert.equal(app.calls.find(([name]) => name === 'direct')[1].social, 'whatsappbusiness');
+  await assert.rejects(app.shareCleaningCard(card, 'Mesaj', ''), /număr WhatsApp valid/);
+  const absent = load({ installed: [] });
+  await assert.rejects(absent.shareCleaningCard(await absent.prepareCleaningCard(), 'Mesaj', '0726049278'), /Instalează WhatsApp/);
 });
