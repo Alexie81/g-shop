@@ -74,6 +74,7 @@
       "expo-image",
       "expo-sharing",
       ["react-native-share", {"android": ["com.whatsapp", "com.whatsapp.w4b"], "ios": ["whatsapp"]}],
+      "./plugins/with-single-whatsapp-launch",
       "expo-status-bar",
       "expo-web-browser"
     ],
