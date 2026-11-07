@@ -70,8 +70,25 @@ try:
     assert changed['cleaning']['costs']['totalDue']==486 and changed['url']!=doc['url']
     assert request('/service-sheets/'+sheet_id)['totalCost']==486
     stored=request('/service-sheets/'+sheet_id+'/documents')
-    assert next(d for d in stored if d['type']=='INTAKE')['cleaning']['costs']['totalDue']==396
-    checks.append('edited values persist; intake snapshot remains independent')
+    assert next(d for d in stored if d['type']=='INTAKE')['cleaning']['costs']['totalDue']==486
+    checks.append('edited values persist and synchronize both existing documents')
+    # The actual Finances endpoint must refresh both PDFs, including old public URLs.
+    original_identity={d['type']:(d['id'],d['number'],d['documentAt'],d['agreementAt']) for d in stored}
+    for payment_status,paid,remaining in [('UNPAID',125,395),('PAID',520,0),('UNPAID',125,395)]:
+        saved=request('/clients/'+client_id+'/financials','PUT',{'workPrice':610,'diagnosticFee':40,'discountPercent':20,'advancePaid':125,'paymentStatus':payment_status})
+        assert saved['summary']['totalDue']==520 and saved['summary']['remainingDue']==remaining
+        updated=request('/service-sheets/'+sheet_id+'/documents')
+        for item in updated:
+            assert (item['id'],item['number'],item['documentAt'],item['agreementAt'])==original_identity[item['type']]
+            costs=item['cleaning']['costs']
+            assert costs['totalDue']==520 and costs['receivedAmount']==paid and costs['remainingDue']==remaining
+            assert round(sum(line['totalPrice'] for line in item['cleaning']['items']),2)==610
+            assert [line['article'] for line in item['cleaning']['items']]==['Canapea 220 cm','Fotoliu']
+        with urllib.request.urlopen(changed['url'],timeout=35) as response:
+            text=' '.join(p.extract_text() for p in PdfReader(io.BytesIO(response.read())).pages)
+            assert '520,00' in text and f'{remaining},00' in text
+    stored=updated
+    checks.append('Finances updates both PDFs immediately; PAID zero balance; UNPAID restores advance; old links stay current')
     with urllib.request.urlopen(changed['url'],timeout=30) as response:
         reader=PdfReader(io.BytesIO(response.read()))
         pdf_text=' '.join(p.extract_text() for p in reader.pages)
@@ -92,6 +109,15 @@ try:
             assert sum(len(page.images) for page in reader.pages)>=2,'Missing PDF signature image'
             (ROOT/('tmp/pdfs/cleaning-signed-'+signed_doc['type'].lower()+'.pdf')).write_bytes(pdf_bytes)
     checks.append('intake reference and date; client signature regenerates both existing PDFs')
+    for status,remaining in [('PAID',0),('UNPAID',395)]:
+        request('/clients/'+client_id+'/financials','PUT',{'paymentStatus':status})
+        signed_docs=request('/service-sheets/'+sheet_id+'/documents')
+        for item in signed_docs:
+            assert item['cleaning']['costs']['remainingDue']==remaining
+            with urllib.request.urlopen(item['url'],timeout=35) as response:
+                reader=PdfReader(io.BytesIO(response.read()))
+                assert sum(len(p.images) for p in reader.pages)>=2
+    checks.append('financial changes preserve existing signatures on both documents')
     request('/service-sheets/'+sheet_id+'/documents/WARRANTY','POST',{},expected=422)
     qr=request('/clients/'+client_id+'/qr','POST',{})
     public_url=qr.get('publicUrl') or qr.get('qr',{}).get('publicUrl') or client.get('qr',{}).get('publicUrl')
@@ -114,7 +140,7 @@ try:
         assert 'FIȘĂ DE INTRARE A COMENZII' in reader.pages[0].extract_text()
         assert 'FIȘĂ DE IEȘIRE A COMENZII' in reader.pages[1].extract_text()
         assert len(reader.pages[-1]['/Annots'])==5
-        assert '396,00' in reader.pages[0].extract_text() and '486,00' in reader.pages[1].extract_text()
+        assert '520,00' in reader.pages[0].extract_text() and '520,00' in reader.pages[1].extract_text()
         assert reader.pages[0].get_contents().get_data().count(b' Do') >= 2
         (ROOT/'tmp/pdfs/cleaning-live-dossier.pdf').write_bytes(dossier_bytes)
     request('/public/client-form/'+str(uuid.uuid4())+'/dossier/'+sheet_id,expected=404,auth=False)
